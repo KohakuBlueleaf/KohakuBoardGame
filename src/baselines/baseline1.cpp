@@ -1,5 +1,7 @@
 #include <iostream>
 #include <fstream>
+#include <string>
+#include <sstream>
 
 #include "../config.hpp"
 #include "../state/state.hpp"
@@ -7,12 +9,6 @@
 
 
 State* root;
-
-/**
- * @brief Read the board from the file
- * 
- * @param fin 
- */
 void read_board(std::ifstream& fin) {
   Board board;
   int player;

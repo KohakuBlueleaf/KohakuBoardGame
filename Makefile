@@ -1,6 +1,6 @@
 CXX = g++
 CXX_MERGE = cpp-merge
-CXXFLAGS = --std=c++20 -Wall -Wextra -Wpedantic -g -O3
+CXXFLAGS = --std=c++2a -Wall -Wextra -Wpedantic -g -O3
 
 SOURCES_DIR = src
 UNITTEST_DIR = unittest

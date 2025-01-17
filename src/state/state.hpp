@@ -39,16 +39,18 @@ enum GameState {
   NONE
 };
 
+
 const int M_MAX = -100000;
 const int P_MAX = 100000;
 
 
 class State{
-  public: 
+  public:
+    //You may want to add more property for a state
     GameState game_state = UNKNOWN;
     Board board;
     int player = 0;
-    int score = -10000000;
+    int score = 0;
     std::vector<Move> legal_actions;
     
     State(){};
@@ -56,10 +58,9 @@ class State{
     State(Board board): board(board){};
     State(Board board, int player): board(board), player(player){};
     
+    int evaluate();
     State* next_state(Move move);
     void get_legal_actions();
-    int evaluate();
-    void print();
     std::string encode_output();
     std::string encode_state();
 };
