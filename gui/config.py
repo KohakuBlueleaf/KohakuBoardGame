@@ -1,0 +1,102 @@
+"""MiniChess GUI configuration constants."""
+
+import os
+
+# Board dimensions (must match C++ config.hpp)
+BOARD_H = 6
+BOARD_W = 5
+MAX_STEP = 100
+
+# Piece codes (must match C++ state)
+EMPTY, PAWN, ROOK, KNIGHT, BISHOP, QUEEN, KING = range(7)
+
+# Unicode chess piece symbols: [player][piece_type]
+PIECE_UNICODE = {
+    0: {
+        PAWN: "\u2659",
+        ROOK: "\u2656",
+        KNIGHT: "\u2658",
+        BISHOP: "\u2657",
+        QUEEN: "\u2655",
+        KING: "\u2654",
+    },
+    1: {
+        PAWN: "\u265f",
+        ROOK: "\u265c",
+        KNIGHT: "\u265e",
+        BISHOP: "\u265d",
+        QUEEN: "\u265b",
+        KING: "\u265a",
+    },
+}
+
+# Layout
+SQUARE_SIZE = 80
+LABEL_MARGIN = 24
+BOARD_PIXEL_W = BOARD_W * SQUARE_SIZE
+BOARD_PIXEL_H = BOARD_H * SQUARE_SIZE
+BOARD_X = LABEL_MARGIN
+BOARD_Y = LABEL_MARGIN
+# Right panel (status / controls) — next to board
+PANEL_WIDTH = 280
+PANEL_X = BOARD_X + BOARD_PIXEL_W + 16
+PANEL_Y = BOARD_Y
+PANEL_H = BOARD_PIXEL_H
+
+# Bottom panel (eval bar | score plot | move table) — below board
+BOTTOM_H = 150
+BOTTOM_Y = BOARD_Y + BOARD_PIXEL_H + LABEL_MARGIN + 4
+BOTTOM_X = BOARD_X
+BOTTOM_EVAL_W = 24  # thin vertical eval bar
+BOTTOM_GAP = 8
+
+WINDOW_W = PANEL_X + PANEL_WIDTH + 12
+WINDOW_H = BOTTOM_Y + BOTTOM_H + 8
+
+# Colors (RGB)
+COLOR_BG = (32, 32, 36)
+COLOR_LIGHT_SQ = (240, 217, 181)
+COLOR_DARK_SQ = (181, 136, 99)
+COLOR_HIGHLIGHT = (255, 255, 100, 140)  # selected piece
+COLOR_LEGAL = (100, 200, 100, 160)  # legal move dot
+COLOR_LAST_MOVE = (170, 210, 255, 100)  # last move highlight
+COLOR_TEXT = (220, 220, 220)
+COLOR_TEXT_DIM = (140, 140, 140)
+COLOR_PANEL_BG = (42, 42, 48)
+COLOR_BTN = (60, 60, 68)
+COLOR_BTN_HOVER = (80, 80, 90)
+COLOR_BTN_TEXT = (220, 220, 220)
+COLOR_WHITE_PIECE = (255, 255, 255)
+COLOR_BLACK_PIECE = (30, 30, 30)
+
+# Fonts
+FONT_SIZE_PIECE = 56
+FONT_SIZE_LABEL = 16
+FONT_SIZE_PANEL = 16
+FONT_SIZE_BTN = 18
+FONT_SIZE_STATUS = 20
+
+# Axis labels (matching C++ game runner)
+COL_LABELS = "ABCDE"
+ROW_LABELS = "654321"
+
+# Paths
+BUILD_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build"
+)
+
+# Default AI timeout (seconds)
+DEFAULT_TIMEOUT = 2
+
+# AI vs AI delay between moves (seconds)
+AI_VS_AI_DELAY = 0.5
+
+# FPS
+FPS = 30
+
+# Algorithm selection -- fallbacks when no engine is available
+ALGORITHMS_FALLBACK = ["pvs", "alphabeta", "minimax", "random"]
+DEFAULT_ALGORITHM = "pvs"
+
+# Max search depth (0 = use time limit instead)
+DEFAULT_MAX_DEPTH = 0

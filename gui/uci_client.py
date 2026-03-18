@@ -1,0 +1,560 @@
+"""UCI protocol client for communicating with MiniChess engine."""
+
+import subprocess
+import threading
+import os
+import sys
+
+
+class UCIEngine:
+    """Manages a UCI engine subprocess."""
+
+    def __init__(self, exe_path):
+        """Launch engine process with stdin/stdout pipes.
+
+        Sends 'uci' and waits for 'uciok', then sends 'isready' and
+        waits for 'readyok'.
+
+        Args:
+            exe_path: Path to the UCI-compatible engine executable.
+
+        Raises:
+            RuntimeError: If the engine fails to start or doesn't respond.
+        """
+        self._exe_path = exe_path
+        self._lock = threading.Lock()
+        self._process = None
+        self._reader_thread = None
+        self._searching = False
+        self.options = []  # Parsed option dicts from the UCI handshake
+
+        # Launch the subprocess
+        kwargs = {
+            "args": [exe_path],
+            "stdin": subprocess.PIPE,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "bufsize": 0,
+        }
+        if sys.platform == "win32":
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+        try:
+            self._process = subprocess.Popen(**kwargs)
+        except OSError as exc:
+            raise RuntimeError(f"Failed to start engine: {exc}") from exc
+
+        # UCI handshake -- parse option lines until uciok
+        self._send("uci")
+        if not self._wait_for_uciok(timeout=5.0):
+            self.quit()
+            raise RuntimeError("Engine did not respond with 'uciok'")
+
+        self._send("isready")
+        if not self._wait_for("readyok", timeout=5.0):
+            self.quit()
+            raise RuntimeError("Engine did not respond with 'readyok'")
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def set_option(self, name, value):
+        """Send 'setoption name X value Y'."""
+        self._send(f"setoption name {name} value {value}")
+
+    def new_game(self):
+        """Send 'ucinewgame' + 'isready' and wait for 'readyok'."""
+        self._send("ucinewgame")
+        self._send("isready")
+        self._wait_for("readyok", timeout=5.0)
+
+    def set_position(self, moves=None):
+        """Send 'position startpos' or 'position startpos moves ...'.
+
+        Args:
+            moves: list of move strings in UCI format (e.g. ['a2a3', 'e5e4']),
+                   or None for start position only.
+        """
+        if moves:
+            move_str = " ".join(moves)
+            self._send(f"position startpos moves {move_str}")
+        else:
+            self._send("position startpos")
+
+    def go(
+        self,
+        depth=None,
+        movetime=None,
+        infinite=False,
+        info_callback=None,
+        done_callback=None,
+    ):
+        """Start search. Returns immediately (search runs in background thread).
+
+        Args:
+            depth: Search to this depth (optional).
+            movetime: Search for this many milliseconds (optional).
+            infinite: If True, search until 'stop' is sent.
+            info_callback: Called for each 'info' line with a parsed dict:
+                {'depth': int, 'seldepth': int, 'score_cp': int, 'nodes': int,
+                 'time': int, 'nps': int, 'pv': [str, ...]}
+            done_callback: Called when 'bestmove' is received with the
+                bestmove string (e.g. 'a2a3').
+        """
+        parts = ["go"]
+        if depth is not None:
+            parts.append(f"depth {depth}")
+        if movetime is not None:
+            parts.append(f"movetime {movetime}")
+        if infinite:
+            parts.append("infinite")
+
+        self._searching = True
+        self._send(" ".join(parts))
+
+        # Start reader thread to parse output
+        self._reader_thread = threading.Thread(
+            target=self._read_loop,
+            args=(info_callback, done_callback),
+            daemon=True,
+        )
+        self._reader_thread.start()
+
+    def stop(self):
+        """Send 'stop' to abort current search."""
+        if self._searching:
+            self._send("stop")
+
+    def quit(self):
+        """Send 'quit' and close process."""
+        try:
+            self._send("quit")
+        except (OSError, BrokenPipeError):
+            pass
+
+        if self._process is not None:
+            try:
+                self._process.terminate()
+                self._process.wait(timeout=2)
+            except Exception:
+                try:
+                    self._process.kill()
+                except Exception:
+                    pass
+            self._process = None
+
+    def is_alive(self):
+        """Check if engine process is still running."""
+        if self._process is None:
+            return False
+        return self._process.poll() is None
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _send(self, command):
+        """Send a command string to the engine's stdin (thread-safe)."""
+        with self._lock:
+            if self._process is None or self._process.stdin is None:
+                return
+            try:
+                self._process.stdin.write((command + "\n").encode("utf-8"))
+                self._process.stdin.flush()
+            except (OSError, BrokenPipeError):
+                pass
+
+    def _readline(self, timeout=None):
+        """Read a single line from stdout. Returns the line or None on EOF/error.
+
+        Note: This blocks. For timeout-based reads, use _wait_for instead.
+        """
+        if self._process is None or self._process.stdout is None:
+            return None
+        try:
+            line = self._process.stdout.readline()
+            if not line:
+                return None
+            return line.decode("utf-8", errors="replace").strip()
+        except (OSError, ValueError):
+            return None
+
+    def _wait_for(self, target, timeout=5.0):
+        """Read lines until one equals *target* (or timeout).
+
+        Returns True if the target was found, False on timeout.
+        """
+        import time
+
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            line = self._readline()
+            if line is None:
+                return False
+            if line.strip() == target:
+                return True
+        return False
+
+    def _wait_for_uciok(self, timeout=5.0):
+        """Read lines until 'uciok', parsing 'option' lines along the way.
+
+        Populates self.options with parsed option dicts.
+        Returns True if 'uciok' was found, False on timeout.
+        """
+        import time
+
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            line = self._readline()
+            if line is None:
+                return False
+            stripped = line.strip()
+            if stripped == "uciok":
+                return True
+            if stripped.startswith("option "):
+                opt = UCIEngine.parse_option_line(stripped)
+                if opt is not None:
+                    self.options.append(opt)
+        return False
+
+    def _read_loop(self, info_callback, done_callback):
+        """Background thread: read engine stdout, parse info/bestmove lines."""
+        try:
+            while self._searching and self.is_alive():
+                line = self._readline()
+                if line is None:
+                    break
+
+                if line.startswith("info "):
+                    if info_callback is not None:
+                        info = self.parse_info(line)
+                        if info:
+                            info_callback(info)
+
+                elif line.startswith("bestmove"):
+                    self._searching = False
+                    parts = line.split()
+                    bestmove = parts[1] if len(parts) >= 2 else None
+                    if done_callback is not None:
+                        done_callback(bestmove)
+                    break
+        except Exception:
+            self._searching = False
+            if done_callback is not None:
+                try:
+                    done_callback(None)
+                except Exception:
+                    pass
+
+    # ------------------------------------------------------------------
+    # Static helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def parse_info(line):
+        """Parse an 'info' line from the engine.
+
+        Example input:
+            'info depth 6 seldepth 12 score cp 25 nodes 123 time 150 nps 820 pv a2a3 b5b4'
+
+        Returns:
+            dict with parsed fields, e.g.:
+            {'depth': 6, 'seldepth': 12, 'score_cp': 25, 'nodes': 123,
+             'time': 150, 'nps': 820, 'pv': ['a2a3', 'b5b4']}
+            Returns empty dict if parsing fails.
+        """
+        result = {}
+        tokens = line.split()
+
+        # Remove the leading 'info' token
+        if tokens and tokens[0] == "info":
+            tokens = tokens[1:]
+
+        i = 0
+        while i < len(tokens):
+            token = tokens[i]
+
+            if token == "depth" and i + 1 < len(tokens):
+                try:
+                    result["depth"] = int(tokens[i + 1])
+                except ValueError:
+                    pass
+                i += 2
+
+            elif token == "seldepth" and i + 1 < len(tokens):
+                try:
+                    result["seldepth"] = int(tokens[i + 1])
+                except ValueError:
+                    pass
+                i += 2
+
+            elif token == "score" and i + 2 < len(tokens):
+                score_type = tokens[i + 1]
+                try:
+                    score_val = int(tokens[i + 2])
+                except ValueError:
+                    i += 3
+                    continue
+                if score_type == "cp":
+                    result["score_cp"] = score_val
+                elif score_type == "mate":
+                    # Convert mate score to a large cp value
+                    result["score_cp"] = 10000 * (1 if score_val > 0 else -1)
+                    result["score_mate"] = score_val
+                i += 3
+
+            elif token == "nodes" and i + 1 < len(tokens):
+                try:
+                    result["nodes"] = int(tokens[i + 1])
+                except ValueError:
+                    pass
+                i += 2
+
+            elif token == "time" and i + 1 < len(tokens):
+                try:
+                    result["time"] = int(tokens[i + 1])
+                except ValueError:
+                    pass
+                i += 2
+
+            elif token == "nps" and i + 1 < len(tokens):
+                try:
+                    result["nps"] = int(tokens[i + 1])
+                except ValueError:
+                    pass
+                i += 2
+
+            elif token == "pv":
+                # All remaining tokens are the PV
+                result["pv"] = tokens[i + 1 :]
+                break
+
+            elif token == "string":
+                # 'string' consumes the rest of the line
+                result["string"] = " ".join(tokens[i + 1 :])
+                break
+
+            elif token == "multipv" and i + 1 < len(tokens):
+                try:
+                    result["multipv"] = int(tokens[i + 1])
+                except ValueError:
+                    pass
+                i += 2
+
+            elif token == "hashfull" and i + 1 < len(tokens):
+                try:
+                    result["hashfull"] = int(tokens[i + 1])
+                except ValueError:
+                    pass
+                i += 2
+
+            elif token == "tbhits" and i + 1 < len(tokens):
+                try:
+                    result["tbhits"] = int(tokens[i + 1])
+                except ValueError:
+                    pass
+                i += 2
+
+            elif token == "currmove" and i + 1 < len(tokens):
+                result["currmove"] = tokens[i + 1]
+                i += 2
+
+            elif token == "currmovenumber" and i + 1 < len(tokens):
+                try:
+                    result["currmovenumber"] = int(tokens[i + 1])
+                except ValueError:
+                    pass
+                i += 2
+
+            else:
+                i += 1
+
+        return result
+
+    @staticmethod
+    def parse_option_line(line):
+        """Parse a UCI 'option' line into a dict.
+
+        Supported formats:
+            option name X type check default true
+            option name X type spin default 5 min 1 max 10
+            option name X type combo default a var a var b var c
+            option name X type string default hello
+
+        Returns:
+            dict with keys 'name', 'type', 'default', and type-specific
+            keys ('min'/'max' for spin, 'vars' for combo), or None on
+            parse failure.
+        """
+        # Remove leading "option " prefix
+        if not line.startswith("option "):
+            return None
+        rest = line[len("option "):]
+
+        # Extract "name <NAME> type <TYPE> ..."
+        # The name may contain spaces, so we find the "type " keyword
+        name_prefix = "name "
+        if not rest.startswith(name_prefix):
+            return None
+        rest = rest[len(name_prefix):]
+
+        type_idx = rest.find(" type ")
+        if type_idx < 0:
+            return None
+        name = rest[:type_idx]
+        rest = rest[type_idx + len(" type "):]
+
+        # Split the remainder to get the type and attributes
+        tokens = rest.split()
+        if not tokens:
+            return None
+        opt_type = tokens[0]
+        tokens = tokens[1:]
+
+        result = {"name": name, "type": opt_type}
+
+        if opt_type == "check":
+            # expect: default true/false
+            if len(tokens) >= 2 and tokens[0] == "default":
+                result["default"] = tokens[1]
+            else:
+                result["default"] = "false"
+
+        elif opt_type == "spin":
+            # expect: default N min N max N
+            i = 0
+            while i < len(tokens):
+                if tokens[i] == "default" and i + 1 < len(tokens):
+                    result["default"] = tokens[i + 1]
+                    i += 2
+                elif tokens[i] == "min" and i + 1 < len(tokens):
+                    result["min"] = tokens[i + 1]
+                    i += 2
+                elif tokens[i] == "max" and i + 1 < len(tokens):
+                    result["max"] = tokens[i + 1]
+                    i += 2
+                else:
+                    i += 1
+
+        elif opt_type == "combo":
+            # expect: default X var A var B var C ...
+            # default value is everything between "default" and first "var"
+            i = 0
+            if i < len(tokens) and tokens[i] == "default":
+                i += 1
+                # Collect default value tokens until "var"
+                default_parts = []
+                while i < len(tokens) and tokens[i] != "var":
+                    default_parts.append(tokens[i])
+                    i += 1
+                result["default"] = " ".join(default_parts) if default_parts else ""
+            else:
+                result["default"] = ""
+            # Collect var values
+            vars_list = []
+            while i < len(tokens):
+                if tokens[i] == "var":
+                    i += 1
+                    var_parts = []
+                    while i < len(tokens) and tokens[i] != "var":
+                        var_parts.append(tokens[i])
+                        i += 1
+                    if var_parts:
+                        vars_list.append(" ".join(var_parts))
+                else:
+                    i += 1
+            result["vars"] = vars_list
+
+        elif opt_type == "string":
+            # expect: default <value> (rest of line)
+            if len(tokens) >= 2 and tokens[0] == "default":
+                result["default"] = " ".join(tokens[1:])
+            else:
+                result["default"] = ""
+
+        else:
+            # Unknown type -- store what we can
+            result["default"] = ""
+
+        return result
+
+    @staticmethod
+    def move_to_uci(move):
+        """Convert ((from_r, from_c), (to_r, to_c)) to UCI string like 'a2a3'.
+
+        Coordinate mapping:
+            Col: 0='a', 1='b', 2='c', 3='d', 4='e'
+            Row: 0='6', 1='5', 2='4', 3='3', 4='2', 5='1'
+
+        Example: ((4, 0), (3, 0)) -> 'a2a3'
+        """
+        (fr, fc), (tr, tc) = move
+        col_chars = "abcde"
+        row_chars = "654321"
+        return col_chars[fc] + row_chars[fr] + col_chars[tc] + row_chars[tr]
+
+    @staticmethod
+    def uci_to_move(uci_str):
+        """Convert UCI string like 'a2a3' to ((from_r, from_c), (to_r, to_c)).
+
+        Coordinate mapping:
+            'a'-'e' -> col 0-4
+            '1'-'6' -> row 5,4,3,2,1,0  (i.e. '6'->0, '5'->1, ..., '1'->5)
+
+        Example: 'a2a3' -> ((4, 0), (3, 0))
+        """
+        if uci_str is None or len(uci_str) < 4:
+            return None
+        col_map = {"a": 0, "b": 1, "c": 2, "d": 3, "e": 4}
+        row_map = {"6": 0, "5": 1, "4": 2, "3": 3, "2": 4, "1": 5}
+
+        fc = col_map.get(uci_str[0])
+        fr = row_map.get(uci_str[1])
+        tc = col_map.get(uci_str[2])
+        tr = row_map.get(uci_str[3])
+
+        if any(v is None for v in (fc, fr, tc, tr)):
+            return None
+
+        return ((fr, fc), (tr, tc))
+
+
+def discover_uci_engines(build_dir):
+    """Find minichess-uci.exe (or similar UCI engines) in build directory.
+
+    Looks for executables whose name contains 'uci' in the build directory
+    and its subdirectories.
+
+    Args:
+        build_dir: Path to the build directory.
+
+    Returns:
+        List of (name, full_path) tuples, sorted by name.
+    """
+    results = []
+    dirs_to_scan = [build_dir]
+
+    # Also scan common subdirectories
+    for subdir in ("Release", "Debug", "baselines"):
+        candidate = os.path.join(build_dir, subdir)
+        if os.path.isdir(candidate):
+            dirs_to_scan.append(candidate)
+
+    for scan_dir in dirs_to_scan:
+        if not os.path.isdir(scan_dir):
+            continue
+        try:
+            for entry in os.listdir(scan_dir):
+                if not entry.lower().endswith(".exe"):
+                    continue
+                full = os.path.join(scan_dir, entry)
+                if os.path.isfile(full):
+                    name = os.path.splitext(entry)[0]
+                    if "uci" in name.lower():
+                        results.append((name, full))
+        except OSError:
+            continue
+
+    results.sort(key=lambda t: t[0].lower())
+    return results
