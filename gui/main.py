@@ -498,10 +498,10 @@ class GameApp:
             self.game_result = "draw"
             return
 
-        if self.analyze["enabled"] and self._is_human_turn():
+        if self.analyze["enabled"] and not self._is_gaming():
             self.search_info = {}
             self._start_analysis()
-        else:
+        elif self._is_gaming():
             self._trigger_ai_if_needed()
 
     def _trigger_ai_if_needed(self):

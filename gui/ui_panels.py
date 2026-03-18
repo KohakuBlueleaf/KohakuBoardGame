@@ -37,11 +37,15 @@ class Button:
         self.text = text
         self.font = font
         self.enabled = True
+        self.active = False  # "on" state — different color
 
     def draw(self, surface, mouse_pos):
         if not self.enabled:
             bg = (45, 45, 50)
             fg = (90, 90, 90)
+        elif self.active:
+            bg = (40, 100, 60) if not self.rect.collidepoint(mouse_pos) else (50, 120, 70)
+            fg = (200, 255, 200)
         elif self.rect.collidepoint(mouse_pos):
             bg = COLOR_BTN_HOVER
             fg = COLOR_BTN_TEXT
@@ -203,9 +207,9 @@ class SidePanel:
         self.btn_undo.enabled = not gaming
         self.btn_undo.draw(self.surface, mouse_pos)
 
-        # Analyze: disabled during gaming
+        # Analyze: disabled during gaming, green when active
         self.btn_analyze.enabled = not gaming
-        self.btn_analyze.text = "Analyze ON" if analyze_enabled else "Analyze"
+        self.btn_analyze.active = analyze_enabled
         self.btn_analyze.draw(self.surface, mouse_pos)
 
         # Stop: only enabled during gaming
