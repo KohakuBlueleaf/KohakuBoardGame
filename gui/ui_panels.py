@@ -114,6 +114,7 @@ class SidePanel:
         search_info=None,
         paused=False,
         analyze_enabled=False,
+        gaming=False,
     ):
         self._frame += 1
         mouse_pos = pygame.mouse.get_pos()
@@ -198,16 +199,12 @@ class SidePanel:
         if search_info.get("pv"):
             cy = self._draw_pv(cx, cy, search_info["pv"])
 
-        # Determine if a game is in progress (any AI side playing, not finished)
-        gaming = mode in ("ai_vs_ai", "human_vs_ai") and game_result is None and not analyze_enabled
-        game_over = game_result is not None
-
         # Undo: disabled during gaming
         self.btn_undo.enabled = not gaming
         self.btn_undo.draw(self.surface, mouse_pos)
 
-        # Analyze: disabled during gaming, shows on/off state
-        self.btn_analyze.enabled = not gaming or game_over
+        # Analyze: disabled during gaming
+        self.btn_analyze.enabled = not gaming
         self.btn_analyze.text = "Analyze ON" if analyze_enabled else "Analyze"
         self.btn_analyze.draw(self.surface, mouse_pos)
 

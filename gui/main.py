@@ -628,6 +628,7 @@ class GameApp:
             search_info=self.search_info,
             paused=self._paused or (self.analyze["enabled"] and not self._analyzing),
             analyze_enabled=self.analyze["enabled"],
+            gaming=self._is_gaming(),
         )
 
         self.side_panel.draw_bottom(
