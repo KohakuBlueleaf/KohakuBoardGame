@@ -13,6 +13,7 @@ PLAYERS = $(wildcard $(SOURCES_DIR)/player/*.cpp)
 BASELINES = $(wildcard $(SOURCES_DIR)/baselines/*.cpp)
 UNITTESTS = $(wildcard $(UNITTEST_DIR)/*.cpp)
 STATE_SOURCE = $(SOURCES_DIR)/state/state.cpp
+NNUE_SOURCE = $(SOURCES_DIR)/nnue/nnue.cpp
 POLICY_DIR = $(SOURCES_DIR)/policy
 
 TARGET_PLAYER = $(PLAYERS:$(SOURCES_DIR)/player/%.cpp=%)
@@ -40,24 +41,24 @@ $(MERGE_DIR):
 # build target
 ifeq ($(OS), Windows_NT)
 $(TARGET_PLAYER): % : $(SOURCES_DIR)/player/%.cpp
-	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/player_$@.exe $(STATE_SOURCE) $(POLICY_DIR)/$@.cpp $< 
+	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/player_$@.exe $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_DIR)/$@.cpp $<
 $(TARGET_BASELINES): % : $(SOURCES_DIR)/baselines/%.cpp
-	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/baselines/$@.exe $(STATE_SOURCE) $(POLICY_DIR)/*.cpp $< 
+	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/baselines/$@.exe $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_DIR)/*.cpp $<
 $(TARGET_MAIN): % : $(SOURCES_DIR)/%.cpp
-	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/$@.exe $< 
+	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/$@.exe $<
 $(TARGET_OTHER): %: $(SOURCES_DIR)/%.cpp
-	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/$@.exe $(STATE_SOURCE) $(POLICY_DIR)/*.cpp $<
+	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/$@.exe $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_DIR)/*.cpp $<
 $(TARGET_UNITTEST): %: $(UNITTEST_DIR)/%_test.cpp
-	$(CXX) $(CXXFLAGS) -o $(UNITTEST_DIR)/build/$@_test.exe $(STATE_SOURCE) $(POLICY_DIR)/*.cpp $<
+	$(CXX) $(CXXFLAGS) -o $(UNITTEST_DIR)/build/$@_test.exe $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_DIR)/*.cpp $<
 else
 $(TARGET_PLAYER): % : $(SOURCES_DIR)/player/%.cpp
-	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/player_$@ $(STATE_SOURCE) $(POLICY_DIR)/$@.cpp $< 
+	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/player_$@ $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_DIR)/$@.cpp $<
 $(TARGET_BASELINES): % : $(SOURCES_DIR)/baselines/%.cpp
-	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/baselines/$@ $(STATE_SOURCE) $(POLICY_DIR)/*.cpp $< 
+	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/baselines/$@ $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_DIR)/*.cpp $<
 $(TARGET_MAIN): % : $(SOURCES_DIR)/%.cpp
-	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/$@ $< 
+	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/$@ $<
 $(TARGET_OTHER): %: $(SOURCES_DIR)/%.cpp
-	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/$@ $(STATE_SOURCE) $(POLICY_DIR)/*.cpp $<
+	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/$@ $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_DIR)/*.cpp $<
 $(TARGET_UNITTEST): %: $(UNITTEST_DIR)/%_test.cpp
-	$(CXX) $(CXXFLAGS) -o $(UNITTEST_DIR)/build/$@_test $(STATE_SOURCE) $(POLICY_DIR)/*.cpp $<
+	$(CXX) $(CXXFLAGS) -o $(UNITTEST_DIR)/build/$@_test $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_DIR)/*.cpp $<
 endif
