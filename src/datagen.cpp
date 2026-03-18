@@ -46,6 +46,8 @@ struct DataRecord {
   int8_t board[2][6][5];  // 60 bytes: both player boards
   int8_t player;          // 1 byte: side to move (0 or 1)
   int16_t score;          // 2 bytes: PVS score from side-to-move perspective
+  int8_t result;          // 1 byte: game result from STM perspective (1=win, 0=draw, -1=loss)
+  uint16_t ply;           // 2 bytes: ply count from game start
 };
 
 #pragma pack(pop)
@@ -169,15 +171,24 @@ static void play_game(
   State* game = new State();
   game->get_legal_actions();
 
+  size_t first_record = records.size();  // track where this game's records start
+  int winner = -1;  // -1=undecided, 0=white wins, 1=black wins, 2=draw
+
   int step = 0;
   while(step < MAX_STEP){
     // Check for terminal state
-    if(game->game_state == WIN)
+    if(game->game_state == WIN){
+      winner = game->player;  // side to move can capture king → wins
       break;
-    if(game->game_state == DRAW)
+    }
+    if(game->game_state == DRAW){
+      winner = 2;
       break;
-    if(game->legal_actions.empty())
+    }
+    if(game->legal_actions.empty()){
+      winner = 2;
       break;
+    }
 
     // Decide which move to play
     Move chosen_move;
@@ -198,15 +209,11 @@ static void play_game(
 
     // Record the position if it's not terminal
     if(next->game_state != WIN){
-      // Evaluate the position from the side-to-move perspective
-      // We create a copy for PVS::eval since it deletes the state
       State* eval_copy = new State(next->board, next->player);
       eval_copy->get_legal_actions();
 
       int score = PVS::eval(eval_copy, cfg.depth, M_MAX - 10, P_MAX + 10);
-      // eval_copy is deleted by PVS::eval
 
-      // Clamp score to int16_t range
       if(score > 32767) score = 32767;
       if(score < -32768) score = -32768;
 
@@ -217,11 +224,26 @@ static void play_game(
             rec.board[p][r][c] = next->board.board[p][r][c];
       rec.player = (int8_t)next->player;
       rec.score = (int16_t)score;
+      rec.result = 0;  // placeholder, filled below
+      rec.ply = (uint16_t)step;
       records.push_back(rec);
     }
 
     delete game;
     game = next;
+  }
+
+  if(winner == -1) winner = 2;  // max steps reached → draw
+
+  // Backfill game result for all positions in this game
+  for(size_t i = first_record; i < records.size(); i++){
+    if(winner == 2){
+      records[i].result = 0;   // draw
+    } else if(records[i].player == winner){
+      records[i].result = 1;   // STM won
+    } else {
+      records[i].result = -1;  // STM lost
+    }
   }
 
   delete game;
@@ -254,7 +276,7 @@ int main(int argc, char* argv[]){
   // Write placeholder header (count will be updated at end)
   DataHeader header;
   std::memcpy(header.magic, "MCDT", 4);
-  header.version = 1;
+  header.version = 2;
   header.count = 0;
   std::fwrite(&header, sizeof(DataHeader), 1, fp);
 
