@@ -8,6 +8,9 @@
 #include "./policy/minimax.hpp"
 #include "./policy/alphabeta.hpp"
 #include "./policy/pvs.hpp"
+#ifdef USE_NNUE
+#include "./nnue/nnue.hpp"
+#endif
 
 
 struct TestPos {
@@ -48,6 +51,14 @@ static double time_get_move(
 
 
 int main(int argc, char* argv[]){
+#ifdef USE_NNUE
+  if(nnue::init()){
+    std::cerr << "NNUE model loaded." << std::endl;
+  }else{
+    std::cerr << "NNUE not loaded, using handcrafted eval." << std::endl;
+  }
+#endif
+
   // Optional label from command line
   const char* label = (argc > 1) ? argv[1] : "";
 

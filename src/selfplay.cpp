@@ -5,10 +5,21 @@
 #include "./policy/minimax.hpp"
 #include "./policy/alphabeta.hpp"
 #include "./policy/random.hpp"
+#ifdef USE_NNUE
+#include "./nnue/nnue.hpp"
+#endif
 
 
 int main(){
   srand(RANDOM_SEED);
+
+#ifdef USE_NNUE
+  if(nnue::init()){
+    std::cerr << "NNUE model loaded." << std::endl;
+  }else{
+    std::cerr << "NNUE not loaded, using handcrafted eval." << std::endl;
+  }
+#endif
   
   State *game = new State(); 
   game->get_legal_actions();

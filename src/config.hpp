@@ -87,6 +87,23 @@
  */
 #define USE_EVAL_MOBILITY
 
+/*
+ * USE_NNUE: Use NNUE (neural network) evaluation.
+ *   When enabled, loads a trained neural network for position evaluation.
+ *   Falls back to handcrafted eval if model fails to load.
+ *   Compile with -DNO_NNUE to disable.
+ *
+ * NNUE_EMBEDDED: Embed the weight file directly into the binary via .incbin.
+ *   No external file needed at runtime. Recompile to update weights.
+ *
+ * NNUE_FILE: Path to the NNUE weight file (used for both .incbin and file loading).
+ */
+#ifndef NO_NNUE
+#define USE_NNUE
+#endif
+// #define NNUE_EMBEDDED
+#define NNUE_FILE "models/nnue_v1.bin"
+
 
 /*Which character/words for pieces*/
 /* By default, the pieces are '♟', '♜', '♞', '♝', '♛', '♚' from unicode*/

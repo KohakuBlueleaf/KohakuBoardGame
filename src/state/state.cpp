@@ -5,6 +5,9 @@
 
 #include "./state.hpp"
 #include "../config.hpp"
+#ifdef USE_NNUE
+#include "../nnue/nnue.hpp"
+#endif
 
 
 #ifdef USE_KP_EVAL
@@ -107,6 +110,14 @@ int State::evaluate(){
     score = P_MAX;
     return score;
   }
+
+  // Use NNUE evaluation if model is loaded
+#ifdef USE_NNUE
+  if(nnue::g_model.loaded()){
+    return nnue::g_model.evaluate(this->board, this->player);
+  }
+#endif
+
   auto self_board = this->board.board[this->player];
   auto oppn_board = this->board.board[1 - this->player];
 
@@ -181,6 +192,14 @@ int State::evaluate(){
     score = P_MAX;
     return score;
   }
+
+  // Use NNUE evaluation if model is loaded
+#ifdef USE_NNUE
+  if(nnue::g_model.loaded()){
+    return nnue::g_model.evaluate(this->board, this->player);
+  }
+#endif
+
   auto self_board = this->board.board[this->player];
   auto oppn_board = this->board.board[1 - this->player];
 
