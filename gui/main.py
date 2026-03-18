@@ -237,8 +237,8 @@ class GameApp:
             return
         if not self.analyze["enabled"]:
             return
-        # Kill old engine to avoid async race, create fresh
-        self._kill_analyze_engine()
+        # Stop any running analysis first (sync via isready)
+        self._stop_analysis()
         engine = self._get_or_create_analyze_engine()
         if engine is None:
             return
@@ -254,16 +254,19 @@ class GameApp:
         self._analyzing = True
 
     def _stop_analysis(self):
-        self._kill_analyze_engine()
-        self._analyzing = False
-
-    def _kill_analyze_engine(self):
-        if self._analyze_engine is not None:
+        if self._analyzing and self._analyze_engine is not None:
             try:
-                self._analyze_engine.quit()
+                self._analyze_engine.stop()
             except Exception:
                 pass
-            self._analyze_engine = None
+            # Wait for engine to finish processing stop
+            if self._analyze_engine.is_alive():
+                try:
+                    self._analyze_engine._send("isready")
+                    self._analyze_engine._wait_for("readyok", timeout=2.0)
+                except Exception:
+                    pass
+        self._analyzing = False
 
     def _on_analyze_info(self, info_dict):
         """Normalize score to white's perspective for the score bar."""
