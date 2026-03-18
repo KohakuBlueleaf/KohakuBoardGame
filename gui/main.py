@@ -237,10 +237,11 @@ class GameApp:
             return
         if not self.analyze["enabled"]:
             return
+        # Kill old engine to avoid async race, create fresh
+        self._kill_analyze_engine()
         engine = self._get_or_create_analyze_engine()
         if engine is None:
             return
-        self._stop_analysis()
         if self.uci_moves:
             engine.set_position(moves=list(self.uci_moves))
         else:
@@ -253,12 +254,16 @@ class GameApp:
         self._analyzing = True
 
     def _stop_analysis(self):
-        if self._analyzing and self._analyze_engine is not None:
+        self._kill_analyze_engine()
+        self._analyzing = False
+
+    def _kill_analyze_engine(self):
+        if self._analyze_engine is not None:
             try:
-                self._analyze_engine.stop()
+                self._analyze_engine.quit()
             except Exception:
                 pass
-            self._analyzing = False
+            self._analyze_engine = None
 
     def _on_analyze_info(self, info_dict):
         """Normalize score to white's perspective for the score bar."""
@@ -453,8 +458,6 @@ class GameApp:
     # ------------------------------------------------------------------
 
     def execute_move(self, move):
-        if self.analyze["enabled"]:
-            self._stop_analysis()
 
         # Clear "stopped" state so user can keep exploring
         if self.game_result == "stopped":
