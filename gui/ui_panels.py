@@ -105,10 +105,11 @@ class SidePanel:
         ai_thinking=False,
         game_result=None,
         ai_depth=None,
-        mode="human_vs_ai",
+        mode="human_vs_human",
         time_limit=DEFAULT_TIMEOUT,
         search_info=None,
         paused=False,
+        analyze_enabled=False,
     ):
         self._frame += 1
         mouse_pos = pygame.mouse.get_pos()
@@ -125,12 +126,17 @@ class SidePanel:
         cx = PANEL_X + self._PAD_LEFT
         cy = PANEL_Y + self._PAD_TOP
 
-        mode_labels = {
-            "human_vs_ai": "Human vs AI",
-            "ai_vs_ai": "AI vs AI",
-            "analyze": "Analyze",
-        }
-        surf = self.font_title.render(mode_labels.get(mode, mode), True, COLOR_TEXT)
+        # Derive display label from mode + analyze state
+        if analyze_enabled:
+            title_label = "Analyze"
+        else:
+            mode_labels = {
+                "human_vs_human": "Human vs Human",
+                "human_vs_ai": "Human vs AI",
+                "ai_vs_ai": "AI vs AI",
+            }
+            title_label = mode_labels.get(mode, mode)
+        surf = self.font_title.render(title_label, True, COLOR_TEXT)
         self.surface.blit(surf, (cx, cy))
         cy += surf.get_height() + self._SECTION_GAP
 
@@ -171,7 +177,7 @@ class SidePanel:
         if paused:
             status_text = "Paused"
             status_color = (200, 200, 100)
-        elif mode == "analyze" and search_info.get("depth") is not None:
+        elif analyze_enabled and search_info.get("depth") is not None:
             n_dots = (self._frame // (FPS // 3)) % 3 + 1
             status_text = "Analyzing" + "." * n_dots
             status_color = (100, 200, 220)
@@ -188,7 +194,8 @@ class SidePanel:
         if search_info.get("pv"):
             cy = self._draw_pv(cx, cy, search_info["pv"])
 
-        show_extra = mode in ("analyze", "ai_vs_ai")
+        # Show undo/pause when AI is involved or analyze is enabled
+        show_extra = mode in ("ai_vs_ai",) or analyze_enabled
         if show_extra:
             self.btn_pause.text = "Resume" if paused else "Pause"
             self.btn_undo.draw(self.surface, mouse_pos)
@@ -365,12 +372,12 @@ class SidePanel:
     # Interaction
     # ==================================================================
 
-    def handle_click(self, x, y, mode=None):
+    def handle_click(self, x, y, mode=None, analyze_enabled=False):
         if self.btn_new_game.is_clicked(x, y):
             return "new_game"
         if self.btn_settings.is_clicked(x, y):
             return "settings"
-        if mode in ("analyze", "ai_vs_ai"):
+        if mode in ("ai_vs_ai",) or analyze_enabled:
             if self.btn_undo.is_clicked(x, y):
                 return "undo"
             if self.btn_pause.is_clicked(x, y):

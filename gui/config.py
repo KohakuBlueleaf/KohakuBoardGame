@@ -94,8 +94,7 @@ AI_VS_AI_DELAY = 0.5
 # FPS
 FPS = 30
 
-# Algorithm selection -- fallbacks when no engine is available
-ALGORITHMS_FALLBACK = ["pvs", "alphabeta", "minimax", "random"]
+# Algorithm selection
 DEFAULT_ALGORITHM = "pvs"
 
 # Max search depth (0 = use time limit instead)

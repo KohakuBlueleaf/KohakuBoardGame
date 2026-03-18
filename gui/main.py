@@ -40,28 +40,36 @@ class GameApp:
         self.game_state = MiniChessState.initial()
         _sync_current_player(self.game_state)
 
-        # Mode / settings
-        self.mode = "human_vs_ai"
-        self.human_player = 0
-        self.time_limit = DEFAULT_TIMEOUT
-        self.white_algorithm = DEFAULT_ALGORITHM
-        self.black_algorithm = DEFAULT_ALGORITHM
-        self.white_max_depth = DEFAULT_MAX_DEPTH
-        self.black_max_depth = DEFAULT_MAX_DEPTH
+        # Discover engines
+        self._available_engines = discover_uci_engines(BUILD_DIR)
 
-        # search_params: {option_name: current_value_string}
-        # Populated from engine options during first engine creation.
-        self.search_params = {}
         # Engine option definitions (list of dicts from UCIEngine.options)
         self._engine_options = []
         # Algorithm list read from engine's combo option
-        self._engine_algorithms = list(ALGORITHMS_FALLBACK)
+        self._engine_algorithms = []
 
-        self.white_engine = None
-        self.black_engine = None
+        # Per-side state
+        self.white = {
+            "engine": None,  # path or None for human
+            "algo": DEFAULT_ALGORITHM,
+            "params": {},  # algo-specific search params
+            "depth": 0,  # 0 = use time limit
+        }
+        self.black = {
+            "engine": self._available_engines[0][1] if self._available_engines else None,
+            "algo": DEFAULT_ALGORITHM,
+            "params": {},
+            "depth": 0,
+        }
+        self.analyze = {
+            "enabled": False,
+            "engine": None,  # auto-select first available
+            "algo": DEFAULT_ALGORITHM,
+            "params": {},
+        }
 
-        self._available_engines = discover_uci_engines(BUILD_DIR)
-        self._auto_select_engine()
+        self.time_limit = DEFAULT_TIMEOUT
+
         self._probe_engine_options()
 
         # Selection / interaction
@@ -89,7 +97,6 @@ class GameApp:
         # Analyze mode
         self._analyze_engine = None
         self._analyzing = False
-        self.analyze_algorithm = DEFAULT_ALGORITHM
         self._undo_stack = []
 
         # AI vs AI pacing
@@ -98,29 +105,36 @@ class GameApp:
 
         self._running = True
 
-        if self.mode == "ai_vs_ai" or (
-            self.mode == "human_vs_ai" and self.game_state.player != self.human_player
-        ):
-            self._trigger_ai_if_needed()
+        self._trigger_ai_if_needed()
 
     # ------------------------------------------------------------------
-    # Engine auto-selection
+    # Mode property -- derived from engine selections
     # ------------------------------------------------------------------
 
-    def _auto_select_engine(self):
-        """Pick the first available UCI engine for Black."""
-        if self._available_engines:
-            self.black_engine = self._available_engines[0][1]
+    @property
+    def mode(self):
+        w_is_ai = self.white["engine"] is not None
+        b_is_ai = self.black["engine"] is not None
+        if w_is_ai and b_is_ai:
+            return "ai_vs_ai"
+        elif w_is_ai or b_is_ai:
+            return "human_vs_ai"
+        else:
+            return "human_vs_human"
+
+    # ------------------------------------------------------------------
+    # Engine auto-selection / probing
+    # ------------------------------------------------------------------
 
     def _probe_engine_options(self):
         """Launch a temporary engine to read its UCI options, then quit it.
 
         Populates self._engine_options, self._engine_algorithms, and
-        self.search_params (with defaults) from the engine's option lines.
+        default params for each side from the engine's option lines.
         """
         exe_path = (
-            self.white_engine
-            or self.black_engine
+            self.white["engine"]
+            or self.black["engine"]
             or (self._available_engines[0][1] if self._available_engines else None)
         )
         if exe_path is None:
@@ -135,36 +149,41 @@ class GameApp:
         # Extract algorithm list from the combo option named "Algorithm"
         for opt in self._engine_options:
             if opt["name"] == "Algorithm" and opt["type"] == "combo":
-                self._engine_algorithms = list(opt.get("vars", ALGORITHMS_FALLBACK))
-                if not self._engine_algorithms:
-                    self._engine_algorithms = list(ALGORITHMS_FALLBACK)
+                self._engine_algorithms = list(opt.get("vars", []))
                 # Use the engine's default algorithm
                 if opt.get("default") in self._engine_algorithms:
-                    self.white_algorithm = opt["default"]
-                    self.black_algorithm = opt["default"]
-                    self.analyze_algorithm = opt["default"]
+                    self.white["algo"] = opt["default"]
+                    self.black["algo"] = opt["default"]
+                    self.analyze["algo"] = opt["default"]
                 break
 
-        # Populate search_params from engine defaults (skip Algorithm)
-        self.search_params = {}
+        # Build default params dict (skip Algorithm and Hash-like globals)
+        default_params = {}
         for opt in self._engine_options:
             if opt["name"] == "Algorithm":
                 continue
-            self.search_params[opt["name"]] = opt.get("default", "")
+            default_params[opt["name"]] = opt.get("default", "")
 
-    def _get_or_create_uci_engine(self, exe_path, attr_name):
+        # Initialize each side's params with defaults
+        self.white["params"] = dict(default_params)
+        self.black["params"] = dict(default_params)
+        self.analyze["params"] = dict(default_params)
+
+    def _get_or_create_uci_engine(self, side_config, attr_name):
+        """Create or reuse a UCI engine for a given side configuration.
+
+        Args:
+            side_config: dict with 'engine', 'algo', 'params' keys.
+            attr_name: attribute name on self to store the engine instance.
+        """
         existing = getattr(self, attr_name, None)
         if existing is not None and existing.is_alive():
             return existing
-        algo = (
-            self.white_algorithm
-            if attr_name == "white_uci_engine"
-            else self.black_algorithm
-        )
         try:
-            engine = UCIEngine(exe_path)
-            engine.set_option("Algorithm", algo)
-            self._send_search_params(engine)
+            engine = UCIEngine(side_config["engine"])
+            engine.set_option("Algorithm", side_config["algo"])
+            for name, value in side_config["params"].items():
+                engine.set_option(name, str(value))
             setattr(self, attr_name, engine)
             return engine
         except RuntimeError:
@@ -186,11 +205,6 @@ class GameApp:
         for attr in ("_analyze_engine", "white_uci_engine", "black_uci_engine"):
             self._quit_engine(attr)
 
-    def _send_search_params(self, engine):
-        """Send all search parameter options to a UCI engine."""
-        for name, value in self.search_params.items():
-            engine.set_option(name, str(value))
-
     # ------------------------------------------------------------------
     # Analyze mode
     # ------------------------------------------------------------------
@@ -198,18 +212,20 @@ class GameApp:
     def _get_or_create_analyze_engine(self):
         if self._analyze_engine is not None and self._analyze_engine.is_alive():
             return self._analyze_engine
-        # Use whichever engine path is available
+        # Use explicit analyze engine path, or fall back to any available
         exe_path = (
-            self.white_engine
-            or self.black_engine
+            self.analyze["engine"]
+            or self.white["engine"]
+            or self.black["engine"]
             or (self._available_engines[0][1] if self._available_engines else None)
         )
         if exe_path is None:
             return None
         try:
             engine = UCIEngine(exe_path)
-            engine.set_option("Algorithm", self.analyze_algorithm)
-            self._send_search_params(engine)
+            engine.set_option("Algorithm", self.analyze["algo"])
+            for name, value in self.analyze["params"].items():
+                engine.set_option(name, str(value))
             self._analyze_engine = engine
             return engine
         except RuntimeError:
@@ -217,6 +233,8 @@ class GameApp:
 
     def _start_analysis(self):
         if self.game_result is not None:
+            return
+        if not self.analyze["enabled"]:
             return
         engine = self._get_or_create_analyze_engine()
         if engine is None:
@@ -257,7 +275,7 @@ class GameApp:
     def _toggle_pause(self):
         if self.mode == "ai_vs_ai":
             self._paused = not self._paused
-        elif self.mode == "analyze":
+        elif self.analyze["enabled"]:
             if self._analyzing:
                 self._stop_analysis()
             else:
@@ -266,7 +284,7 @@ class GameApp:
     def undo_move(self):
         if not self._undo_stack:
             return
-        if self.mode == "analyze":
+        if self.analyze["enabled"]:
             self._stop_analysis()
         snap = self._undo_stack.pop()
         self.game_state = snap["game_state"]
@@ -279,7 +297,7 @@ class GameApp:
         self.search_info = {}
         self.selected_piece = None
         self.legal_moves_for_selected = []
-        if self.mode == "analyze":
+        if self.analyze["enabled"]:
             self._start_analysis()
 
     # ------------------------------------------------------------------
@@ -327,7 +345,9 @@ class GameApp:
                 self.handle_board_click(board_pos[0], board_pos[1])
             return
 
-        action = self.side_panel.handle_click(x, y, mode=self.mode)
+        action = self.side_panel.handle_click(
+            x, y, mode=self.mode, analyze_enabled=self.analyze["enabled"]
+        )
         if action == "new_game":
             self.new_game()
         elif action == "settings":
@@ -358,13 +378,13 @@ class GameApp:
     # ------------------------------------------------------------------
 
     def _is_human_turn(self):
-        if self.game_result is not None or self.ai_thinking:
+        if self.game_result is not None:
             return False
-        if self.mode == "ai_vs_ai":
+        if self.ai_thinking:
             return False
-        if self.mode == "analyze":
-            return True
-        return self.game_state.player == self.human_player
+        player = self.game_state.player
+        side = self.white if player == 0 else self.black
+        return side["engine"] is None
 
     def handle_board_click(self, row, col):
         player = self.game_state.player
@@ -400,10 +420,10 @@ class GameApp:
     # ------------------------------------------------------------------
 
     def execute_move(self, move):
-        if self.mode == "analyze":
+        if self.analyze["enabled"]:
             self._stop_analysis()
 
-        if self.mode in ("analyze", "ai_vs_ai"):
+        if self.analyze["enabled"] or self.mode == "ai_vs_ai":
             self._undo_stack.append(
                 {
                     "game_state": self.game_state,
@@ -440,7 +460,7 @@ class GameApp:
             self.game_result = "draw"
             return
 
-        if self.mode == "analyze":
+        if self.analyze["enabled"] and self._is_human_turn():
             self.search_info = {}
             self._start_analysis()
         else:
@@ -449,14 +469,11 @@ class GameApp:
     def _trigger_ai_if_needed(self):
         if self.game_result is not None or self.ai_thinking or self._paused:
             return
-        if self.mode == "human_vs_ai" and self.game_state.player == self.human_player:
-            return
-
         player = self.game_state.player
-        engine = self.white_engine if player == 0 else self.black_engine
-
-        if engine is not None:
-            self.trigger_ai_move()
+        side = self.white if player == 0 else self.black
+        if side["engine"] is None:
+            return  # human's turn
+        self.trigger_ai_move()
 
     # ------------------------------------------------------------------
     # AI management
@@ -464,17 +481,17 @@ class GameApp:
 
     def trigger_ai_move(self):
         player = self.game_state.player
-        engine_path = self.white_engine if player == 0 else self.black_engine
+        side = self.white if player == 0 else self.black
 
-        if engine_path is None:
-            return
+        if side["engine"] is None:
+            return  # human's turn
 
         self.ai_thinking = True
         self.ai_result = {"move": None, "depth": 0, "ready": False}
         self.search_info = {}
 
         attr = "white_uci_engine" if player == 0 else "black_uci_engine"
-        uci = self._get_or_create_uci_engine(engine_path, attr)
+        uci = self._get_or_create_uci_engine(side, attr)
 
         if uci is None:
             # Engine failed to start
@@ -486,7 +503,7 @@ class GameApp:
         else:
             uci.set_position()
 
-        max_depth = self.white_max_depth if player == 0 else self.black_max_depth
+        max_depth = side["depth"]
         if max_depth > 0:
             uci.go(
                 depth=max_depth,
@@ -569,7 +586,8 @@ class GameApp:
             mode=self.mode,
             time_limit=self.time_limit,
             search_info=self.search_info,
-            paused=self._paused or (self.mode == "analyze" and not self._analyzing),
+            paused=self._paused or (self.analyze["enabled"] and not self._analyzing),
+            analyze_enabled=self.analyze["enabled"],
         )
 
         self.side_panel.draw_bottom(
@@ -612,7 +630,7 @@ class GameApp:
                 except Exception:
                     pass
 
-        if self.mode == "analyze":
+        if self.analyze["enabled"]:
             self._start_analysis()
         else:
             self._trigger_ai_if_needed()
@@ -626,7 +644,7 @@ class GameApp:
         engine_names = ["Human"] + [name for name, _path in self._available_engines]
         engine_paths = [None] + [path for _name, path in self._available_engines]
 
-        algo_list = self._engine_algorithms or ALGORITHMS_FALLBACK
+        algo_list = self._engine_algorithms or [DEFAULT_ALGORITHM]
 
         def _engine_index(exe_path):
             if exe_path is None:
@@ -635,8 +653,6 @@ class GameApp:
                 if path == exe_path:
                     return idx
             return 0
-
-        first_engine_name = engine_names[1] if len(engine_names) > 1 else "Human"
 
         root = tk.Tk()
         root.withdraw()
@@ -649,69 +665,42 @@ class GameApp:
 
         pad = {"padx": 10, "pady": 4}
 
-        mode_var = tk.StringVar(value=self.mode)
-        human_var = tk.IntVar(value=self.human_player)
-        white_var = tk.StringVar(value=engine_names[_engine_index(self.white_engine)])
-        black_var = tk.StringVar(value=engine_names[_engine_index(self.black_engine)])
+        white_engine_var = tk.StringVar(
+            value=engine_names[_engine_index(self.white["engine"])]
+        )
+        black_engine_var = tk.StringVar(
+            value=engine_names[_engine_index(self.black["engine"])]
+        )
+        w_algo_var = tk.StringVar(value=self.white["algo"])
+        b_algo_var = tk.StringVar(value=self.black["algo"])
+        w_depth_var = tk.IntVar(value=self.white["depth"])
+        b_depth_var = tk.IntVar(value=self.black["depth"])
+
+        analyze_enabled_var = tk.BooleanVar(value=self.analyze["enabled"])
+        analyze_engine_var = tk.StringVar(
+            value=engine_names[_engine_index(self.analyze["engine"])]
+        )
+        analyze_algo_var = tk.StringVar(value=self.analyze["algo"])
+
         time_var = tk.IntVar(value=self.time_limit)
-        w_algo_var = tk.StringVar(value=self.white_algorithm)
-        b_algo_var = tk.StringVar(value=self.black_algorithm)
-        w_depth_var = tk.IntVar(value=self.white_max_depth)
-        b_depth_var = tk.IntVar(value=self.black_max_depth)
-        analyze_algo_var = tk.StringVar(value=self.analyze_algorithm)
+
+        # Mutable copies of per-side params for editing via sub-dialogs
+        white_params = dict(self.white["params"])
+        black_params = dict(self.black["params"])
+        analyze_params = dict(self.analyze["params"])
 
         applied = [False]
 
-        mode_frame = ttk.LabelFrame(dialog, text="Mode")
-        mode_frame.grid(row=0, column=0, columnspan=2, sticky="ew", **pad)
-
-        rb_hva = ttk.Radiobutton(
-            mode_frame,
-            text="Human vs AI",
-            variable=mode_var,
-            value="human_vs_ai",
-            command=lambda: _on_mode_change(),
-        )
-        rb_ava = ttk.Radiobutton(
-            mode_frame,
-            text="AI vs AI",
-            variable=mode_var,
-            value="ai_vs_ai",
-            command=lambda: _on_mode_change(),
-        )
-        rb_analyze = ttk.Radiobutton(
-            mode_frame,
-            text="Analyze",
-            variable=mode_var,
-            value="analyze",
-            command=lambda: _on_mode_change(),
-        )
-        rb_hva.grid(row=0, column=0, sticky="w", padx=8, pady=2)
-        rb_ava.grid(row=0, column=1, sticky="w", padx=8, pady=2)
-        rb_analyze.grid(row=0, column=2, sticky="w", padx=8, pady=2)
-
-        human_frame = ttk.LabelFrame(dialog, text="Human plays as")
-        human_frame.grid(row=1, column=0, columnspan=2, sticky="ew", **pad)
-
-        rb_white = ttk.Radiobutton(
-            human_frame, text="White", variable=human_var, value=0
-        )
-        rb_black = ttk.Radiobutton(
-            human_frame, text="Black", variable=human_var, value=1
-        )
-        rb_white.grid(row=0, column=0, sticky="w", padx=8, pady=2)
-        rb_black.grid(row=0, column=1, sticky="w", padx=8, pady=2)
-        human_radios = [rb_white, rb_black]
-
+        # ---- White frame ----
         white_frame = ttk.LabelFrame(dialog, text="White")
-        white_frame.grid(row=2, column=0, columnspan=2, sticky="ew", **pad)
+        white_frame.grid(row=0, column=0, columnspan=2, sticky="ew", **pad)
 
-        ttk.Label(white_frame, text="Engine:").grid(
+        ttk.Label(white_frame, text="Player:").grid(
             row=0, column=0, sticky="w", padx=4, pady=2
         )
         white_combo = ttk.Combobox(
             white_frame,
-            textvariable=white_var,
+            textvariable=white_engine_var,
             values=engine_names,
             state="readonly",
             width=22,
@@ -730,23 +719,34 @@ class GameApp:
         )
         w_algo_combo.grid(row=1, column=1, sticky="w", padx=4, pady=2)
 
+        w_params_btn = ttk.Button(
+            white_frame,
+            text="Params...",
+            command=lambda: self._open_params_dialog(
+                dialog, w_algo_var.get(), white_params
+            ),
+            width=8,
+        )
+        w_params_btn.grid(row=1, column=2, sticky="w", padx=4, pady=2)
+
         ttk.Label(white_frame, text="Depth:").grid(
-            row=1, column=2, sticky="w", padx=4, pady=2
+            row=1, column=3, sticky="w", padx=4, pady=2
         )
         w_depth_spin = ttk.Spinbox(
             white_frame, from_=0, to=20, textvariable=w_depth_var, width=4
         )
-        w_depth_spin.grid(row=1, column=3, sticky="w", padx=4, pady=2)
+        w_depth_spin.grid(row=1, column=4, sticky="w", padx=4, pady=2)
 
+        # ---- Black frame ----
         black_frame = ttk.LabelFrame(dialog, text="Black")
-        black_frame.grid(row=3, column=0, columnspan=2, sticky="ew", **pad)
+        black_frame.grid(row=1, column=0, columnspan=2, sticky="ew", **pad)
 
-        ttk.Label(black_frame, text="Engine:").grid(
+        ttk.Label(black_frame, text="Player:").grid(
             row=0, column=0, sticky="w", padx=4, pady=2
         )
         black_combo = ttk.Combobox(
             black_frame,
-            textvariable=black_var,
+            textvariable=black_engine_var,
             values=engine_names,
             state="readonly",
             width=22,
@@ -765,57 +765,59 @@ class GameApp:
         )
         b_algo_combo.grid(row=1, column=1, sticky="w", padx=4, pady=2)
 
+        b_params_btn = ttk.Button(
+            black_frame,
+            text="Params...",
+            command=lambda: self._open_params_dialog(
+                dialog, b_algo_var.get(), black_params
+            ),
+            width=8,
+        )
+        b_params_btn.grid(row=1, column=2, sticky="w", padx=4, pady=2)
+
         ttk.Label(black_frame, text="Depth:").grid(
-            row=1, column=2, sticky="w", padx=4, pady=2
+            row=1, column=3, sticky="w", padx=4, pady=2
         )
         b_depth_spin = ttk.Spinbox(
             black_frame, from_=0, to=20, textvariable=b_depth_var, width=4
         )
-        b_depth_spin.grid(row=1, column=3, sticky="w", padx=4, pady=2)
+        b_depth_spin.grid(row=1, column=4, sticky="w", padx=4, pady=2)
 
-        w_ai_widgets = [w_algo_combo, w_depth_spin]
-        b_ai_widgets = [b_algo_combo, b_depth_spin]
+        # ---- Analyze frame ----
+        analyze_frame = ttk.LabelFrame(dialog, text="Analyze")
+        analyze_frame.grid(row=2, column=0, columnspan=2, sticky="ew", **pad)
 
-        def _update_side_widgets():
-            w_is_engine = white_var.get() != "Human"
-            b_is_engine = black_var.get() != "Human"
-            for w in w_ai_widgets:
-                w.configure(state="readonly" if w_is_engine else "disabled")
-            w_depth_spin.configure(state="normal" if w_is_engine else "disabled")
-            for w in b_ai_widgets:
-                w.configure(state="readonly" if b_is_engine else "disabled")
-            b_depth_spin.configure(state="normal" if b_is_engine else "disabled")
-
-        white_combo.bind("<<ComboboxSelected>>", lambda e: _update_side_widgets())
-        black_combo.bind("<<ComboboxSelected>>", lambda e: _update_side_widgets())
-
-        def _on_mode_change():
-            mode = mode_var.get()
-            is_human_choice = mode == "human_vs_ai"
-            state = "!disabled" if is_human_choice else "disabled"
-            for rb in human_radios:
-                rb.state([state])
-            if mode == "ai_vs_ai":
-                if white_var.get() == "Human":
-                    white_var.set(first_engine_name)
-                if black_var.get() == "Human":
-                    black_var.set(first_engine_name)
-            _update_side_widgets()
-
-        _on_mode_change()
-        _update_side_widgets()
-
-        ttk.Label(dialog, text="Time limit (s):").grid(
-            row=4, column=0, sticky="w", **pad
+        analyze_check = ttk.Checkbutton(
+            analyze_frame,
+            text="Enable background analysis",
+            variable=analyze_enabled_var,
+            command=lambda: _update_analyze_widgets(),
         )
-        time_spin = ttk.Spinbox(dialog, from_=1, to=30, textvariable=time_var, width=5)
-        time_spin.grid(row=4, column=1, sticky="w", **pad)
+        analyze_check.grid(row=0, column=0, columnspan=5, sticky="w", padx=4, pady=2)
 
-        analyze_frame = ttk.LabelFrame(dialog, text="Analyze Engine")
-        analyze_frame.grid(row=5, column=0, columnspan=2, sticky="ew", **pad)
+        ttk.Label(analyze_frame, text="Engine:").grid(
+            row=1, column=0, sticky="w", padx=4, pady=2
+        )
+        # Analyze engine choices: only actual engines (no Human)
+        analyze_engine_names = [name for name, _path in self._available_engines]
+        if not analyze_engine_names:
+            analyze_engine_names = ["(none)"]
+        analyze_engine_combo = ttk.Combobox(
+            analyze_frame,
+            textvariable=analyze_engine_var,
+            values=["(auto)"] + analyze_engine_names,
+            state="readonly",
+            width=22,
+        )
+        # Default to (auto) if analyze engine was None
+        if self.analyze["engine"] is None:
+            analyze_engine_var.set("(auto)")
+        analyze_engine_combo.grid(
+            row=1, column=1, columnspan=3, sticky="ew", padx=4, pady=2
+        )
 
         ttk.Label(analyze_frame, text="Algorithm:").grid(
-            row=0, column=0, sticky="w", padx=4, pady=2
+            row=2, column=0, sticky="w", padx=4, pady=2
         )
         analyze_algo_combo = ttk.Combobox(
             analyze_frame,
@@ -824,130 +826,96 @@ class GameApp:
             state="readonly",
             width=10,
         )
-        analyze_algo_combo.grid(row=0, column=1, sticky="w", padx=4, pady=2)
+        analyze_algo_combo.grid(row=2, column=1, sticky="w", padx=4, pady=2)
 
-        # -- Search Parameters (built dynamically from engine options) ----------
-        # Separate options into search params and global params.
-        # Skip "Algorithm" (handled above). Show "Hash" in a "Global" section.
-        search_opts = []
-        global_opts = []
-        for opt in self._engine_options:
-            if opt["name"] == "Algorithm":
-                continue
-            if opt["name"] == "Hash":
-                global_opts.append(opt)
-            else:
-                search_opts.append(opt)
+        a_params_btn = ttk.Button(
+            analyze_frame,
+            text="Params...",
+            command=lambda: self._open_params_dialog(
+                dialog, analyze_algo_var.get(), analyze_params
+            ),
+            width=8,
+        )
+        a_params_btn.grid(row=2, column=2, sticky="w", padx=4, pady=2)
 
-        sp_vars = {}  # {option_name: tk variable}
-        sp_meta = {}  # {option_name: opt dict} for reading back values
+        analyze_widgets = [analyze_engine_combo, analyze_algo_combo, a_params_btn]
 
-        if search_opts:
-            search_frame = ttk.LabelFrame(dialog, text="Search Parameters")
-            search_frame.grid(row=6, column=0, columnspan=2, sticky="ew", **pad)
+        def _update_analyze_widgets():
+            enabled = analyze_enabled_var.get()
+            for w in analyze_widgets:
+                if isinstance(w, ttk.Combobox):
+                    w.configure(state="readonly" if enabled else "disabled")
+                else:
+                    w.configure(state="normal" if enabled else "disabled")
 
-            # Separate by type for layout: checks first, then others
-            check_opts = [o for o in search_opts if o["type"] == "check"]
-            other_opts = [o for o in search_opts if o["type"] != "check"]
+        _update_analyze_widgets()
 
-            # Checkboxes -- two columns
-            for i, opt in enumerate(check_opts):
-                name = opt["name"]
-                current = self.search_params.get(name, opt.get("default", "false"))
-                var = tk.BooleanVar(value=(current.lower() == "true"))
-                sp_vars[name] = var
-                sp_meta[name] = opt
-                r, c = divmod(i, 2)
-                ttk.Checkbutton(search_frame, text=name, variable=var).grid(
-                    row=r, column=c, sticky="w", padx=8, pady=1
-                )
+        # ---- Time limit ----
+        ttk.Label(dialog, text="Time limit (s):").grid(
+            row=3, column=0, sticky="w", **pad
+        )
+        time_spin = ttk.Spinbox(dialog, from_=1, to=30, textvariable=time_var, width=5)
+        time_spin.grid(row=3, column=1, sticky="w", **pad)
 
-            # Other option types -- two columns below checkboxes
-            row_start = (len(check_opts) + 1) // 2
-            for j, opt in enumerate(other_opts):
-                name = opt["name"]
-                current = self.search_params.get(name, opt.get("default", ""))
-                sp_meta[name] = opt
-                r, c = divmod(j, 2)
-                r += row_start
+        # ---- Widget enable/disable based on player selection ----
+        w_ai_widgets = [w_algo_combo, w_params_btn, w_depth_spin]
+        b_ai_widgets = [b_algo_combo, b_params_btn, b_depth_spin]
 
-                if opt["type"] == "spin":
-                    lo = int(opt.get("min", 0))
-                    hi = int(opt.get("max", 9999))
-                    try:
-                        val = int(current)
-                    except (ValueError, TypeError):
-                        val = int(opt.get("default", 0))
-                    var = tk.IntVar(value=val)
-                    sp_vars[name] = var
-                    sub = ttk.Frame(search_frame)
-                    sub.grid(row=r, column=c, sticky="w", padx=8, pady=1)
-                    ttk.Label(sub, text=f"{name}:").pack(side="left")
-                    ttk.Spinbox(
-                        sub, from_=lo, to=hi, textvariable=var, width=4
-                    ).pack(side="left", padx=(4, 0))
+        def _update_side_widgets():
+            w_is_engine = white_engine_var.get() != "Human"
+            b_is_engine = black_engine_var.get() != "Human"
+            for w in w_ai_widgets:
+                if isinstance(w, ttk.Combobox):
+                    w.configure(state="readonly" if w_is_engine else "disabled")
+                elif isinstance(w, ttk.Spinbox):
+                    w.configure(state="normal" if w_is_engine else "disabled")
+                else:
+                    w.configure(state="normal" if w_is_engine else "disabled")
+            for w in b_ai_widgets:
+                if isinstance(w, ttk.Combobox):
+                    w.configure(state="readonly" if b_is_engine else "disabled")
+                elif isinstance(w, ttk.Spinbox):
+                    w.configure(state="normal" if b_is_engine else "disabled")
+                else:
+                    w.configure(state="normal" if b_is_engine else "disabled")
 
-                elif opt["type"] == "combo":
-                    choices = opt.get("vars", [])
-                    var = tk.StringVar(value=current)
-                    sp_vars[name] = var
-                    sub = ttk.Frame(search_frame)
-                    sub.grid(row=r, column=c, sticky="w", padx=8, pady=1)
-                    ttk.Label(sub, text=f"{name}:").pack(side="left")
-                    ttk.Combobox(
-                        sub,
-                        textvariable=var,
-                        values=choices,
-                        state="readonly",
-                        width=max(8, max((len(v) for v in choices), default=8)),
-                    ).pack(side="left", padx=(4, 0))
+        white_combo.bind("<<ComboboxSelected>>", lambda e: _update_side_widgets())
+        black_combo.bind("<<ComboboxSelected>>", lambda e: _update_side_widgets())
 
-                elif opt["type"] == "string":
-                    var = tk.StringVar(value=current)
-                    sp_vars[name] = var
-                    sub = ttk.Frame(search_frame)
-                    sub.grid(row=r, column=c, sticky="w", padx=8, pady=1)
-                    ttk.Label(sub, text=f"{name}:").pack(side="left")
-                    ttk.Entry(sub, textvariable=var, width=12).pack(
-                        side="left", padx=(4, 0)
-                    )
+        # Reset params to defaults when algorithm changes
+        def _on_w_algo_change(event=None):
+            new_algo = w_algo_var.get()
+            # Reset white params to defaults
+            for opt in self._engine_options:
+                if opt["name"] == "Algorithm":
+                    continue
+                white_params[opt["name"]] = opt.get("default", "")
 
-        # -- Global Parameters (e.g. Hash) ------------------------------------
-        global_vars = {}
-        if global_opts:
-            global_frame = ttk.LabelFrame(dialog, text="Global")
-            global_frame.grid(row=7, column=0, columnspan=2, sticky="ew", **pad)
+        def _on_b_algo_change(event=None):
+            new_algo = b_algo_var.get()
+            # Reset black params to defaults
+            for opt in self._engine_options:
+                if opt["name"] == "Algorithm":
+                    continue
+                black_params[opt["name"]] = opt.get("default", "")
 
-            for i, opt in enumerate(global_opts):
-                name = opt["name"]
-                current = self.search_params.get(name, opt.get("default", ""))
-                sp_meta[name] = opt
+        def _on_a_algo_change(event=None):
+            new_algo = analyze_algo_var.get()
+            # Reset analyze params to defaults
+            for opt in self._engine_options:
+                if opt["name"] == "Algorithm":
+                    continue
+                analyze_params[opt["name"]] = opt.get("default", "")
 
-                if opt["type"] == "spin":
-                    lo = int(opt.get("min", 0))
-                    hi = int(opt.get("max", 9999))
-                    try:
-                        val = int(current)
-                    except (ValueError, TypeError):
-                        val = int(opt.get("default", 0))
-                    var = tk.IntVar(value=val)
-                    global_vars[name] = var
-                    sub = ttk.Frame(global_frame)
-                    sub.grid(row=i, column=0, sticky="w", padx=8, pady=1)
-                    ttk.Label(sub, text=f"{name}:").pack(side="left")
-                    ttk.Spinbox(
-                        sub, from_=lo, to=hi, textvariable=var, width=4
-                    ).pack(side="left", padx=(4, 0))
+        w_algo_combo.bind("<<ComboboxSelected>>", _on_w_algo_change)
+        b_algo_combo.bind("<<ComboboxSelected>>", _on_b_algo_change)
+        analyze_algo_combo.bind("<<ComboboxSelected>>", _on_a_algo_change)
 
-                elif opt["type"] == "check":
-                    var = tk.BooleanVar(value=(current.lower() == "true"))
-                    global_vars[name] = var
-                    ttk.Checkbutton(
-                        global_frame, text=name, variable=var
-                    ).grid(row=i, column=0, sticky="w", padx=8, pady=1)
+        _update_side_widgets()
 
+        # ---- Buttons ----
         btn_frame = ttk.Frame(dialog)
-        btn_frame.grid(row=8, column=0, columnspan=2, pady=10)
+        btn_frame.grid(row=4, column=0, columnspan=2, pady=10)
 
         def _on_ok():
             applied[0] = True
@@ -977,93 +945,224 @@ class GameApp:
         if not applied[0]:
             return
 
-        new_mode = mode_var.get()
-        new_human = human_var.get()
+        # ---- Read back values ----
         new_time = max(1, min(30, time_var.get()))
         new_w_algo = w_algo_var.get()
         new_b_algo = b_algo_var.get()
         new_w_depth = max(0, min(20, w_depth_var.get()))
         new_b_depth = max(0, min(20, b_depth_var.get()))
         new_analyze_algo = analyze_algo_var.get()
+        new_analyze_enabled = analyze_enabled_var.get()
 
-        # Collect search params as strings (the UCI wire format)
-        new_search_params = {}
-        for name, var in sp_vars.items():
-            opt = sp_meta[name]
-            if opt["type"] == "check":
-                new_search_params[name] = "true" if var.get() else "false"
-            elif opt["type"] == "spin":
-                lo = int(opt.get("min", 0))
-                hi = int(opt.get("max", 9999))
-                new_search_params[name] = str(max(lo, min(hi, var.get())))
-            else:
-                new_search_params[name] = str(var.get())
-
-        # Also collect global params (Hash etc.) into search_params so they
-        # get sent via _send_search_params.  Store under a separate key
-        # only for the change-detection below.
-        for name, var in global_vars.items():
-            opt = sp_meta[name]
-            if opt["type"] == "spin":
-                lo = int(opt.get("min", 0))
-                hi = int(opt.get("max", 9999))
-                new_search_params[name] = str(max(lo, min(hi, var.get())))
-            elif opt["type"] == "check":
-                new_search_params[name] = "true" if var.get() else "false"
-            else:
-                new_search_params[name] = str(var.get())
-
-        search_params_changed = new_search_params != self.search_params
-
-        w_name = white_var.get()
-        b_name = black_var.get()
+        w_name = white_engine_var.get()
+        b_name = black_engine_var.get()
         w_idx = engine_names.index(w_name) if w_name in engine_names else 0
         b_idx = engine_names.index(b_name) if b_name in engine_names else 0
         new_white_engine = engine_paths[w_idx]
         new_black_engine = engine_paths[b_idx]
 
-        if new_mode == "ai_vs_ai" and (
-            new_white_engine is None or new_black_engine is None
-        ):
-            new_mode = "human_vs_ai"
-            if new_white_engine is None and new_black_engine is not None:
-                new_human = 0
-            elif new_black_engine is None and new_white_engine is not None:
-                new_human = 1
-
-        if new_mode == "human_vs_ai":
-            ai_side = 1 - new_human
-            ai_engine = new_white_engine if ai_side == 0 else new_black_engine
-            if ai_engine is None and self._available_engines:
-                fallback = self._available_engines[0][1]
-                if ai_side == 0:
-                    new_white_engine = fallback
-                else:
-                    new_black_engine = fallback
-
-        if search_params_changed:
-            self._shutdown_uci_engines()
+        # Resolve analyze engine
+        a_name = analyze_engine_var.get()
+        if a_name == "(auto)" or a_name == "(none)":
+            new_analyze_engine = None
         else:
-            if new_w_algo != self.white_algorithm or new_white_engine != self.white_engine:
-                self._quit_engine("white_uci_engine")
-            if new_b_algo != self.black_algorithm or new_black_engine != self.black_engine:
-                self._quit_engine("black_uci_engine")
-            if new_analyze_algo != self.analyze_algorithm:
-                self._quit_engine("_analyze_engine")
+            a_idx = engine_names.index(a_name) if a_name in engine_names else 0
+            new_analyze_engine = engine_paths[a_idx]
 
-        self.mode = new_mode
-        self.human_player = new_human
+        # ---- Detect changes and shutdown engines as needed ----
+        w_changed = (
+            new_white_engine != self.white["engine"]
+            or new_w_algo != self.white["algo"]
+            or white_params != self.white["params"]
+        )
+        b_changed = (
+            new_black_engine != self.black["engine"]
+            or new_b_algo != self.black["algo"]
+            or black_params != self.black["params"]
+        )
+        a_changed = (
+            new_analyze_engine != self.analyze["engine"]
+            or new_analyze_algo != self.analyze["algo"]
+            or analyze_params != self.analyze["params"]
+            or new_analyze_enabled != self.analyze["enabled"]
+        )
+
+        if w_changed:
+            self._quit_engine("white_uci_engine")
+        if b_changed:
+            self._quit_engine("black_uci_engine")
+        if a_changed:
+            self._quit_engine("_analyze_engine")
+
+        # ---- Apply new settings ----
+        self.white["engine"] = new_white_engine
+        self.white["algo"] = new_w_algo
+        self.white["params"] = white_params
+        self.white["depth"] = new_w_depth
+
+        self.black["engine"] = new_black_engine
+        self.black["algo"] = new_b_algo
+        self.black["params"] = black_params
+        self.black["depth"] = new_b_depth
+
+        self.analyze["enabled"] = new_analyze_enabled
+        self.analyze["engine"] = new_analyze_engine
+        self.analyze["algo"] = new_analyze_algo
+        self.analyze["params"] = analyze_params
+
         self.time_limit = new_time
-        self.white_algorithm = new_w_algo
-        self.black_algorithm = new_b_algo
-        self.white_max_depth = new_w_depth
-        self.black_max_depth = new_b_depth
-        self.white_engine = new_white_engine
-        self.black_engine = new_black_engine
-        self.analyze_algorithm = new_analyze_algo
-        self.search_params = new_search_params
 
         self.new_game()
+
+    def _open_params_dialog(self, parent, algo_name, params_dict):
+        """Open a modal sub-dialog to edit search parameters for a specific side.
+
+        Args:
+            parent: The parent tk window (the settings dialog).
+            algo_name: The currently selected algorithm name.
+            params_dict: Mutable dict of param_name -> value_string.
+                         Modified in-place if OK is clicked.
+        """
+        import tkinter as tk
+        from tkinter import ttk
+
+        sub = tk.Toplevel(parent)
+        sub.title(f"Search Parameters ({algo_name})")
+        sub.resizable(False, False)
+        sub.grab_set()
+        sub.attributes("-topmost", True)
+
+        # Build options from engine options, skipping "Algorithm"
+        opts = [o for o in self._engine_options if o["name"] != "Algorithm"]
+
+        if not opts:
+            ttk.Label(sub, text="No parameters available.").grid(
+                row=0, column=0, padx=20, pady=20
+            )
+            ttk.Button(sub, text="OK", command=sub.destroy, width=10).grid(
+                row=1, column=0, pady=10
+            )
+            sub.update_idletasks()
+            sw, sh = sub.winfo_screenwidth(), sub.winfo_screenheight()
+            dw, dh = sub.winfo_width(), sub.winfo_height()
+            sub.geometry(f"+{(sw - dw) // 2}+{(sh - dh) // 2}")
+            sub.wait_window()
+            return
+
+        sp_vars = {}
+        sp_meta = {}
+
+        # Separate by type: checks first, then others
+        check_opts = [o for o in opts if o["type"] == "check"]
+        other_opts = [o for o in opts if o["type"] != "check"]
+
+        content_frame = ttk.Frame(sub, padding=10)
+        content_frame.grid(row=0, column=0, sticky="nsew")
+
+        # Checkboxes -- two columns
+        for i, opt in enumerate(check_opts):
+            name = opt["name"]
+            current = params_dict.get(name, opt.get("default", "false"))
+            var = tk.BooleanVar(value=(str(current).lower() == "true"))
+            sp_vars[name] = var
+            sp_meta[name] = opt
+            r, c = divmod(i, 2)
+            ttk.Checkbutton(content_frame, text=name, variable=var).grid(
+                row=r, column=c, sticky="w", padx=8, pady=1
+            )
+
+        # Other option types below checkboxes
+        row_start = (len(check_opts) + 1) // 2
+        for j, opt in enumerate(other_opts):
+            name = opt["name"]
+            current = params_dict.get(name, opt.get("default", ""))
+            sp_meta[name] = opt
+            r = row_start + j
+
+            if opt["type"] == "spin":
+                lo = int(opt.get("min", 0))
+                hi = int(opt.get("max", 9999))
+                try:
+                    val = int(current)
+                except (ValueError, TypeError):
+                    val = int(opt.get("default", 0))
+                var = tk.IntVar(value=val)
+                sp_vars[name] = var
+                sub_f = ttk.Frame(content_frame)
+                sub_f.grid(row=r, column=0, columnspan=2, sticky="w", padx=8, pady=1)
+                ttk.Label(sub_f, text=f"{name}:").pack(side="left")
+                ttk.Spinbox(
+                    sub_f, from_=lo, to=hi, textvariable=var, width=6
+                ).pack(side="left", padx=(4, 0))
+
+            elif opt["type"] == "combo":
+                choices = opt.get("vars", [])
+                var = tk.StringVar(value=current)
+                sp_vars[name] = var
+                sub_f = ttk.Frame(content_frame)
+                sub_f.grid(row=r, column=0, columnspan=2, sticky="w", padx=8, pady=1)
+                ttk.Label(sub_f, text=f"{name}:").pack(side="left")
+                ttk.Combobox(
+                    sub_f,
+                    textvariable=var,
+                    values=choices,
+                    state="readonly",
+                    width=max(8, max((len(v) for v in choices), default=8)),
+                ).pack(side="left", padx=(4, 0))
+
+            elif opt["type"] == "string":
+                var = tk.StringVar(value=current)
+                sp_vars[name] = var
+                sub_f = ttk.Frame(content_frame)
+                sub_f.grid(row=r, column=0, columnspan=2, sticky="w", padx=8, pady=1)
+                ttk.Label(sub_f, text=f"{name}:").pack(side="left")
+                ttk.Entry(sub_f, textvariable=var, width=12).pack(
+                    side="left", padx=(4, 0)
+                )
+
+        # OK / Cancel
+        applied = [False]
+
+        def _on_ok():
+            applied[0] = True
+            sub.destroy()
+
+        def _on_cancel():
+            sub.destroy()
+
+        btn_frame = ttk.Frame(sub)
+        btn_frame.grid(row=1, column=0, pady=10)
+        ttk.Button(btn_frame, text="OK", command=_on_ok, width=10).grid(
+            row=0, column=0, padx=8
+        )
+        ttk.Button(btn_frame, text="Cancel", command=_on_cancel, width=10).grid(
+            row=0, column=1, padx=8
+        )
+
+        sub.bind("<Return>", lambda e: _on_ok())
+        sub.bind("<Escape>", lambda e: _on_cancel())
+
+        sub.update_idletasks()
+        sw, sh = sub.winfo_screenwidth(), sub.winfo_screenheight()
+        dw, dh = sub.winfo_width(), sub.winfo_height()
+        sub.geometry(f"+{(sw - dw) // 2}+{(sh - dh) // 2}")
+
+        sub.wait_window()
+
+        if not applied[0]:
+            return
+
+        # Write back into params_dict
+        for name, var in sp_vars.items():
+            opt = sp_meta[name]
+            if opt["type"] == "check":
+                params_dict[name] = "true" if var.get() else "false"
+            elif opt["type"] == "spin":
+                lo = int(opt.get("min", 0))
+                hi = int(opt.get("max", 9999))
+                params_dict[name] = str(max(lo, min(hi, var.get())))
+            else:
+                params_dict[name] = str(var.get())
 
 
 def main():
