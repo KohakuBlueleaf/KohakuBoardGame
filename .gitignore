@@ -1,10 +1,7 @@
 .vscode/
 .claude/
 build/
-gamelog.txt
-action
-state
-!state/
+models/
 ~$*
 *.bin
 *.pt
