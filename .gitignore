@@ -6,3 +6,4 @@ action
 state
 !state/
 ~$*
+*.bin
