@@ -36,19 +36,27 @@ class Button:
         self.rect = pygame.Rect(x, y, width, height)
         self.text = text
         self.font = font
+        self.enabled = True
 
     def draw(self, surface, mouse_pos):
-        hovering = self.rect.collidepoint(mouse_pos)
-        bg = COLOR_BTN_HOVER if hovering else COLOR_BTN
+        if not self.enabled:
+            bg = (45, 45, 50)
+            fg = (90, 90, 90)
+        elif self.rect.collidepoint(mouse_pos):
+            bg = COLOR_BTN_HOVER
+            fg = COLOR_BTN_TEXT
+        else:
+            bg = COLOR_BTN
+            fg = COLOR_BTN_TEXT
         pygame.draw.rect(surface, bg, self.rect, border_radius=6)
         pygame.draw.rect(surface, COLOR_TEXT_DIM, self.rect, width=1, border_radius=6)
-        label = self.font.render(self.text, True, COLOR_BTN_TEXT)
+        label = self.font.render(self.text, True, fg)
         lx = self.rect.x + (self.rect.width - label.get_width()) // 2
         ly = self.rect.y + (self.rect.height - label.get_height()) // 2
         surface.blit(label, (lx, ly))
 
     def is_clicked(self, x, y):
-        return self.rect.collidepoint(x, y)
+        return self.enabled and self.rect.collidepoint(x, y)
 
 
 class SidePanel:
@@ -73,24 +81,20 @@ class SidePanel:
         self.font_bold = _make_font(FONT_SIZE_PANEL, bold=True)
         self.font_small = _make_font(FONT_SIZE_PANEL - 2)
 
-        btn_w = (PANEL_WIDTH - 2 * self._PAD_LEFT - self._BTN_GAP) // 2
-        btn1_x = PANEL_X + self._PAD_LEFT
-        btn2_x = btn1_x + btn_w + self._BTN_GAP
+        btn2_w = (PANEL_WIDTH - 2 * self._PAD_LEFT - self._BTN_GAP) // 2
+        btn3_w = (PANEL_WIDTH - 2 * self._PAD_LEFT - 2 * self._BTN_GAP) // 3
+        bx = PANEL_X + self._PAD_LEFT
 
+        # Bottom row: New Game | Settings
         btn_y2 = PANEL_Y + PANEL_H - self._BTN_BOTTOM_MARGIN - self._BTN_HEIGHT
-        self.btn_new_game = Button(
-            btn1_x, btn_y2, btn_w, self._BTN_HEIGHT, "New Game", self.font_btn
-        )
-        self.btn_settings = Button(
-            btn2_x, btn_y2, btn_w, self._BTN_HEIGHT, "Settings", self.font_btn
-        )
+        self.btn_new_game = Button(bx, btn_y2, btn2_w, self._BTN_HEIGHT, "New Game", self.font_btn)
+        self.btn_settings = Button(bx + btn2_w + self._BTN_GAP, btn_y2, btn2_w, self._BTN_HEIGHT, "Settings", self.font_btn)
+
+        # Top row: Undo | Analyze | Stop
         btn_y1 = btn_y2 - self._BTN_HEIGHT - self._BTN_GAP
-        self.btn_undo = Button(
-            btn1_x, btn_y1, btn_w, self._BTN_HEIGHT, "Undo (Z)", self.font_btn
-        )
-        self.btn_pause = Button(
-            btn2_x, btn_y1, btn_w, self._BTN_HEIGHT, "Pause", self.font_btn
-        )
+        self.btn_undo = Button(bx, btn_y1, btn3_w, self._BTN_HEIGHT, "Undo", self.font_btn)
+        self.btn_analyze = Button(bx + btn3_w + self._BTN_GAP, btn_y1, btn3_w, self._BTN_HEIGHT, "Analyze", self.font_btn)
+        self.btn_stop = Button(bx + 2 * (btn3_w + self._BTN_GAP), btn_y1, btn3_w, self._BTN_HEIGHT, "Stop", self.font_btn)
 
         self._scroll_offset = 0
         self._frame = 0
@@ -194,14 +198,24 @@ class SidePanel:
         if search_info.get("pv"):
             cy = self._draw_pv(cx, cy, search_info["pv"])
 
-        # Show undo/pause when AI is involved or analyze is enabled
-        show_extra = mode in ("ai_vs_ai",) or analyze_enabled
-        if show_extra:
-            self.btn_pause.text = "Resume" if paused else "Pause"
-            self.btn_undo.draw(self.surface, mouse_pos)
-            self.btn_pause.draw(self.surface, mouse_pos)
+        # Determine if a game is in progress (any AI side playing, not finished)
+        gaming = mode in ("ai_vs_ai", "human_vs_ai") and game_result is None and not analyze_enabled
+        game_over = game_result is not None
 
-        top_btn = self.btn_undo if show_extra else self.btn_new_game
+        # Undo: disabled during gaming
+        self.btn_undo.enabled = not gaming
+        self.btn_undo.draw(self.surface, mouse_pos)
+
+        # Analyze: disabled during gaming, shows on/off state
+        self.btn_analyze.enabled = not gaming or game_over
+        self.btn_analyze.text = "Analyze ON" if analyze_enabled else "Analyze"
+        self.btn_analyze.draw(self.surface, mouse_pos)
+
+        # Stop: only enabled during gaming
+        self.btn_stop.enabled = gaming
+        self.btn_stop.draw(self.surface, mouse_pos)
+
+        top_btn = self.btn_undo
         sep_y = top_btn.rect.y - self._SECTION_GAP - 2
         x1 = PANEL_X + self._SEPARATOR_INSET
         x2 = PANEL_X + PANEL_WIDTH - self._SEPARATOR_INSET
@@ -372,16 +386,17 @@ class SidePanel:
     # Interaction
     # ==================================================================
 
-    def handle_click(self, x, y, mode=None, analyze_enabled=False):
+    def handle_click(self, x, y, **_kw):
         if self.btn_new_game.is_clicked(x, y):
             return "new_game"
         if self.btn_settings.is_clicked(x, y):
             return "settings"
-        if mode in ("ai_vs_ai",) or analyze_enabled:
-            if self.btn_undo.is_clicked(x, y):
-                return "undo"
-            if self.btn_pause.is_clicked(x, y):
-                return "pause"
+        if self.btn_undo.is_clicked(x, y):
+            return "undo"
+        if self.btn_analyze.is_clicked(x, y):
+            return "analyze"
+        if self.btn_stop.is_clicked(x, y):
+            return "stop"
         return None
 
     def set_scroll(self, direction):
@@ -397,6 +412,8 @@ class SidePanel:
             return "White wins!", (100, 220, 100)
         if game_result == "black_wins":
             return "Black wins!", (220, 80, 80)
+        if game_result == "stopped":
+            return "Game stopped", (180, 180, 180)
         return "Draw!", (200, 200, 100)
 
     def _draw_search_stats(self, cx, cy, search_info, ai_depth, time_limit):

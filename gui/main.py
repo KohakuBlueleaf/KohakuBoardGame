@@ -274,17 +274,43 @@ class GameApp:
     # Pause / Undo
     # ------------------------------------------------------------------
 
-    def _toggle_pause(self):
-        if self.mode == "ai_vs_ai":
-            self._paused = not self._paused
-        elif self.analyze["enabled"]:
-            if self._analyzing:
-                self._stop_analysis()
-            else:
-                self._start_analysis()
+    def toggle_analyze(self):
+        """Toggle analyze mode on/off. Only allowed when not gaming."""
+        if self._is_gaming():
+            return
+        self.analyze["enabled"] = not self.analyze["enabled"]
+        if self.analyze["enabled"]:
+            self._start_analysis()
+        else:
+            self._stop_analysis()
+            self.search_info = {}
+
+    def stop_game(self):
+        """Stop the current game. Declares it over so user can analyze."""
+        if not self._is_gaming():
+            return
+        self._paused = False
+        if self.ai_thinking:
+            # Force stop current search
+            for attr in ("white_uci_engine", "black_uci_engine"):
+                eng = getattr(self, attr, None)
+                if eng is not None:
+                    try:
+                        eng.stop()
+                    except Exception:
+                        pass
+            self.ai_thinking = False
+            self.ai_result = {"move": None, "depth": 0, "ready": False}
+        self.game_result = "stopped"
+
+    def _is_gaming(self):
+        """True when an AI game is in progress (not finished, at least one engine)."""
+        if self.game_result is not None:
+            return False
+        return self.mode in ("ai_vs_ai", "human_vs_ai")
 
     def undo_move(self):
-        if not self._undo_stack:
+        if not self._undo_stack or self._is_gaming():
             return
         if self.analyze["enabled"]:
             self._stop_analysis()
@@ -347,17 +373,17 @@ class GameApp:
                 self.handle_board_click(board_pos[0], board_pos[1])
             return
 
-        action = self.side_panel.handle_click(
-            x, y, mode=self.mode, analyze_enabled=self.analyze["enabled"]
-        )
+        action = self.side_panel.handle_click(x, y)
         if action == "new_game":
             self.new_game()
         elif action == "settings":
             self.open_settings()
         elif action == "undo":
             self.undo_move()
-        elif action == "pause":
-            self._toggle_pause()
+        elif action == "analyze":
+            self.toggle_analyze()
+        elif action == "stop":
+            self.stop_game()
 
     def _handle_keydown(self, key):
         if key == pygame.K_n:
@@ -371,19 +397,26 @@ class GameApp:
             else:
                 self._running = False
         elif key == pygame.K_SPACE:
-            self._toggle_pause()
+            if self.mode == "ai_vs_ai":
+                self._paused = not self._paused
         elif key == pygame.K_z:
             self.undo_move()
+        elif key == pygame.K_a:
+            self.toggle_analyze()
+        elif key == pygame.K_q:
+            self.stop_game()
 
     # ------------------------------------------------------------------
     # Board interaction
     # ------------------------------------------------------------------
 
     def _is_human_turn(self):
-        if self.game_result is not None:
-            return False
         if self.ai_thinking:
             return False
+        # Not gaming (stopped, game over, or no engines) → always allow clicks
+        if not self._is_gaming():
+            return True
+        # During a game, only human side can click
         player = self.game_state.player
         side = self.white if player == 0 else self.black
         return side["engine"] is None
@@ -425,7 +458,12 @@ class GameApp:
         if self.analyze["enabled"]:
             self._stop_analysis()
 
-        if self.analyze["enabled"] or self.mode == "ai_vs_ai":
+        # Clear "stopped" state so user can keep exploring
+        if self.game_result == "stopped":
+            self.game_result = None
+
+        # Save undo snapshot (always — user may want to explore/replay)
+        if not self._is_gaming():
             self._undo_stack.append(
                 {
                     "game_state": self.game_state,
