@@ -104,10 +104,9 @@ class GameApp:
         # AI vs AI pacing
         self._last_ai_time = 0.0
         self._paused = False
+        self._game_started = False  # only True after explicit New Game + OK
 
         self._running = True
-
-        self._trigger_ai_if_needed()
 
     # ------------------------------------------------------------------
     # Mode property -- derived from engine selections
@@ -302,12 +301,11 @@ class GameApp:
             self.ai_thinking = False
             self.ai_result = {"move": None, "depth": 0, "ready": False}
         self.game_result = "stopped"
+        self._game_started = False
 
     def _is_gaming(self):
-        """True when an AI game is in progress (not finished, at least one engine)."""
-        if self.game_result is not None:
-            return False
-        return self.mode in ("ai_vs_ai", "human_vs_ai")
+        """True when a game was explicitly started and not yet finished/stopped."""
+        return self._game_started and self.game_result is None
 
     def undo_move(self):
         if not self._undo_stack or self._is_gaming():
@@ -663,6 +661,10 @@ class GameApp:
         self._paused = False
         self._undo_stack = []
         self._stop_analysis()
+        self.analyze["enabled"] = False
+
+        # Mark game as explicitly started
+        self._game_started = True
 
         for attr in ("white_uci_engine", "black_uci_engine"):
             engine = getattr(self, attr, None)
@@ -672,10 +674,7 @@ class GameApp:
                 except Exception:
                     pass
 
-        if self.analyze["enabled"]:
-            self._start_analysis()
-        else:
-            self._trigger_ai_if_needed()
+        self._trigger_ai_if_needed()
 
     def open_settings(self):
         import tkinter as tk
