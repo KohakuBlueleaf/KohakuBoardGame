@@ -99,13 +99,51 @@ static void tt_store(uint64_t hash, int depth, int score, TTFlag flag, const Mov
 
 
 /*============================================================
+ * Killer Move Table
+ *
+ * Stores quiet moves that caused beta cutoffs at each ply.
+ * Two slots per ply — when a new killer is stored, the old
+ * one shifts down. Killers improve move ordering by placing
+ * historically good quiet moves ahead of other quiet moves.
+ *============================================================*/
+#ifdef USE_KILLER_MOVES
+
+static constexpr int MAX_PLY = 64;
+static Move killer_table[MAX_PLY][KILLER_SLOTS];
+
+static void store_killer(int ply, const Move& move){
+  if(ply >= MAX_PLY) return;
+  // Don't store duplicates
+  if(killer_table[ply][0] == move) return;
+  // Shift slot 0 → slot 1, store new move in slot 0
+  for(int i = KILLER_SLOTS - 1; i > 0; i--)
+    killer_table[ply][i] = killer_table[ply][i - 1];
+  killer_table[ply][0] = move;
+}
+
+static bool is_killer(int ply, const Move& move){
+  if(ply >= MAX_PLY) return false;
+  for(int i = 0; i < KILLER_SLOTS; i++)
+    if(killer_table[ply][i] == move) return true;
+  return false;
+}
+
+#endif
+
+
+/*============================================================
  * Move ordering: captures scored by MVV-LVA
  * With TT: TT best move gets highest priority
+ * With Killers: killer moves rank below captures, above quiet
  *============================================================*/
 #ifdef USE_MOVE_ORDERING
 static const int piece_val[7] = {0, 2, 6, 7, 8, 20, 100};
 
-static int score_move(const State* state, const Move& move){
+static int score_move(
+  const State* state,
+  const Move& move,
+  [[maybe_unused]] int ply = 0)
+{
   int to_r = move.second.first;
   int to_c = move.second.second;
   int captured = state->board.board[1 - state->player][to_r][to_c];
@@ -115,21 +153,26 @@ static int score_move(const State* state, const Move& move){
     int attacker = state->board.board[state->player][from_r][from_c];
     return piece_val[captured] * 100 - piece_val[attacker];
   }
+#ifdef USE_KILLER_MOVES
+  if(is_killer(ply, move))
+    return 50;
+#endif
   return 0;
 }
 #endif
 
-// Unified move ordering: MVV-LVA + optional TT best move first
+// Unified move ordering: MVV-LVA + killers + optional TT best move first
 static std::vector<Move> get_ordered_moves(
   [[maybe_unused]] const State* state,
-  [[maybe_unused]] const Move* tt_move = nullptr)
+  [[maybe_unused]] const Move* tt_move = nullptr,
+  [[maybe_unused]] int ply = 0)
 {
   auto moves = state->legal_actions;
 
 #ifdef USE_MOVE_ORDERING
   std::sort(moves.begin(), moves.end(),
-    [state](const Move& a, const Move& b){
-      return score_move(state, a) > score_move(state, b);
+    [state, ply](const Move& a, const Move& b){
+      return score_move(state, a, ply) > score_move(state, b, ply);
     });
 #endif
 
@@ -200,7 +243,10 @@ static int quiescence(State *state, int alpha, int beta, int qdepth){
 /*============================================================
  * PVS (Principal Variation Search)
  *============================================================*/
-int PVS::eval(State *state, int depth, int alpha, int beta){
+int PVS::eval(
+  State *state, int depth, int alpha, int beta,
+  [[maybe_unused]] int ply, [[maybe_unused]] bool can_null)
+{
   if(state->game_state == WIN){
     delete state;
     return P_MAX;
@@ -248,25 +294,93 @@ int PVS::eval(State *state, int depth, int alpha, int beta){
   }
 #endif
 
+  /*------------------------------------------------------------
+   * Null Move Pruning
+   *
+   * If we skip our turn (pass) and search at reduced depth,
+   * and the result is still >= beta, the position is so good
+   * that a real move will also beat beta. Prune early.
+   *------------------------------------------------------------*/
+#ifdef USE_NULL_MOVE
+  if(can_null && depth >= NULL_MOVE_R + 1){
+    // Create a "pass" state: same board, switch player
+    State* null_state = new State(state->board, 1 - state->player);
+    null_state->get_legal_actions();
+
+    // Only do null move if the position is not terminal
+    if(null_state->game_state != WIN && null_state->game_state != DRAW){
+      int null_score = -eval(null_state, depth - 1 - NULL_MOVE_R, -beta, -(beta - 1), ply + 1, false);
+      if(null_score >= beta){
+        delete state;
+        return beta;
+      }
+    }else{
+      delete null_state;
+    }
+  }
+#endif
+
   // Move ordering (TT move first if available)
 #ifdef USE_TRANSPOSITION_TABLE
-  auto moves = get_ordered_moves(state, has_tt_move ? &tt_best : nullptr);
+  auto moves = get_ordered_moves(state, has_tt_move ? &tt_best : nullptr, ply);
 #else
-  auto moves = get_ordered_moves(state);
+  auto moves = get_ordered_moves(state, nullptr, ply);
 #endif
 
   Move best_move;
   bool first_child = true;
+  int move_index = 0;
   for(auto& move : moves){
     int score;
     if(first_child){
-      score = -eval(state->next_state(move), depth-1, -beta, -alpha);
+      // First move: full window, full depth
+      score = -eval(state->next_state(move), depth - 1, -beta, -alpha, ply + 1, true);
       first_child = false;
       best_move = move;
     }else{
-      score = -eval(state->next_state(move), depth-1, -(alpha+1), -alpha);
-      if(score > alpha && score < beta){
-        score = -eval(state->next_state(move), depth-1, -beta, -alpha);
+      /*----------------------------------------------------------
+       * Late Move Reduction (LMR)
+       *
+       * Moves ordered late are unlikely to be good. Search them
+       * at reduced depth first; only re-search at full depth if
+       * the reduced search suggests they might be interesting.
+       *----------------------------------------------------------*/
+      bool do_lmr = false;
+#ifdef USE_LMR
+      if(move_index >= LMR_FULL_DEPTH && depth >= LMR_DEPTH_LIMIT){
+        // Only reduce quiet (non-capture) moves
+        int to_r = move.second.first;
+        int to_c = move.second.second;
+        bool is_capture = state->board.board[1 - state->player][to_r][to_c] != 0;
+        if(!is_capture){
+#ifdef USE_KILLER_MOVES
+          // Don't reduce killer moves
+          if(!is_killer(ply, move))
+            do_lmr = true;
+#else
+          do_lmr = true;
+#endif
+        }
+      }
+#endif
+
+      if(do_lmr){
+        // LMR: null-window, reduced depth
+        score = -eval(state->next_state(move), depth - 2, -(alpha + 1), -alpha, ply + 1, true);
+        if(score > alpha){
+          // Re-search at full depth, null-window
+          score = -eval(state->next_state(move), depth - 1, -(alpha + 1), -alpha, ply + 1, true);
+          if(score > alpha && score < beta){
+            // Full window re-search
+            score = -eval(state->next_state(move), depth - 1, -beta, -alpha, ply + 1, true);
+          }
+        }
+      }else{
+        // Standard PVS null-window search
+        score = -eval(state->next_state(move), depth - 1, -(alpha + 1), -alpha, ply + 1, true);
+        if(score > alpha && score < beta){
+          score = -eval(state->next_state(move), depth - 1, -beta, -alpha, ply + 1, true);
+        }
       }
     }
 
@@ -274,8 +388,20 @@ int PVS::eval(State *state, int depth, int alpha, int beta){
       alpha = score;
       best_move = move;
     }
-    if(alpha >= beta)
+    if(alpha >= beta){
+      // Beta cutoff — store killer if this is a quiet move
+#ifdef USE_KILLER_MOVES
+      {
+        int to_r = move.second.first;
+        int to_c = move.second.second;
+        bool is_capture = state->board.board[1 - state->player][to_r][to_c] != 0;
+        if(!is_capture)
+          store_killer(ply, move);
+      }
+#endif
       break;
+    }
+    move_index++;
   }
 
 #ifdef USE_TRANSPOSITION_TABLE
@@ -310,21 +436,21 @@ Move PVS::get_move(State *state, int depth){
     tt_best = tte->get_move();
     has_tt_move = true;
   }
-  auto moves = get_ordered_moves(state, has_tt_move ? &tt_best : nullptr);
+  auto moves = get_ordered_moves(state, has_tt_move ? &tt_best : nullptr, 0);
 #else
-  auto moves = get_ordered_moves(state);
+  auto moves = get_ordered_moves(state, nullptr, 0);
 #endif
 
   bool first_child = true;
   for(auto& move : moves){
     int score;
     if(first_child){
-      score = -eval(state->next_state(move), depth-1, -beta, -alpha);
+      score = -eval(state->next_state(move), depth - 1, -beta, -alpha, 0, true);
       first_child = false;
     }else{
-      score = -eval(state->next_state(move), depth-1, -(alpha+1), -alpha);
+      score = -eval(state->next_state(move), depth - 1, -(alpha + 1), -alpha, 0, true);
       if(score > alpha && score < beta){
-        score = -eval(state->next_state(move), depth-1, -beta, -alpha);
+        score = -eval(state->next_state(move), depth - 1, -beta, -alpha, 0, true);
       }
     }
 

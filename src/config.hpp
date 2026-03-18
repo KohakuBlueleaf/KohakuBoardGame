@@ -53,6 +53,32 @@
 #define USE_BITBOARD
 
 /*
+ * USE_KILLER_MOVES: Store quiet moves that caused beta cutoffs, 2 slots per ply.
+ *   Killers rank below captures but above other quiet moves in move ordering.
+ *   Requires USE_MOVE_ORDERING to have any effect.
+ */
+// #define USE_KILLER_MOVES
+#define KILLER_SLOTS 2
+
+/*
+ * USE_NULL_MOVE: Skip a turn (pass) with reduced depth; if still >= beta, prune.
+ *   Based on the assumption that doing nothing is rarely better than the best move.
+ *   NULL_MOVE_R controls the depth reduction for the null move search.
+ */
+// #define USE_NULL_MOVE
+#define NULL_MOVE_R 2
+
+/*
+ * USE_LMR: Late Move Reduction — reduce depth for late quiet moves that are
+ *   unlikely to be good. Saves search time on moves ordered near the end.
+ *   LMR_FULL_DEPTH: search first N moves at full depth before reducing.
+ *   LMR_DEPTH_LIMIT: only apply LMR when remaining depth >= this value.
+ */
+// #define USE_LMR
+#define LMR_FULL_DEPTH 3
+#define LMR_DEPTH_LIMIT 3
+
+/*
  * Additional evaluation features (additive, each independent)
  * All require USE_KP_EVAL as the base. Values are added on top of KP score.
  *
