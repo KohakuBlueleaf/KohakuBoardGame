@@ -34,7 +34,7 @@ static void init_zobrist(){
     zobrist_ready = true;
 }
 
-static uint64_t compute_hash(const State* state){
+[[maybe_unused]] static uint64_t compute_hash(const State* state){
     if(!zobrist_ready){ init_zobrist(); }
     uint64_t h = 0;
     for(int p = 0; p < 2; p++){
@@ -73,24 +73,24 @@ static std::vector<TTEntry> tt;
 static int tt_size_bits = DEFAULT_TT_SIZE_BITS;
 static int tt_mask = 0;
 
-static void tt_resize(int bits){
+[[maybe_unused]] static void tt_resize(int bits){
     tt_size_bits = bits;
     int size = 1 << bits;
     tt_mask = size - 1;
     tt.assign(size, TTEntry{});
 }
 
-static void tt_init(){
+[[maybe_unused]] static void tt_init(){
     if(tt.empty()){
         tt_resize(DEFAULT_TT_SIZE_BITS);
     }
 }
 
-static void tt_clear(){
+[[maybe_unused]] static void tt_clear(){
     std::fill(tt.begin(), tt.end(), TTEntry{});
 }
 
-static TTEntry* tt_probe(uint64_t hash){
+[[maybe_unused]] static TTEntry* tt_probe(uint64_t hash){
     tt_init();
     TTEntry& e = tt[hash & tt_mask];
     if(e.flag != TT_NONE && e.hash == hash){
@@ -99,7 +99,7 @@ static TTEntry* tt_probe(uint64_t hash){
     return nullptr;
 }
 
-static void tt_store(
+[[maybe_unused]] static void tt_store(
     uint64_t hash,
     int depth,
     int score,
