@@ -7,8 +7,59 @@
 /*You can modify these things in development for fast testing*/
 /*When TA run your program, we will use default settings (123, 10, 50)*/
 #define RANDOM_SEED 123
-#define timeout 10
-#define MAX_STEP 50
+#define timeout 2
+#define MAX_STEP 100
+
+
+/*
+ * Evaluation and search options (uncomment to enable)
+ *
+ * USE_KP_EVAL: King-Piece evaluation with piece-square tables + king tropism
+ *   For games with a "king" piece (MiniChess, Chess, Shogi).
+ *   Pieces are valued based on their position AND their relation to kings.
+ *
+ * USE_MOVE_ORDERING: Sort moves before search (captures first via MVV-LVA)
+ *   Essential for PVS to be effective. Also helps plain alpha-beta.
+ *
+ * Note: USE_KP_EVAL and USE_PP_EVAL are mutually exclusive.
+ */
+#define USE_KP_EVAL
+#define USE_MOVE_ORDERING
+
+/*
+ * USE_QUIESCENCE: Continue searching captures at depth 0 until the position
+ *   is "quiet". Prevents the horizon effect (e.g., evaluating mid-capture).
+ *   Pairs naturally with PVS. Max quiescence depth is capped for safety.
+ */
+#define USE_QUIESCENCE
+#define QUIESCENCE_MAX_DEPTH 16
+
+/*
+ * USE_TRANSPOSITION_TABLE: Cache searched positions to avoid redundant work.
+ *   Positions reached via different move orders share results.
+ *   Also provides best-move hints for move ordering (huge for PVS).
+ *   TT_SIZE_BITS controls table size: 2^N entries (~24 bytes each).
+ *   18 = 256K entries (~6MB), 20 = 1M entries (~24MB).
+ */
+#define USE_TRANSPOSITION_TABLE
+#define TT_SIZE_BITS 18
+
+/*
+ * USE_BITBOARD: Use bitboard-based move generation (uint32_t for 6x5=30 bits).
+ *   Precomputed attack tables for leapers (knight, king, pawn).
+ *   Bit-scan iteration instead of nested loops.
+ *   ~2-4x faster than naive array-based generation on this board size.
+ */
+#define USE_BITBOARD
+
+/*
+ * Additional evaluation features (additive, each independent)
+ * All require USE_KP_EVAL as the base. Values are added on top of KP score.
+ *
+ * USE_EVAL_MOBILITY: Bonus for having more legal moves than opponent.
+ *   More moves = more flexibility = stronger position.
+ */
+#define USE_EVAL_MOBILITY
 
 
 /*Which character/words for pieces*/

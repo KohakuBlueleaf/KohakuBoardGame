@@ -61,6 +61,8 @@ class State{
     int evaluate();
     State* next_state(Move move);
     void get_legal_actions();
+    void get_legal_actions_naive();
+    void get_legal_actions_bitboard();
     std::string encode_output();
     std::string encode_state();
 };
