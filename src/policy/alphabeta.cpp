@@ -1,61 +1,106 @@
-#include <ctime>
-#include <cmath>
-#include <tuple>
 #include <utility>
 #include "alphabeta.hpp"
 #include "../state/state.hpp"
 
 
-/*
-Declaration of AlphaBeta
-*/
-//Evaluate state with alphabeta pruning
-int AlphaBeta::eval(State *state, int depth, int alpha, int beta){
-  GameState now_res = state->game_state;
-  //return value of this state if the game is end or meet the depth
-  if(now_res == WIN){
-    delete state;
-    return 100000;
-  }
-  if(now_res == DRAW){
-    delete state;
-    return 0;
-  }
-  if(depth == 0){
-    int score = state->evaluate();
-    delete state;
-    return score;
-  }
-  
-  //AlphaBeta Pruning
-  for(auto move: state->legal_actions){
-    //negative max
-    int score = -eval(state->next_state(move), depth-1, -beta, -alpha);
-    alpha = std::max(score, alpha);
-    if(alpha >= beta){
-      delete state;
-      return alpha;
+/*============================================================
+ * AlphaBeta — eval_ctx
+ *
+ * Negamax with alpha-beta pruning.
+ * Caller manages memory (no delete inside).
+ *============================================================*/
+int AlphaBeta::eval_ctx(State *state, int depth, int alpha, int beta,
+                        SearchContext& ctx, const ABParams& p, int ply){
+    ctx.nodes++;
+    if(ply > ctx.seldepth){
+        ctx.seldepth = ply;
     }
-  }
-  
-  delete state;
-  return alpha;
-};
-
-
-//Run AlphaBeta pruning and get best move
-Move AlphaBeta::get_move(State *state, int depth){
-  Move best_action;
-  int alpha = M_MAX-10;
-
-  auto all_moves = state->legal_actions;
-  for(Move move: all_moves){
-    int score = -eval(state->next_state(move), depth-1, M_MAX, -alpha);
-    if(score > alpha){
-      best_action = move;
-      alpha = score;
+    if(ctx.stop){
+        return 0;
     }
-  }
 
-  return best_action;
-};
+    /*-- terminal / leaf checks --*/
+    GameState now_res = state->game_state;
+    if(now_res == WIN){
+        return 100000;
+    }
+    if(now_res == DRAW){
+        return 0;
+    }
+    if(depth == 0){
+        return state->evaluate(p.use_nnue, p.use_kp_eval, p.use_eval_mobility);
+    }
+
+    /*-- alpha-beta pruning loop --*/
+    for(auto& move : state->legal_actions){
+        State *next = state->next_state(move);
+        int score = -eval_ctx(next, depth - 1, -beta, -alpha, ctx, p, ply + 1);
+        delete next;
+
+        if(score > alpha){
+            alpha = score;
+        }
+        if(alpha >= beta){
+            return alpha;
+        }
+    }
+
+    return alpha;
+}
+
+
+/*============================================================
+ * AlphaBeta — search
+ *
+ * Iterate legal moves, call eval_ctx, return SearchResult.
+ *============================================================*/
+SearchResult AlphaBeta::search(State *state, int depth, SearchContext& ctx){
+    ctx.reset();
+    ABParams p = ABParams::from_map(ctx.params);
+    SearchResult result;
+    result.depth = depth;
+
+    if(!state->legal_actions.size()){
+        state->get_legal_actions();
+    }
+
+    int alpha = M_MAX - 10;
+    auto all_moves = state->legal_actions;
+
+    for(auto& move : all_moves){
+        State *next = state->next_state(move);
+        int score = -eval_ctx(next, depth - 1, M_MAX, -alpha, ctx, p, 1);
+        delete next;
+
+        if(score > alpha){
+            result.best_move = move;
+            alpha = score;
+        }
+    }
+
+    result.score = alpha;
+    result.nodes = ctx.nodes;
+    result.seldepth = ctx.seldepth;
+    result.pv = {result.best_move};
+    return result;
+}
+
+
+/*============================================================
+ * AlphaBeta — default_params / param_defs
+ *============================================================*/
+ParamMap AlphaBeta::default_params(){
+    return {
+        {"UseNNUE", "true"},
+        {"UseKPEval", "true"},
+        {"UseEvalMobility", "true"},
+    };
+}
+
+std::vector<ParamDef> AlphaBeta::param_defs(){
+    return {
+        {"UseNNUE", ParamDef::CHECK, "true"},
+        {"UseKPEval", ParamDef::CHECK, "true"},
+        {"UseEvalMobility", ParamDef::CHECK, "true"},
+    };
+}
