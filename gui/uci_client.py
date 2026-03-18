@@ -390,20 +390,20 @@ class UCIEngine:
         # Remove leading "option " prefix
         if not line.startswith("option "):
             return None
-        rest = line[len("option "):]
+        rest = line[len("option ") :]
 
         # Extract "name <NAME> type <TYPE> ..."
         # The name may contain spaces, so we find the "type " keyword
         name_prefix = "name "
         if not rest.startswith(name_prefix):
             return None
-        rest = rest[len(name_prefix):]
+        rest = rest[len(name_prefix) :]
 
         type_idx = rest.find(" type ")
         if type_idx < 0:
             return None
         name = rest[:type_idx]
-        rest = rest[type_idx + len(" type "):]
+        rest = rest[type_idx + len(" type ") :]
 
         # Split the remainder to get the type and attributes
         tokens = rest.split()

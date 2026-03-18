@@ -56,7 +56,9 @@ class GameApp:
             "depth": 0,  # 0 = use time limit
         }
         self.black = {
-            "engine": self._available_engines[0][1] if self._available_engines else None,
+            "engine": (
+                self._available_engines[0][1] if self._available_engines else None
+            ),
             "algo": DEFAULT_ALGORITHM,
             "params": {},
             "depth": 0,
@@ -1091,9 +1093,9 @@ class GameApp:
                 sub_f = ttk.Frame(content_frame)
                 sub_f.grid(row=r, column=0, columnspan=2, sticky="w", padx=8, pady=1)
                 ttk.Label(sub_f, text=f"{name}:").pack(side="left")
-                ttk.Spinbox(
-                    sub_f, from_=lo, to=hi, textvariable=var, width=6
-                ).pack(side="left", padx=(4, 0))
+                ttk.Spinbox(sub_f, from_=lo, to=hi, textvariable=var, width=6).pack(
+                    side="left", padx=(4, 0)
+                )
 
             elif opt["type"] == "combo":
                 choices = opt.get("vars", [])
