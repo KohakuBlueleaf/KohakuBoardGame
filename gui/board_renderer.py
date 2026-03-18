@@ -79,29 +79,14 @@ class BoardRenderer:
     # Public API
     # -----------------------------------------------------------------
 
-    def draw(self, state, selected=None, legal_moves=None, last_move=None):
-        """Draw the complete board.
-
-        Args:
-            state: Object with .board[player][row][col] and .current_player.
-            selected: (row, col) tuple of the selected piece, or None.
-            legal_moves: list of ((fr, fc), (tr, tc)) legal moves for the
-                selected piece, or None.
-            last_move: ((fr, fc), (tr, tc)) the last move played, or None.
-
-        Drawing order:
-            1. Board squares (alternating light / dark)
-            2. Last-move highlight (blue tint on from / to squares)
-            3. Selected-piece highlight (yellow tint)
-            4. Legal-move indicators (green dots / rings)
-            5. Pieces (Unicode chess symbols)
-            6. Row and column labels
-        """
+    def draw(self, state, selected=None, legal_moves=None, last_move=None, pv_arrows=None):
         self._draw_squares()
         self._draw_last_move(last_move)
         self._draw_selected(selected)
         self._draw_legal_moves(state, selected, legal_moves)
         self._draw_pieces(state)
+        if pv_arrows:
+            self._draw_pv_arrows(pv_arrows)
         self._draw_labels()
 
     def screen_to_board(self, x, y):
@@ -272,6 +257,89 @@ class BoardRenderer:
                 continue
 
         return None
+
+    def _draw_pv_arrows(self, pv_moves):
+        """Draw arrows on the board for the principal variation.
+
+        Args:
+            pv_moves: list of UCI move strings like ["a2a3", "b5b4"].
+                      First move is brightest, subsequent moves fade.
+        """
+        if not pv_moves:
+            return
+
+        col_map = {"a": 0, "b": 1, "c": 2, "d": 3, "e": 4}
+        row_map = {"6": 0, "5": 1, "4": 2, "3": 3, "2": 4, "1": 5}
+
+        max_arrows = min(len(pv_moves), 5)
+        for i in range(max_arrows):
+            uci = pv_moves[i]
+            if len(uci) < 4:
+                continue
+
+            fc = col_map.get(uci[0])
+            fr = row_map.get(uci[1])
+            tc = col_map.get(uci[2])
+            tr = row_map.get(uci[3])
+            if any(v is None for v in (fc, fr, tc, tr)):
+                continue
+
+            # Arrow color: first = bright, rest fade
+            alpha = max(40, 200 - i * 40)
+            if i == 0:
+                color = (80, 200, 80, alpha)  # green for best move
+            else:
+                color = (80, 160, 220, alpha)  # blue for continuation
+
+            # Center of from/to squares
+            fx, fy = self.board_to_screen(fr, fc)
+            tx, ty = self.board_to_screen(tr, tc)
+            fx += SQUARE_SIZE // 2
+            fy += SQUARE_SIZE // 2
+            tx += SQUARE_SIZE // 2
+            ty += SQUARE_SIZE // 2
+
+            self._draw_arrow(fx, fy, tx, ty, color, width=max(2, 6 - i))
+
+    def _draw_arrow(self, x1, y1, x2, y2, color, width=4):
+        """Draw an arrow with a triangular head on an alpha surface."""
+        import math
+
+        overlay = pygame.Surface(
+            (BOARD_PIXEL_W + 2 * LABEL_MARGIN, BOARD_PIXEL_H + 2 * LABEL_MARGIN),
+            pygame.SRCALPHA,
+        )
+
+        # Shaft
+        pygame.draw.line(overlay, color, (x1, y1), (x2, y2), width)
+
+        # Arrowhead
+        dx = x2 - x1
+        dy = y2 - y1
+        length = math.sqrt(dx * dx + dy * dy)
+        if length < 1:
+            self.surface.blit(overlay, (0, 0))
+            return
+
+        ux, uy = dx / length, dy / length
+        head_len = min(16, length * 0.3)
+        head_w = head_len * 0.6
+
+        # Base of arrowhead
+        bx = x2 - ux * head_len
+        by = y2 - uy * head_len
+
+        # Perpendicular
+        px, py = -uy, ux
+
+        points = [
+            (x2, y2),
+            (bx + px * head_w, by + py * head_w),
+            (bx - px * head_w, by - py * head_w),
+        ]
+        pygame.draw.polygon(overlay, color, points)
+
+        self.surface.blit(overlay, (0, 0))
 
     def _draw_labels(self):
         """Draw row labels (6-1) on the left and column labels (A-E) below."""

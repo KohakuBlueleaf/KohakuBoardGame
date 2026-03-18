@@ -573,11 +573,13 @@ class GameApp:
     def draw(self):
         self.screen.fill(COLOR_BG)
 
+        pv = self.search_info.get("pv") if self.analyze["enabled"] or self.ai_thinking else None
         self.board_renderer.draw(
             self.game_state,
             selected=self.selected_piece,
             legal_moves=self.legal_moves_for_selected,
             last_move=self.last_move,
+            pv_arrows=pv,
         )
 
         self.side_panel.draw(
