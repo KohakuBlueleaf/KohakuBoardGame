@@ -259,19 +259,23 @@ class BoardRenderer:
         return None
 
     def _draw_pv_arrows(self, pv_moves):
-        """Draw arrows on the board for the principal variation.
+        """Draw numbered arrows on the board for the principal variation."""
+        import math
 
-        Args:
-            pv_moves: list of UCI move strings like ["a2a3", "b5b4"].
-                      First move is brightest, subsequent moves fade.
-        """
         if not pv_moves:
             return
 
         col_map = {"a": 0, "b": 1, "c": 2, "d": 3, "e": 4}
         row_map = {"6": 0, "5": 1, "4": 2, "3": 3, "2": 4, "1": 5}
 
-        max_arrows = min(len(pv_moves), 5)
+        overlay = pygame.Surface(
+            (BOARD_PIXEL_W + 2 * LABEL_MARGIN, BOARD_PIXEL_H + 2 * LABEL_MARGIN),
+            pygame.SRCALPHA,
+        )
+
+        num_font = pygame.font.SysFont("Arial", 14, bold=True)
+
+        max_arrows = min(len(pv_moves), 6)
         for i in range(max_arrows):
             uci = pv_moves[i]
             if len(uci) < 4:
@@ -284,14 +288,12 @@ class BoardRenderer:
             if any(v is None for v in (fc, fr, tc, tr)):
                 continue
 
-            # Arrow color: first = bright, rest fade
-            alpha = max(40, 200 - i * 40)
+            alpha = max(60, 220 - i * 30)
             if i == 0:
-                color = (80, 200, 80, alpha)  # green for best move
+                color = (80, 220, 80, alpha)
             else:
-                color = (80, 160, 220, alpha)  # blue for continuation
+                color = (80, 160, 230, alpha)
 
-            # Center of from/to squares
             fx, fy = self.board_to_screen(fr, fc)
             tx, ty = self.board_to_screen(tr, tc)
             fx += SQUARE_SIZE // 2
@@ -299,45 +301,49 @@ class BoardRenderer:
             tx += SQUARE_SIZE // 2
             ty += SQUARE_SIZE // 2
 
-            self._draw_arrow(fx, fy, tx, ty, color, width=max(2, 6 - i))
+            dx = tx - fx
+            dy = ty - fy
+            length = math.sqrt(dx * dx + dy * dy)
+            if length < 1:
+                continue
+            ux, uy = dx / length, dy / length
 
-    def _draw_arrow(self, x1, y1, x2, y2, color, width=4):
-        """Draw an arrow with a triangular head on an alpha surface."""
-        import math
+            shaft_w = max(3, 7 - i)
+            head_len = min(20, length * 0.3)
+            head_w = head_len * 0.65
 
-        overlay = pygame.Surface(
-            (BOARD_PIXEL_W + 2 * LABEL_MARGIN, BOARD_PIXEL_H + 2 * LABEL_MARGIN),
-            pygame.SRCALPHA,
-        )
+            # Shaft ends at the base of the arrowhead (not the tip)
+            sx2 = tx - ux * head_len
+            sy2 = ty - uy * head_len
+            pygame.draw.line(overlay, color, (fx, fy), (sx2, sy2), shaft_w)
 
-        # Shaft
-        pygame.draw.line(overlay, color, (x1, y1), (x2, y2), width)
+            # Arrowhead triangle
+            px, py = -uy, ux
+            points = [
+                (tx, ty),
+                (sx2 + px * head_w, sy2 + py * head_w),
+                (sx2 - px * head_w, sy2 - py * head_w),
+            ]
+            pygame.draw.polygon(overlay, color, points)
 
-        # Arrowhead
-        dx = x2 - x1
-        dy = y2 - y1
-        length = math.sqrt(dx * dx + dy * dy)
-        if length < 1:
-            self.surface.blit(overlay, (0, 0))
-            return
-
-        ux, uy = dx / length, dy / length
-        head_len = min(16, length * 0.3)
-        head_w = head_len * 0.6
-
-        # Base of arrowhead
-        bx = x2 - ux * head_len
-        by = y2 - uy * head_len
-
-        # Perpendicular
-        px, py = -uy, ux
-
-        points = [
-            (x2, y2),
-            (bx + px * head_w, by + py * head_w),
-            (bx - px * head_w, by - py * head_w),
-        ]
-        pygame.draw.polygon(overlay, color, points)
+            # Step number at midpoint of the arrow
+            mid_x = (fx + tx) / 2
+            mid_y = (fy + ty) / 2
+            # Offset perpendicular to arrow so number doesn't sit on the shaft
+            off = 10
+            num_x = mid_x + px * off
+            num_y = mid_y + py * off
+            num_surf = num_font.render(str(i + 1), True, (255, 255, 255))
+            # Background circle for readability
+            nr = max(num_surf.get_width(), num_surf.get_height()) // 2 + 3
+            pygame.draw.circle(
+                overlay, (0, 0, 0, min(200, alpha)),
+                (int(num_x), int(num_y)), nr,
+            )
+            overlay.blit(
+                num_surf,
+                (num_x - num_surf.get_width() / 2, num_y - num_surf.get_height() / 2),
+            )
 
         self.surface.blit(overlay, (0, 0))
 
