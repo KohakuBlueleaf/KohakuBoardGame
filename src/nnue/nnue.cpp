@@ -4,6 +4,9 @@
 
 #include "nnue.hpp"
 #include "compute.hpp"
+#ifdef USE_NNUE_SIMD
+#include "compute_simd.hpp"
+#endif
 
 #include <cstdio>
 #include <cstring>
@@ -254,11 +257,17 @@ int Model::evaluate(const Board& board, int player) const {
     }
 
     float w_accum[256], b_accum[256];
+#ifdef USE_NNUE_SIMD
+    accumulate_sparse_simd(white_features, w_count, ft_weight, ft_bias, w_accum, accum_size);
+    accumulate_sparse_simd(black_features, b_count, ft_weight, ft_bias, b_accum, accum_size);
+    screlu_simd(w_accum, accum_size);
+    screlu_simd(b_accum, accum_size);
+#else
     accumulate_sparse(white_features, w_count, ft_weight, ft_bias, w_accum, accum_size);
     accumulate_sparse(black_features, b_count, ft_weight, ft_bias, b_accum, accum_size);
-
     screlu(w_accum, accum_size);
     screlu(b_accum, accum_size);
+#endif
 
     float concat[512];
     if (player == 0) {
@@ -270,15 +279,21 @@ int Model::evaluate(const Board& board, int player) const {
     }
 
     float l1_out[128];
+    float l2_out[128];
+    float raw_score;
+#ifdef USE_NNUE_SIMD
+    linear_forward_simd(concat, l1_weight, l1_bias, l1_out, accum_size * 2, l1_size);
+    screlu_simd(l1_out, l1_size);
+    linear_forward_simd(l1_out, l2_weight, l2_bias, l2_out, l1_size, l2_size);
+    screlu_simd(l2_out, l2_size);
+    linear_forward_simd(l2_out, out_weight, out_bias, &raw_score, l2_size, 1);
+#else
     linear_forward(concat, l1_weight, l1_bias, l1_out, accum_size * 2, l1_size);
     screlu(l1_out, l1_size);
-
-    float l2_out[128];
     linear_forward(l1_out, l2_weight, l2_bias, l2_out, l1_size, l2_size);
     screlu(l2_out, l2_size);
-
-    float raw_score;
     linear_forward(l2_out, out_weight, out_bias, &raw_score, l2_size, 1);
+#endif
 
     return static_cast<int>(raw_score);
 }

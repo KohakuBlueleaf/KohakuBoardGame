@@ -394,20 +394,20 @@ def nnue_loss(
 # ---------------------------------------------------------------------------
 # Binary weight export
 # ---------------------------------------------------------------------------
-def export_binary_weights(model: MiniChessNNUE, path: str) -> None:
-    """Export model weights to a flat binary format for C++ inference.
+# ---------------------------------------------------------------------------
+# Quantization constants (must match C++ compute_quant.hpp)
+# ---------------------------------------------------------------------------
+QA = 255          # FT accumulator scale (int16)
+QA_HIDDEN = 127   # hidden activation scale (uint8)
+QB = 64           # dense weight scale (int8)
+QAH_QB = QA_HIDDEN * QB  # 8128 — dense matmul output scale
 
-    Header (24 bytes):
-        char[4]  magic = "MCNN"
-        int32    version (1=PS, 2=HalfKP)
-        int32    feature_size
-        int32    accum_size
-        int32    l1_size
-        int32    l2_size
-    Then contiguous float32 arrays:
-        ft_weight:  (feature_size, accum_size)  — transposed for C++ row-based accumulation
-        ft_bias:    (accum_size,)
-        l1..out weights and biases in order.
+
+def export_binary_weights(model: MiniChessNNUE, path: str) -> None:
+    """Export float32 weights for C++ inference.
+
+    Header (24 bytes): magic "MCNN", version, feature_size, accum_size, l1_size, l2_size
+    ft_weight (feature_size, accum_size), ft_bias, l1..out weights/biases.
     """
     version = 1 if model.feature_size == PS_SIZE else 2
     sd = model.state_dict()
@@ -419,6 +419,7 @@ def export_binary_weights(model: MiniChessNNUE, path: str) -> None:
         f.write(struct.pack("<i", model.l1_size))
         f.write(struct.pack("<i", model.l2_size))
 
+        # FT: transpose (accum, feat) -> (feat, accum) for C++ row accumulation
         ft_w = sd["ft.weight"].detach().cpu().float().t().contiguous()
         f.write(ft_w.numpy().tobytes())
         ft_b = sd["ft.bias"].detach().cpu().float().contiguous()
@@ -433,7 +434,74 @@ def export_binary_weights(model: MiniChessNNUE, path: str) -> None:
             f.write(tensor.numpy().tobytes())
 
     total_bytes = os.path.getsize(path)
-    print(f"  Exported binary weights to {path} ({total_bytes} bytes)")
+    print(f"  Exported float weights to {path} ({total_bytes} bytes)")
+
+
+def export_quantized_weights(model: MiniChessNNUE, path: str) -> None:
+    """Export quantized int16/int8 weights for C++ SIMD inference.
+
+    Same header as float, but version += 10 (11=PS_quant, 12=HalfKP_quant).
+    Data layout:
+        ft_weight:   int16 (feature_size, accum_size) — scale QA
+        ft_bias:     int16 (accum_size) — scale QA
+        l1_weight:   int8  (accum_size*2, l1_size) — TRANSPOSED, scale QB
+        l1_bias:     int32 (l1_size) — scale QA*QB
+        l2_weight:   int8  (l1_size, l2_size) — TRANSPOSED, scale QB
+        l2_bias:     int32 (l2_size) — scale QA*QB
+        out_weight:  int8  (l2_size, 1) — TRANSPOSED, scale QB
+        out_bias:    int32 (1) — scale QA*QB
+    """
+    version = (1 if model.feature_size == PS_SIZE else 2) + 10
+    sd = model.state_dict()
+
+    def quant_i16(t, scale):
+        return torch.clamp(torch.round(t * scale), -32768, 32767).to(torch.int16)
+
+    def quant_i8(t, scale):
+        return torch.clamp(torch.round(t * scale), -128, 127).to(torch.int8)
+
+    def quant_i32(t, scale):
+        return torch.clamp(torch.round(t * scale), -2**31, 2**31 - 1).to(torch.int32)
+
+    with open(path, "wb") as f:
+        f.write(b"MCNN")
+        f.write(struct.pack("<i", version))
+        f.write(struct.pack("<i", model.feature_size))
+        f.write(struct.pack("<i", model.accum_size))
+        f.write(struct.pack("<i", model.l1_size))
+        f.write(struct.pack("<i", model.l2_size))
+
+        # FT: (feat, accum) int16, scale QA=255
+        ft_w = sd["ft.weight"].detach().cpu().float().t().contiguous()
+        f.write(quant_i16(ft_w, QA).numpy().tobytes())
+        ft_b = sd["ft.bias"].detach().cpu().float().contiguous()
+        f.write(quant_i16(ft_b, QA).numpy().tobytes())
+
+        # Dense layers: weight TRANSPOSED to (in_size, out_size) int8 scale QB=64
+        # Bias: int32 scale QA_HIDDEN*QB=8128
+        for w_name, b_name in [
+            ("l1.weight", "l1.bias"),
+            ("l2.weight", "l2.bias"),
+            ("out.weight", "out.bias"),
+        ]:
+            w = sd[w_name].detach().cpu().float().t().contiguous()  # transpose
+            f.write(quant_i8(w, QB).numpy().tobytes())
+            b = sd[b_name].detach().cpu().float().contiguous()
+            f.write(quant_i32(b, QAH_QB).numpy().tobytes())
+
+    total_bytes = os.path.getsize(path)
+
+    # Report quantization statistics
+    ft_w_float = sd["ft.weight"].detach().cpu().float()
+    ft_w_range = ft_w_float.abs().max().item()
+    l1_w_float = sd["l1.weight"].detach().cpu().float()
+    l1_w_range = l1_w_float.abs().max().item()
+
+    print(f"  Exported quantized weights to {path} ({total_bytes} bytes)")
+    print(f"  FT weight range: [{-ft_w_range:.4f}, {ft_w_range:.4f}] "
+          f"(QA={QA}, resolution={1/QA:.4f})")
+    print(f"  L1 weight range: [{-l1_w_range:.4f}, {l1_w_range:.4f}] "
+          f"(QB={QB}, clipped={int((l1_w_float.abs() > 127/QB).sum())})")
 
 
 # ---------------------------------------------------------------------------
@@ -602,6 +670,10 @@ def train(args: argparse.Namespace) -> None:
     print(f"  Saved PyTorch model to {args.output}")
 
     export_binary_weights(model, args.export)
+
+    # Export quantized version alongside
+    quant_path = args.export.replace(".bin", "_quant.bin")
+    export_quantized_weights(model, quant_path)
 
 
 # ---------------------------------------------------------------------------

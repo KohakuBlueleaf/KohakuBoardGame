@@ -103,6 +103,7 @@
 #endif
 // #define NNUE_EMBEDDED
 #define NNUE_FILE "models/nnue_v1.bin"
+#define USE_NNUE_SIMD
 
 
 /*Which character/words for pieces*/
