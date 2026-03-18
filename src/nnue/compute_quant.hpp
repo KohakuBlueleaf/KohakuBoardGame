@@ -159,7 +159,8 @@ inline void screlu_ft_q(
     }
     for (; i < size; ++i) {
         int v = input[i];
-        if (v < 0) v = 0; if (v > QA) v = QA;
+        if(v < 0){ v = 0; }
+        if(v > QA){ v = QA; }
         int sq = (v * v) >> 9;
         output[i] = (uint8_t)(sq > QA_HIDDEN ? QA_HIDDEN : sq);
     }
@@ -182,14 +183,16 @@ inline void screlu_ft_q(
     }
     for (; i < size; ++i) {
         int v = input[i];
-        if (v < 0) v = 0; if (v > QA) v = QA;
+        if(v < 0){ v = 0; }
+        if(v > QA){ v = QA; }
         int sq = (v * v) >> 9;
         output[i] = (uint8_t)(sq > QA_HIDDEN ? QA_HIDDEN : sq);
     }
 #else
     for (int i = 0; i < size; ++i) {
         int v = input[i];
-        if (v < 0) v = 0; if (v > QA) v = QA;
+        if(v < 0){ v = 0; }
+        if(v > QA){ v = QA; }
         int sq = (v * v) >> 9;
         output[i] = (uint8_t)(sq > QA_HIDDEN ? QA_HIDDEN : sq);
     }

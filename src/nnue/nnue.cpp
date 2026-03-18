@@ -9,6 +9,7 @@
 #endif
 
 #include <cstdio>
+#include <cstdint>
 #include <cstring>
 
 namespace nnue {
@@ -248,32 +249,32 @@ int Model::evaluate(const Board& board, int player) const {
     int black_features[MAX_ACTIVE];
     int w_count, b_count;
 
-    if (version == 1) {
+    if(version == 1){
         w_count = extract_features_ps(board, 0, white_features);
         b_count = extract_features_ps(board, 1, black_features);
-    } else {
+    }else{
         w_count = extract_features_halfkp(board, 0, white_features);
         b_count = extract_features_halfkp(board, 1, black_features);
     }
 
     float w_accum[256], b_accum[256];
-#ifdef USE_NNUE_SIMD
+    #ifdef USE_NNUE_SIMD
     accumulate_sparse_simd(white_features, w_count, ft_weight, ft_bias, w_accum, accum_size);
     accumulate_sparse_simd(black_features, b_count, ft_weight, ft_bias, b_accum, accum_size);
     screlu_simd(w_accum, accum_size);
     screlu_simd(b_accum, accum_size);
-#else
+    #else
     accumulate_sparse(white_features, w_count, ft_weight, ft_bias, w_accum, accum_size);
     accumulate_sparse(black_features, b_count, ft_weight, ft_bias, b_accum, accum_size);
     screlu(w_accum, accum_size);
     screlu(b_accum, accum_size);
-#endif
+    #endif
 
     float concat[512];
-    if (player == 0) {
+    if(player == 0){
         std::memcpy(concat, w_accum, accum_size * sizeof(float));
         std::memcpy(concat + accum_size, b_accum, accum_size * sizeof(float));
-    } else {
+    }else{
         std::memcpy(concat, b_accum, accum_size * sizeof(float));
         std::memcpy(concat + accum_size, w_accum, accum_size * sizeof(float));
     }
@@ -281,19 +282,19 @@ int Model::evaluate(const Board& board, int player) const {
     float l1_out[128];
     float l2_out[128];
     float raw_score;
-#ifdef USE_NNUE_SIMD
+    #ifdef USE_NNUE_SIMD
     linear_forward_simd(concat, l1_weight, l1_bias, l1_out, accum_size * 2, l1_size);
     screlu_simd(l1_out, l1_size);
     linear_forward_simd(l1_out, l2_weight, l2_bias, l2_out, l1_size, l2_size);
     screlu_simd(l2_out, l2_size);
     linear_forward_simd(l2_out, out_weight, out_bias, &raw_score, l2_size, 1);
-#else
+    #else
     linear_forward(concat, l1_weight, l1_bias, l1_out, accum_size * 2, l1_size);
     screlu(l1_out, l1_size);
     linear_forward(l1_out, l2_weight, l2_bias, l2_out, l1_size, l2_size);
     screlu(l2_out, l2_size);
     linear_forward(l2_out, out_weight, out_bias, &raw_score, l2_size, 1);
-#endif
+    #endif
 
     return static_cast<int>(raw_score);
 }

@@ -27,16 +27,9 @@
 #include <cstring>
 #include <cmath>
 #include <cstdint>
-#include <time.h>
+#include "timer/timer.hpp"
 
-// ---------------------------------------------------------------------------
-// Timing helper
-// ---------------------------------------------------------------------------
-static inline int64_t now_ns() {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
-}
+static inline int64_t now_ns(){ return hires_time(); }
 
 // ---------------------------------------------------------------------------
 // Board construction helper (same pattern as benchmark.cpp)
