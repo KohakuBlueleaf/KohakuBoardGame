@@ -33,17 +33,17 @@ from tqdm import tqdm
 # ---------------------------------------------------------------------------
 BOARD_H = 6
 BOARD_W = 5
-NUM_SQUARES = BOARD_H * BOARD_W         # 30
-NUM_PIECE_TYPES = 6                      # Pawn(1)..King(6), indexed 0..5
-NUM_PT_NO_KING = 5                       # Piece types excluding king
-NUM_COLORS = 2                           # own=0, opponent=1
+NUM_SQUARES = BOARD_H * BOARD_W  # 30
+NUM_PIECE_TYPES = 6  # Pawn(1)..King(6), indexed 0..5
+NUM_PT_NO_KING = 5  # Piece types excluding king
+NUM_COLORS = 2  # own=0, opponent=1
 
 # PS: color * piece_type * square = 2*6*30 = 360
 PS_SIZE = NUM_COLORS * NUM_PIECE_TYPES * NUM_SQUARES  # 360
 
 # HalfKP: king_sq * color * piece_type_no_king * square = 30*2*5*30 = 9000
 NUM_PIECE_FEATURES = NUM_COLORS * NUM_PT_NO_KING * NUM_SQUARES  # 300
-HALFKP_SIZE = NUM_SQUARES * NUM_PIECE_FEATURES                  # 9000
+HALFKP_SIZE = NUM_SQUARES * NUM_PIECE_FEATURES  # 9000
 MAX_ACTIVE = 20
 
 HEADER_FMT = "<4sii"
@@ -63,7 +63,9 @@ SCORE_FILTER = 10000
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
-def read_bin_file(path: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def read_bin_file(
+    path: str,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Read a single .bin data file (supports v1 and v2 formats).
 
     Returns:
@@ -85,20 +87,24 @@ def read_bin_file(path: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.nda
 
         if version == 1:
             record_size = RECORD_V1_SIZE
-            dt = np.dtype([
-                ("board", np.int8, (60,)),
-                ("player", np.int8),
-                ("score", "<i2"),
-            ])
+            dt = np.dtype(
+                [
+                    ("board", np.int8, (60,)),
+                    ("player", np.int8),
+                    ("score", "<i2"),
+                ]
+            )
         elif version == 2:
             record_size = RECORD_V2_SIZE
-            dt = np.dtype([
-                ("board", np.int8, (60,)),
-                ("player", np.int8),
-                ("score", "<i2"),
-                ("result", np.int8),
-                ("ply", "<u2"),
-            ])
+            dt = np.dtype(
+                [
+                    ("board", np.int8, (60,)),
+                    ("player", np.int8),
+                    ("score", "<i2"),
+                    ("result", np.int8),
+                    ("ply", "<u2"),
+                ]
+            )
         else:
             raise ValueError(f"Unknown data version {version} in {path}")
 
@@ -205,7 +211,9 @@ def board_to_ps_features(
                 b_color = 1 - color_plane
                 mir_r = BOARD_H - 1 - r
                 b_sq = mir_r * BOARD_W + c
-                b_idx = b_color * NUM_PIECE_TYPES * NUM_SQUARES + pt * NUM_SQUARES + b_sq
+                b_idx = (
+                    b_color * NUM_PIECE_TYPES * NUM_SQUARES + pt * NUM_SQUARES + b_sq
+                )
                 black_feats[has_piece, b_idx] = 1.0
 
     stm = players.astype(bool)
@@ -255,18 +263,24 @@ def board_to_halfkp_indices(
                 sq = r * BOARD_W + c
 
                 w_color = color_plane
-                w_feat = (w_king_sq[indices] * NUM_PIECE_FEATURES
-                          + w_color * (NUM_PT_NO_KING * NUM_SQUARES)
-                          + pt_idx * NUM_SQUARES + sq)
+                w_feat = (
+                    w_king_sq[indices] * NUM_PIECE_FEATURES
+                    + w_color * (NUM_PT_NO_KING * NUM_SQUARES)
+                    + pt_idx * NUM_SQUARES
+                    + sq
+                )
                 pos_w = w_cnt[indices]
                 white_idx[indices, pos_w] = w_feat.astype(np.int16)
                 w_cnt[indices] = pos_w + 1
 
                 b_color = 1 - color_plane
                 mir_sq = (BOARD_H - 1 - r) * BOARD_W + c
-                b_feat = (b_king_mir[indices] * NUM_PIECE_FEATURES
-                          + b_color * (NUM_PT_NO_KING * NUM_SQUARES)
-                          + pt_idx * NUM_SQUARES + mir_sq)
+                b_feat = (
+                    b_king_mir[indices] * NUM_PIECE_FEATURES
+                    + b_color * (NUM_PT_NO_KING * NUM_SQUARES)
+                    + pt_idx * NUM_SQUARES
+                    + mir_sq
+                )
                 pos_b = b_cnt[indices]
                 black_idx[indices, pos_b] = b_feat.astype(np.int16)
                 b_cnt[indices] = pos_b + 1
@@ -292,8 +306,13 @@ class PSDenseDataset(Dataset):
         return len(self.scores)
 
     def __getitem__(self, idx):
-        return (self.white_feats[idx], self.black_feats[idx],
-                self.stm[idx], self.scores[idx], self.results[idx])
+        return (
+            self.white_feats[idx],
+            self.black_feats[idx],
+            self.stm[idx],
+            self.scores[idx],
+            self.results[idx],
+        )
 
 
 class HalfKPSparseDataset(Dataset):
@@ -397,9 +416,9 @@ def nnue_loss(
 # ---------------------------------------------------------------------------
 # Quantization constants (must match C++ compute_quant.hpp)
 # ---------------------------------------------------------------------------
-QA = 255          # FT accumulator scale (int16)
-QA_HIDDEN = 127   # hidden activation scale (uint8)
-QB = 64           # dense weight scale (int8)
+QA = 255  # FT accumulator scale (int16)
+QA_HIDDEN = 127  # hidden activation scale (uint8)
+QB = 64  # dense weight scale (int8)
 QAH_QB = QA_HIDDEN * QB  # 8128 — dense matmul output scale
 
 
@@ -426,9 +445,12 @@ def export_binary_weights(model: MiniChessNNUE, path: str) -> None:
         f.write(ft_b.numpy().tobytes())
 
         for name in [
-            "l1.weight", "l1.bias",
-            "l2.weight", "l2.bias",
-            "out.weight", "out.bias",
+            "l1.weight",
+            "l1.bias",
+            "l2.weight",
+            "l2.bias",
+            "out.weight",
+            "out.bias",
         ]:
             tensor = sd[name].detach().cpu().float().contiguous()
             f.write(tensor.numpy().tobytes())
@@ -461,7 +483,7 @@ def export_quantized_weights(model: MiniChessNNUE, path: str) -> None:
         return torch.clamp(torch.round(t * scale), -128, 127).to(torch.int8)
 
     def quant_i32(t, scale):
-        return torch.clamp(torch.round(t * scale), -2**31, 2**31 - 1).to(torch.int32)
+        return torch.clamp(torch.round(t * scale), -(2**31), 2**31 - 1).to(torch.int32)
 
     with open(path, "wb") as f:
         f.write(b"MCNN")
@@ -498,28 +520,38 @@ def export_quantized_weights(model: MiniChessNNUE, path: str) -> None:
     l1_w_range = l1_w_float.abs().max().item()
 
     print(f"  Exported quantized weights to {path} ({total_bytes} bytes)")
-    print(f"  FT weight range: [{-ft_w_range:.4f}, {ft_w_range:.4f}] "
-          f"(QA={QA}, resolution={1/QA:.4f})")
-    print(f"  L1 weight range: [{-l1_w_range:.4f}, {l1_w_range:.4f}] "
-          f"(QB={QB}, clipped={int((l1_w_float.abs() > 127/QB).sum())})")
+    print(
+        f"  FT weight range: [{-ft_w_range:.4f}, {ft_w_range:.4f}] "
+        f"(QA={QA}, resolution={1/QA:.4f})"
+    )
+    print(
+        f"  L1 weight range: [{-l1_w_range:.4f}, {l1_w_range:.4f}] "
+        f"(QB={QB}, clipped={int((l1_w_float.abs() > 127/QB).sum())})"
+    )
 
 
 # ---------------------------------------------------------------------------
 # Training
 # ---------------------------------------------------------------------------
 def train(args: argparse.Namespace) -> None:
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if args.device == "auto":
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    else:
+        device = torch.device(args.device)
     print(f"Device: {device}")
 
     # ---- Load data --------------------------------------------------------
     print("Loading data...")
     boards, players, scores, results, plies = load_all_data(
-        args.data, min_ply=args.min_ply,
+        args.data,
+        min_ply=args.min_ply,
     )
     has_wdl = np.any(results != 0)
     if args.wdl_weight > 0 and not has_wdl:
-        print("Warning: --wdl-weight > 0 but data has no game results (v1 format). "
-              "Falling back to pure score loss.")
+        print(
+            "Warning: --wdl-weight > 0 but data has no game results (v1 format). "
+            "Falling back to pure score loss."
+        )
         args.wdl_weight = 0.0
 
     # ---- Train/val split --------------------------------------------------
@@ -538,20 +570,32 @@ def train(args: argparse.Namespace) -> None:
         wf, bf, stm = board_to_ps_features(boards, players)
         print(f"  Feature extraction: {time.time() - t0:.2f}s")
         print(f"  Active features per position: {wf.sum(axis=1).mean():.1f}")
-        train_ds = PSDenseDataset(wf[train_idx], bf[train_idx], stm[train_idx],
-                                  scores[train_idx], results[train_idx])
-        val_ds = PSDenseDataset(wf[val_idx], bf[val_idx], stm[val_idx],
-                                scores[val_idx], results[val_idx])
+        train_ds = PSDenseDataset(
+            wf[train_idx],
+            bf[train_idx],
+            stm[train_idx],
+            scores[train_idx],
+            results[train_idx],
+        )
+        val_ds = PSDenseDataset(
+            wf[val_idx], bf[val_idx], stm[val_idx], scores[val_idx], results[val_idx]
+        )
     elif feature_type == "halfkp":
         feature_size = HALFKP_SIZE
         wi, bi, stm = board_to_halfkp_indices(boards, players)
         print(f"  Feature extraction: {time.time() - t0:.2f}s")
         active = (wi != HALFKP_SIZE).sum(axis=1).mean()
         print(f"  Active features per position: {active:.1f}")
-        train_ds = HalfKPSparseDataset(wi[train_idx], bi[train_idx], stm[train_idx],
-                                       scores[train_idx], results[train_idx])
-        val_ds = HalfKPSparseDataset(wi[val_idx], bi[val_idx], stm[val_idx],
-                                     scores[val_idx], results[val_idx])
+        train_ds = HalfKPSparseDataset(
+            wi[train_idx],
+            bi[train_idx],
+            stm[train_idx],
+            scores[train_idx],
+            results[train_idx],
+        )
+        val_ds = HalfKPSparseDataset(
+            wi[val_idx], bi[val_idx], stm[val_idx], scores[val_idx], results[val_idx]
+        )
     else:
         print(f"Error: unknown feature type '{feature_type}' (use 'ps' or 'halfkp')")
         sys.exit(1)
@@ -560,14 +604,22 @@ def train(args: argparse.Namespace) -> None:
     print(f"  Train: {len(train_ds)}, Val: {len(val_ds)}")
 
     train_loader = DataLoader(
-        train_ds, batch_size=args.batch_size, shuffle=True,
-        num_workers=args.num_workers, pin_memory=(device.type == "cuda"),
+        train_ds,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=args.num_workers,
+        pin_memory=(device.type == "cuda"),
         drop_last=False,
+        persistent_workers=True,
     )
     val_loader = DataLoader(
-        val_ds, batch_size=args.batch_size, shuffle=False,
-        num_workers=args.num_workers, pin_memory=(device.type == "cuda"),
+        val_ds,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        pin_memory=(device.type == "cuda"),
         drop_last=False,
+        persistent_workers=True,
     )
 
     # ---- Model ------------------------------------------------------------
@@ -599,8 +651,11 @@ def train(args: argparse.Namespace) -> None:
         n = 0
         with torch.no_grad():
             for wf, bf, s, sc, res in tqdm(loader, desc=desc, leave=False):
-                wf = wf.to(device); bf = bf.to(device)
-                s = s.to(device); sc = sc.to(device); res = res.to(device)
+                wf = wf.to(device)
+                bf = bf.to(device)
+                s = s.to(device)
+                sc = sc.to(device)
+                res = res.to(device)
                 pred = model(wf, bf, s)
                 total_loss += nnue_loss(pred, sc, res, args.wdl_weight).item()
                 n += 1
@@ -612,8 +667,10 @@ def train(args: argparse.Namespace) -> None:
     print(f"\nBaseline loss — train: {baseline_train:.6f}, val: {baseline_val:.6f}")
 
     # ---- Training loop ----------------------------------------------------
-    print(f"Training for {args.epochs} epochs, "
-          f"batch_size={args.batch_size}, lr={args.lr}")
+    print(
+        f"Training for {args.epochs} epochs, "
+        f"batch_size={args.batch_size}, lr={args.lr}"
+    )
     print("-" * 72)
 
     best_val_loss = float("inf")
@@ -625,8 +682,11 @@ def train(args: argparse.Namespace) -> None:
 
         pbar = tqdm(train_loader, desc=f"Epoch {epoch:>3d}/{args.epochs}", leave=False)
         for wf, bf, s, sc, res in pbar:
-            wf = wf.to(device); bf = bf.to(device)
-            s = s.to(device); sc = sc.to(device); res = res.to(device)
+            wf = wf.to(device)
+            bf = bf.to(device)
+            s = s.to(device)
+            sc = sc.to(device)
+            res = res.to(device)
 
             pred = model(wf, bf, s)
             loss = nnue_loss(pred, sc, res, args.wdl_weight)
@@ -684,51 +744,82 @@ def main() -> None:
         description="Train a NNUE for MiniChess (6x5)",
     )
     parser.add_argument(
-        "--data", type=str, default="data/train_*.bin",
+        "--data",
+        type=str,
+        default="data/train_*.bin",
         help="Glob pattern for data files (default: data/train_*.bin)",
     )
     parser.add_argument(
-        "--features", type=str, default="halfkp", choices=["ps", "halfkp"],
+        "--features",
+        type=str,
+        default="halfkp",
+        choices=["ps", "halfkp"],
         help="Feature type: ps (360) or halfkp (9000) (default: halfkp)",
     )
     parser.add_argument(
-        "--epochs", type=int, default=100,
+        "--epochs",
+        type=int,
+        default=100,
         help="Number of training epochs (default: 100)",
     )
     parser.add_argument(
-        "--batch-size", type=int, default=8192,
+        "--batch-size",
+        type=int,
+        default=8192,
         help="Batch size (default: 8192)",
     )
     parser.add_argument(
-        "--lr", type=float, default=1e-3,
+        "--lr",
+        type=float,
+        default=1e-3,
         help="Learning rate (default: 1e-3)",
     )
     parser.add_argument(
-        "--accum-size", type=int, default=128,
+        "--accum-size",
+        type=int,
+        default=128,
         help="Accumulator width (default: 128)",
     )
     parser.add_argument(
-        "--wdl-weight", type=float, default=0.5,
+        "--wdl-weight",
+        type=float,
+        default=0.5,
         help="WDL blending weight: 0.0=pure score, 1.0=pure game result (default: 0.5)",
     )
     parser.add_argument(
-        "--min-ply", type=int, default=0,
+        "--min-ply",
+        type=int,
+        default=0,
         help="Skip positions with ply < this value (default: 0)",
     )
     parser.add_argument(
-        "--val-split", type=float, default=0.05,
+        "--val-split",
+        type=float,
+        default=0.05,
         help="Fraction of data for validation (default: 0.05)",
     )
     parser.add_argument(
-        "--num-workers", type=int, default=0,
+        "--num-workers",
+        type=int,
+        default=0,
         help="DataLoader workers (default: 0)",
     )
     parser.add_argument(
-        "--output", type=str, default="models/nnue_v1.pt",
+        "--device",
+        type=str,
+        default="auto",
+        help="Device to train on: auto, cpu, cuda, cuda:0, etc. (default: auto)",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="models/nnue_v1.pt",
         help="Save PyTorch model to (default: models/nnue_v1.pt)",
     )
     parser.add_argument(
-        "--export", type=str, default="models/nnue_v1.bin",
+        "--export",
+        type=str,
+        default="models/nnue_v1.bin",
         help="Export binary weights to (default: models/nnue_v1.bin)",
     )
     args = parser.parse_args()

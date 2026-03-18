@@ -14,10 +14,10 @@ import os
 import numpy as np
 
 # Must match the C++ structs exactly
-HEADER_FMT = "<4sii"      # magic(4) + version(i32) + count(i32) = 12 bytes
+HEADER_FMT = "<4sii"  # magic(4) + version(i32) + count(i32) = 12 bytes
 HEADER_SIZE = struct.calcsize(HEADER_FMT)
 
-RECORD_FMT = "<60sbh"     # board(60) + player(i8) + score(i16) = 63 bytes
+RECORD_FMT = "<60sbh"  # board(60) + player(i8) + score(i16) = 63 bytes
 RECORD_SIZE = struct.calcsize(RECORD_FMT)
 
 BOARD_H = 6
@@ -54,12 +54,16 @@ def read_file(path):
 
             board_bytes, player, score = struct.unpack(RECORD_FMT, rec_data)
             # Reshape board bytes into [2][6][5]
-            board = np.frombuffer(board_bytes, dtype=np.int8).reshape(2, BOARD_H, BOARD_W)
-            records.append({
-                "board": board.copy(),
-                "player": player,
-                "score": score,
-            })
+            board = np.frombuffer(board_bytes, dtype=np.int8).reshape(
+                2, BOARD_H, BOARD_W
+            )
+            records.append(
+                {
+                    "board": board.copy(),
+                    "player": player,
+                    "score": score,
+                }
+            )
 
         return header_info, records
 
