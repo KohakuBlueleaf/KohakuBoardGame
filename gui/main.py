@@ -237,8 +237,7 @@ class GameApp:
             return
         if not self.analyze["enabled"]:
             return
-        # Stop any running analysis first (sync via isready)
-        self._stop_analysis()
+        # Engine handles stop+go seamlessly (generation-based)
         engine = self._get_or_create_analyze_engine()
         if engine is None:
             return
@@ -254,18 +253,11 @@ class GameApp:
         self._analyzing = True
 
     def _stop_analysis(self):
-        if self._analyzing and self._analyze_engine is not None:
+        if self._analyze_engine is not None:
             try:
                 self._analyze_engine.stop()
             except Exception:
                 pass
-            # Wait for engine to finish processing stop
-            if self._analyze_engine.is_alive():
-                try:
-                    self._analyze_engine._send("isready")
-                    self._analyze_engine._wait_for("readyok", timeout=2.0)
-                except Exception:
-                    pass
         self._analyzing = False
 
     def _on_analyze_info(self, info_dict):

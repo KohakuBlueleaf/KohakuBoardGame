@@ -119,21 +119,31 @@ static std::string format_pv(const std::vector<Move>& pv){
 
 /* === Search Dispatch (worker thread) === */
 
+/* === Search generation counter === */
+// Each `go` increments this. The search thread checks it to know
+// if it has been superseded (abandoned). If so, it silently exits
+// without sending bestmove — the new search owns output now.
+static std::atomic<uint32_t> g_search_gen{0};
+
 static void do_search(
     int max_depth,
     int64_t movetime_ms,
-    [[maybe_unused]] bool infinite
+    [[maybe_unused]] bool infinite,
+    uint32_t my_gen
 ){
     State state(g_board, g_player);
     state.get_legal_actions();
 
+    // Check if we've been superseded before even starting
+    auto alive = [&](){ return my_gen == g_search_gen.load() && !g_ctx.stop; };
+
     if(state.legal_actions.empty()){
-        send("bestmove 0000");
+        if(alive()){ send("bestmove 0000"); }
         g_searching = false;
         return;
     }
     if(state.game_state == WIN){
-        send("bestmove " + move_to_str(state.legal_actions[0]));
+        if(alive()){ send("bestmove " + move_to_str(state.legal_actions[0])); }
         g_searching = false;
         return;
     }
@@ -145,13 +155,12 @@ static void do_search(
     auto search_start = std::chrono::high_resolution_clock::now();
 
     for(int depth = 1; depth <= depth_limit; depth++){
-        if(g_ctx.stop){
-            break;
-        }
+        if(!alive()){ break; }
 
         auto depth_start = std::chrono::high_resolution_clock::now();
-
         SearchResult result = g_algo->search(&state, depth, g_ctx);
+
+        if(!alive() && depth > 1){ break; }
 
         auto now = std::chrono::high_resolution_clock::now();
         int64_t depth_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -160,10 +169,6 @@ static void do_search(
         int64_t total_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             now - search_start
         ).count();
-
-        if(g_ctx.stop && depth > 1){
-            break;
-        }
 
         best_move = result.best_move;
         total_nodes += result.nodes;
@@ -174,30 +179,23 @@ static void do_search(
 
         std::ostringstream info;
         info << "info depth " << depth
-         << " seldepth " << result.seldepth
-         << " score cp " << result.score
-         << " nodes " << total_nodes
-         << " time " << total_ms
-         << " nps " << nps;
-
+             << " seldepth " << result.seldepth
+             << " score cp " << result.score
+             << " nodes " << total_nodes
+             << " time " << total_ms
+             << " nps " << nps;
         if(!result.pv.empty()){
             info << " pv " << format_pv(result.pv);
         }
 
-        send(info.str());
+        if(alive()){ send(info.str()); }
 
-        if(g_ctx.stop){
-            break;
-        }
-        if(movetime_ms > 0 && total_ms * 2 >= movetime_ms){
-            break;
-        }
-        if(result.score >= P_MAX - 100 || result.score <= M_MAX + 100){
-            break;
-        }
+        if(!alive()){ break; }
+        if(movetime_ms > 0 && total_ms * 2 >= movetime_ms){ break; }
+        if(result.score >= P_MAX - 100 || result.score <= M_MAX + 100){ break; }
     }
 
-    send("bestmove " + move_to_str(best_move));
+    if(alive()){ send("bestmove " + move_to_str(best_move)); }
     g_searching = false;
 }
 
@@ -205,9 +203,11 @@ static void do_search(
 /* === Command: go === */
 
 static void cmd_go(std::istringstream& iss){
+    // Abandon any running search — don't block
+    g_ctx.stop = true;
+    g_search_gen++;  // old thread sees generation mismatch, exits silently
     if(g_search_thread.joinable()){
-        g_ctx.stop = true;
-        g_search_thread.join();
+        g_search_thread.detach();
     }
 
     int max_depth = 0;
@@ -233,7 +233,8 @@ static void cmd_go(std::istringstream& iss){
     g_ctx.stop = false;
     g_ctx.params = g_params;
     g_searching = true;
-    g_search_thread = std::thread(do_search, max_depth, movetime_ms, infinite);
+    uint32_t gen = g_search_gen.load();
+    g_search_thread = std::thread(do_search, max_depth, movetime_ms, infinite, gen);
 }
 
 
@@ -395,22 +396,32 @@ void loop(){
             cmd_go(iss);
         }else if(cmd == "stop"){
             g_ctx.stop = true;
+            g_search_gen++;
+            // Send bestmove immediately so the GUI isn't stuck waiting
+            if(g_searching){
+                // The old thread will exit silently (gen mismatch)
+                send("bestmove 0000");
+                g_searching = false;
+            }
             if(g_search_thread.joinable()){
-                g_search_thread.join();
+                g_search_thread.detach();
             }
         }else if(cmd == "d"){
             cmd_display();
         }else if(cmd == "quit"){
             g_ctx.stop = true;
+            g_search_gen++;
+            // Give the thread a moment to notice, then exit
             if(g_search_thread.joinable()){
-                g_search_thread.join();
+                g_search_thread.detach();
             }
             break;
         }
     }
 
+    // Don't join on exit — detached threads clean up on process exit
     if(g_search_thread.joinable()){
-        g_search_thread.join();
+        g_search_thread.detach();
     }
 }
 
