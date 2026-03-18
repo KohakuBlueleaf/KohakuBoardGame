@@ -18,7 +18,7 @@ POLICY_DIR = $(SOURCES_DIR)/policy
 TARGET_PLAYER = $(PLAYERS:$(SOURCES_DIR)/player/%.cpp=%)
 TARGET_BASELINES = $(BASELINES:$(SOURCES_DIR)/baselines/%.cpp=%)
 TARGET_MAIN = main
-TARGET_OTHER = selfplay benchmark
+TARGET_OTHER = selfplay benchmark datagen
 TARGET_UNITTEST = $(UNITTESTS:$(UNITTEST_DIR)/%_test.cpp=%)
 OTHER = action state gamelog.txt
 
