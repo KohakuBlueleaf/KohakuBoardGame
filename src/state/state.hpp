@@ -58,7 +58,7 @@ class State{
     State(Board board): board(board){};
     State(Board board, int player): board(board), player(player){};
     
-    int evaluate();
+    int evaluate(bool use_nnue = true, bool use_kp_eval = true, bool use_mobility = true);
     State* next_state(Move move);
     void get_legal_actions();
     void get_legal_actions_naive();
