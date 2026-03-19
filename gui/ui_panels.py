@@ -189,6 +189,10 @@ class SidePanel:
             n_dots = (self._frame // (FPS // 3)) % 3 + 1
             status_text = "Analyzing" + "." * n_dots
             status_color = (100, 200, 220)
+        elif analyze_enabled:
+            n_dots = (self._frame // (FPS // 3)) % 3 + 1
+            status_text = "Loading" + "." * n_dots
+            status_color = (180, 180, 100)
         elif ai_thinking:
             n_dots = (self._frame // (FPS // 3)) % 3 + 1
             status_text = "AI thinking" + "." * n_dots

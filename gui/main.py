@@ -266,8 +266,11 @@ class GameApp:
         engine = self._get_or_create_analyze_engine()
         if engine is None:
             return
-        # Just send position + go. Engine handles superseding the old search.
-        # Client's persistent reader thread dispatches to current callbacks.
+        # Stop current search and wait for bestmove before starting new one
+        if self._analyzing:
+            engine.stop_and_wait(timeout=2.0)
+            self._analyzing = False
+        # Now safe to send new position + go
         if self.uci_moves:
             engine.set_position(moves=list(self.uci_moves))
         else:
@@ -282,14 +285,9 @@ class GameApp:
         self._analyzing = True
 
     def _stop_analysis(self):
-        if self._analyze_engine is not None:
-            try:
-                self._analyze_engine.stop()
-            except Exception:
-                pass
-        # Don't set _analyzing = False here — let _on_analyze_done handle it
-        # via generation check. This prevents the race where stop's bestmove
-        # arrives after a new go was already sent.
+        if self._analyzing and self._analyze_engine is not None:
+            self._analyze_engine.stop_and_wait(timeout=2.0)
+        self._analyzing = False
 
     def _on_analyze_info(self, info_dict):
         """Normalize score to white's perspective for the score bar."""

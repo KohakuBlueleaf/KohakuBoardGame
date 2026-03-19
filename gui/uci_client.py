@@ -125,6 +125,26 @@ class UCIEngine:
         if self._searching:
             self._send("stop")
 
+    def stop_and_wait(self, timeout=5.0):
+        """Send 'stop' and wait until bestmove is received.
+
+        Returns True if bestmove was received, False on timeout.
+        Safe to call even if not searching.
+        """
+        import threading as _threading
+        if not self._searching:
+            return True
+        event = _threading.Event()
+        old_done = self._done_callback
+        def _on_done(bm):
+            event.set()
+            if old_done:
+                old_done(bm)
+        self._done_callback = _on_done
+        self._send("stop")
+        result = event.wait(timeout=timeout)
+        return result
+
     def quit(self):
         """Send 'quit' and close process."""
         try:
