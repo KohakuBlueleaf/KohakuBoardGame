@@ -46,6 +46,20 @@ static void send(const std::string& msg){
 
 /* === Move Conversion === */
 
+/* Piece letter for drop encoding (index 1-5 → P S G B R) */
+static const char DROP_LETTERS[] = " PSGBR";
+
+static int drop_letter_to_type(char ch){
+    switch(ch){
+        case 'P': case 'p': return 1;
+        case 'S': case 's': return 2;
+        case 'G': case 'g': return 3;
+        case 'B': case 'b': return 4;
+        case 'R': case 'r': return 5;
+        default: return 0;
+    }
+}
+
 std::string move_to_str(const Move& m){
     /* Placement move: from == to → output just the destination */
     if(m.first == m.second){
@@ -55,13 +69,33 @@ std::string move_to_str(const Move& m){
         buf[2] = '\0';
         return std::string(buf);
     }
-    /* Board move: from + to */
-    char buf[5];
+    /* Drop move: from.first == BOARD_H, from.second == piece_type */
+    if(m.first.first == static_cast<size_t>(BOARD_H)){
+        int pt = static_cast<int>(m.first.second);
+        char buf[4];
+        buf[0] = (pt >= 1 && pt <= 5) ? DROP_LETTERS[pt] : '?';
+        buf[1] = '*';
+        buf[2] = 'a' + static_cast<char>(m.second.second);
+        buf[3] = '\0';
+        /* Append row digit */
+        std::string s(buf);
+        s += static_cast<char>('0' + BOARD_H - static_cast<int>(m.second.first));
+        return s;
+    }
+    /* Board move: from + to (+ promotion if to.first >= BOARD_H) */
+    bool promote = (m.second.first >= static_cast<size_t>(BOARD_H));
+    size_t to_row = promote ? m.second.first - BOARD_H : m.second.first;
+    char buf[6];
     buf[0] = 'a' + static_cast<char>(m.first.second);
     buf[1] = '0' + static_cast<char>(BOARD_H) - static_cast<char>(m.first.first);
     buf[2] = 'a' + static_cast<char>(m.second.second);
-    buf[3] = '0' + static_cast<char>(BOARD_H) - static_cast<char>(m.second.first);
-    buf[4] = '\0';
+    buf[3] = '0' + static_cast<char>(BOARD_H) - static_cast<char>(to_row);
+    if(promote){
+        buf[4] = '+';
+        buf[5] = '\0';
+    }else{
+        buf[4] = '\0';
+    }
     return std::string(buf);
 }
 
@@ -72,11 +106,23 @@ Move str_to_move(const std::string& s){
         size_t row = static_cast<size_t>(('0' + BOARD_H) - s[1]);
         return Move(Point(row, col), Point(row, col));
     }
-    /* Board move: from + to */
+    /* Drop move: X*rc (e.g. P*c3) */
+    if(s.size() >= 3 && s[1] == '*'){
+        int pt = drop_letter_to_type(s[0]);
+        size_t col = static_cast<size_t>(s[2] - 'a');
+        size_t row = static_cast<size_t>(('0' + BOARD_H) - s[3]);
+        return Move(Point(static_cast<size_t>(BOARD_H), static_cast<size_t>(pt)),
+                     Point(row, col));
+    }
+    /* Board move: from + to [+promote] */
     size_t from_col = static_cast<size_t>(s[0] - 'a');
     size_t from_row = static_cast<size_t>(('0' + BOARD_H) - s[1]);
     size_t to_col   = static_cast<size_t>(s[2] - 'a');
     size_t to_row   = static_cast<size_t>(('0' + BOARD_H) - s[3]);
+    bool promote = (s.size() >= 5 && s[4] == '+');
+    if(promote){
+        to_row += BOARD_H;  /* sentinel for promotion */
+    }
     return Move(Point(from_row, from_col), Point(to_row, to_col));
 }
 

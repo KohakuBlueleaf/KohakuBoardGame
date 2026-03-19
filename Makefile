@@ -15,9 +15,10 @@ TARGET_OTHER = selfplay benchmark datagen nnue_bench
 # Include paths
 MINICHESS_INC = -Isrc/games/minichess -Isrc/state -Isrc
 GOMOKU_INC = -Isrc/games/gomoku -Isrc/state -Isrc
+MINISHOGI_INC = -Isrc/games/minishogi -Isrc/state -Isrc
 
 
-.PHONY: all clean minichess gomoku
+.PHONY: all clean minichess gomoku minishogi
 all: |$(BUILD_DIR) minichess $(TARGET_OTHER)
 
 $(BUILD_DIR):
@@ -29,6 +30,8 @@ minichess:
 	$(CXX) $(CXXFLAGS) $(MINICHESS_INC) -o $(BUILD_DIR)/minichess-ubgi.exe $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
 gomoku:
 	$(CXX) $(CXXFLAGS) $(GOMOKU_INC) -DNO_NNUE -o $(BUILD_DIR)/gomoku-ubgi.exe src/games/gomoku/state.cpp $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
+minishogi:
+	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -DNO_NNUE -o $(BUILD_DIR)/minishogi-ubgi.exe src/games/minishogi/state.cpp $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
 $(TARGET_OTHER): %: $(SOURCES_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) $(MINICHESS_INC) -o $(BUILD_DIR)/$@.exe $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_SRC) $<
 $(TARGET_UNITTEST): %: $(UNITTEST_DIR)/%_test.cpp
@@ -38,6 +41,8 @@ minichess:
 	$(CXX) $(CXXFLAGS) $(MINICHESS_INC) -o $(BUILD_DIR)/minichess-ubgi $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
 gomoku:
 	$(CXX) $(CXXFLAGS) $(GOMOKU_INC) -DNO_NNUE -o $(BUILD_DIR)/gomoku-ubgi src/games/gomoku/state.cpp $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
+minishogi:
+	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -DNO_NNUE -o $(BUILD_DIR)/minishogi-ubgi src/games/minishogi/state.cpp $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
 $(TARGET_OTHER): %: $(SOURCES_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) $(MINICHESS_INC) -o $(BUILD_DIR)/$@ $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_SRC) $<
 $(TARGET_UNITTEST): %: $(UNITTEST_DIR)/%_test.cpp
@@ -45,4 +50,4 @@ $(TARGET_UNITTEST): %: $(UNITTEST_DIR)/%_test.cpp
 endif
 
 clean:
-	rm -f $(BUILD_DIR)/minichess-ubgi* $(BUILD_DIR)/gomoku-ubgi* $(BUILD_DIR)/selfplay* $(BUILD_DIR)/benchmark* $(BUILD_DIR)/datagen* $(BUILD_DIR)/nnue_bench*
+	rm -f $(BUILD_DIR)/minichess-ubgi* $(BUILD_DIR)/gomoku-ubgi* $(BUILD_DIR)/minishogi-ubgi* $(BUILD_DIR)/selfplay* $(BUILD_DIR)/benchmark* $(BUILD_DIR)/datagen* $(BUILD_DIR)/nnue_bench*
