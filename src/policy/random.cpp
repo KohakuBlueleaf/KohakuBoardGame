@@ -10,6 +10,10 @@ SearchResult Random::search(State *state, int depth, SearchContext& ctx){
         state->get_legal_actions();
     }
     auto actions = state->legal_actions;
+    if(actions.empty()){
+        result.best_move = Move();
+        return result;
+    }
     result.best_move = actions[(rand()+depth)%actions.size()];
     result.score = 0;
     result.nodes = 1;

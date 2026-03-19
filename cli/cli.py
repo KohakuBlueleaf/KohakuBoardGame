@@ -3,7 +3,6 @@
 import argparse
 import sys
 import os
-import time
 import threading
 
 if sys.platform == "win32":
@@ -338,9 +337,10 @@ def run_tournament(
 
             if not verbose:
                 e1_color = "White" if engine1_is_white else "Black"
+                e2_color = "Black" if engine1_is_white else "White"
                 print(
                     f"Game {game_idx + 1}/{num_games}: "
-                    f"Engine1({algo1})={e1_color} vs Engine2({algo2})=",
+                    f"Engine1({algo1})={e1_color} vs Engine2({algo2})={e2_color}",
                     end="",
                     flush=True,
                 )

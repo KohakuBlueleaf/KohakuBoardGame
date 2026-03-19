@@ -82,6 +82,7 @@ static void print_progress(int games_done, int total_games, int total_positions,
 static unsigned int rng_state;
 
 static void rng_seed(unsigned int seed){
+    if(seed == 0){ seed = 1; }
     rng_state = seed;
 }
 
@@ -95,7 +96,7 @@ static unsigned int rng_next(){
 
 /* Returns a float in [0, 1) */
 static double rng_float(){
-    return (rng_next() & 0x7FFFFFFF) / (double)0x7FFFFFFF;
+    return (rng_next() & 0x7FFFFFFF) / (double)0x80000000;
 }
 
 /* Returns a random int in [0, n) */

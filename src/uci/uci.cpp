@@ -1,6 +1,4 @@
-// Standard headers MUST come before project headers because config.hpp
-// defines a macro "timeout" that clashes with std::cv_status::timeout
-// in <condition_variable> (pulled in by <mutex> and <thread>).
+// Standard headers.
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -36,6 +34,7 @@ static SearchContext       g_ctx;
 static std::thread         g_search_thread;
 static std::mutex          g_io_mutex;
 static std::atomic<bool>   g_searching{false};
+static Move                g_best_move;
 
 
 /* === Helpers === */
@@ -130,9 +129,11 @@ static void do_search(
     int64_t movetime_ms,
     [[maybe_unused]] bool infinite,
     uint32_t my_gen,
-    SearchContext ctx
+    SearchContext ctx,
+    Board board,
+    int player
 ){
-    State state(g_board, g_player);
+    State state(board, player);
     state.get_legal_actions();
 
     // Check if we've been superseded or stopped
@@ -154,10 +155,24 @@ static void do_search(
     }
 
     Move best_move = state.legal_actions[0];
+    g_best_move = best_move;
     int depth_limit = (max_depth > 0) ? max_depth : 100;
     uint64_t total_nodes = 0;
 
     auto search_start = std::chrono::high_resolution_clock::now();
+
+    /* === Root move partial-result callback === */
+    ctx.on_root_update = [&](const RootUpdate& upd){
+        if(my_gen != g_search_gen.load()){ return; }
+        best_move = upd.best_move;
+        g_best_move = upd.best_move;
+        std::ostringstream oss;
+        oss << "info depth " << upd.depth
+            << " currmove " << move_to_str(upd.best_move)
+            << " currmovenumber " << upd.move_number
+            << " score cp " << upd.score;
+        send(oss.str());
+    };
 
     for(int depth = 1; depth <= depth_limit; depth++){
         if(!alive()){ break; }
@@ -176,6 +191,7 @@ static void do_search(
         ).count();
 
         best_move = result.best_move;
+        g_best_move = best_move;
         total_nodes += result.nodes;
 
         uint64_t nps = (depth_ms > 0)
@@ -239,7 +255,8 @@ static void cmd_go(std::istringstream& iss){
     g_ctx.stop = false;
     g_searching = true;
     uint32_t gen = g_search_gen.load();
-    g_search_thread = std::thread(do_search, max_depth, movetime_ms, infinite, gen, ctx);
+    g_best_move = Move();
+    g_search_thread = std::thread(do_search, max_depth, movetime_ms, infinite, gen, ctx, g_board, g_player);
 }
 
 
@@ -405,7 +422,8 @@ void loop(){
             // Send bestmove immediately so the GUI isn't stuck waiting
             if(g_searching){
                 // The old thread will exit silently (gen mismatch)
-                send("bestmove 0000");
+                Move bm = g_best_move;
+                send("bestmove " + move_to_str(bm));
                 g_searching = false;
             }
             if(g_search_thread.joinable()){

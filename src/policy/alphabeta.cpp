@@ -64,18 +64,25 @@ SearchResult AlphaBeta::search(State *state, int depth, SearchContext& ctx){
         state->get_legal_actions();
     }
 
+    int beta_root = P_MAX + 10;
     int alpha = M_MAX - 10;
     auto all_moves = state->legal_actions;
+    int move_index = 0;
+    int total_moves = (int)all_moves.size();
 
     for(auto& move : all_moves){
         State *next = state->next_state(move);
-        int score = -eval_ctx(next, depth - 1, M_MAX, -alpha, ctx, p, 1);
+        int score = -eval_ctx(next, depth - 1, -(beta_root), -alpha, ctx, p, 1);
         delete next;
 
         if(score > alpha){
             result.best_move = move;
             alpha = score;
+            if(p.report_partial && ctx.on_root_update){
+                ctx.on_root_update({result.best_move, alpha, depth, move_index + 1, total_moves});
+            }
         }
+        move_index++;
     }
 
     result.score = alpha;
@@ -94,6 +101,7 @@ ParamMap AlphaBeta::default_params(){
         {"UseNNUE", "true"},
         {"UseKPEval", "true"},
         {"UseEvalMobility", "true"},
+        {"ReportPartial", "true"},
     };
 }
 
@@ -102,5 +110,6 @@ std::vector<ParamDef> AlphaBeta::param_defs(){
         {"UseNNUE", ParamDef::CHECK, "true"},
         {"UseKPEval", ParamDef::CHECK, "true"},
         {"UseEvalMobility", ParamDef::CHECK, "true"},
+        {"ReportPartial", ParamDef::CHECK, "true"},
     };
 }

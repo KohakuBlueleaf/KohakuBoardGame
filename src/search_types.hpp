@@ -3,12 +3,22 @@
 #include "search_params.hpp"
 #include <vector>
 #include <cstdint>
+#include <functional>
+
+struct RootUpdate {
+    Move best_move;
+    int score;
+    int depth;
+    int move_number;   // which root move just finished (1-based)
+    int total_moves;   // total root moves
+};
 
 struct SearchContext {
     uint64_t nodes = 0;
     int seldepth = 0;
     bool stop = false;
     ParamMap params;
+    std::function<void(const RootUpdate&)> on_root_update;
 
     void reset(){
         nodes = 0;

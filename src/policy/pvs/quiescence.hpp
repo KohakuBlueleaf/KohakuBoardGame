@@ -10,7 +10,7 @@
 /*============================================================
  * Quiescence Search with SearchContext (node counting)
  *============================================================*/
-static int quiescence_ctx(
+inline int quiescence_ctx(
     State *state,
     int alpha,
     int beta,

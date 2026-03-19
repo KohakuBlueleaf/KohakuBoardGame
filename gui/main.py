@@ -18,12 +18,6 @@ except ImportError:
     from uci_client import UCIEngine, discover_uci_engines
 
 
-def _sync_current_player(state):
-    """Bridge .player to .current_player for the renderer and panel."""
-    state.current_player = state.player
-    return state
-
-
 class GameApp:
     """Main application class."""
 
@@ -38,7 +32,6 @@ class GameApp:
         self.side_panel = SidePanel(self.screen)
 
         self.game_state = MiniChessState.initial()
-        _sync_current_player(self.game_state)
 
         # Discover engines
         self._available_engines = discover_uci_engines(BUILD_DIR)
@@ -318,7 +311,6 @@ class GameApp:
             self._stop_analysis()
         snap = self._undo_stack.pop()
         self.game_state = snap["game_state"]
-        _sync_current_player(self.game_state)
         self.uci_moves = snap["uci_moves"]
         self.move_history = snap["move_history"]
         self.score_history = snap["score_history"]
@@ -480,7 +472,6 @@ class GameApp:
         move_str = f"{step}. {prefix}: {format_move(move)}"
 
         new_state = self.game_state.next_state(move)
-        _sync_current_player(new_state)
         self.game_state = new_state
 
         self.move_history.append(move_str)
@@ -649,7 +640,6 @@ class GameApp:
 
     def new_game(self):
         self.game_state = MiniChessState.initial()
-        _sync_current_player(self.game_state)
 
         self.selected_piece = None
         self.legal_moves_for_selected = []

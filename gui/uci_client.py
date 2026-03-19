@@ -551,8 +551,13 @@ def discover_uci_engines(build_dir):
             continue
         try:
             for entry in os.listdir(scan_dir):
-                if not entry.lower().endswith(".exe"):
-                    continue
+                if sys.platform == "win32":
+                    if not entry.lower().endswith(".exe"):
+                        continue
+                else:
+                    full = os.path.join(scan_dir, entry)
+                    if not os.path.isfile(full) or not os.access(full, os.X_OK):
+                        continue
                 full = os.path.join(scan_dir, entry)
                 if os.path.isfile(full):
                     name = os.path.splitext(entry)[0]

@@ -13,7 +13,6 @@ def _make_font(size, bold=False):
         font = pygame.font.SysFont(name, size, bold=bold)
         if font is not None:
             return font
-    return pygame.font.SysFont(None, size, bold=bold)
 
 
 def _draw_rounded_rect(surface, rect, color, radius=10):
@@ -401,7 +400,7 @@ class SidePanel:
         return None
 
     def set_scroll(self, direction):
-        self._scroll_offset += direction
+        self._scroll_offset = max(0, self._scroll_offset + direction)
 
     # ==================================================================
     # Helpers

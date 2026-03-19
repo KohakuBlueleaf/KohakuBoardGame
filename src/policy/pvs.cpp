@@ -262,6 +262,8 @@ SearchResult PVS::search(State *state, int depth, SearchContext& ctx){
 
     Move best_move;
     bool first_child = true;
+    int move_index = 0;
+    int total_moves = (int)moves.size();
 
     for(auto& move : moves){
         int score;
@@ -292,7 +294,11 @@ SearchResult PVS::search(State *state, int depth, SearchContext& ctx){
         if(score > alpha){
             best_move = move;
             alpha = score;
+            if(p.report_partial && ctx.on_root_update){
+                ctx.on_root_update({best_move, alpha, depth, move_index + 1, total_moves});
+            }
         }
+        move_index++;
     }
 
     /* === Build result === */
@@ -383,6 +389,7 @@ ParamMap PVS::default_params(){
         {"UseLMR", "true"},
         {"LMRFullDepth", "3"},
         {"LMRDepthLimit", "3"},
+        {"ReportPartial", "true"},
     };
 }
 
@@ -402,5 +409,6 @@ std::vector<ParamDef> PVS::param_defs(){
         {"UseLMR", ParamDef::CHECK, "true"},
         {"LMRFullDepth", ParamDef::SPIN, "3", 1, 10},
         {"LMRDepthLimit", ParamDef::SPIN, "3", 1, 10},
+        {"ReportPartial", ParamDef::CHECK, "true"},
     };
 }

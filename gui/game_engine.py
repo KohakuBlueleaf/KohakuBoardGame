@@ -4,14 +4,6 @@ Provides game state management, legal move generation, AI subprocess
 communication, and action file parsing.
 """
 
-import copy
-import os
-import subprocess
-import sys
-import tempfile
-import threading
-import time
-
 try:
     from gui.config import *
 except ImportError:
@@ -362,6 +354,10 @@ class MiniChessState:
     # ------------------------------------------------------------------ #
     # Deep copy
     # ------------------------------------------------------------------ #
+
+    @property
+    def current_player(self):
+        return self.player
 
     def copy(self):
         """Return a deep copy of this state."""

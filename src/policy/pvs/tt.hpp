@@ -12,11 +12,11 @@
  *============================================================*/
 
 /* === Zobrist random keys === */
-static uint64_t zobrist_piece[2][7][BOARD_H][BOARD_W];
-static uint64_t zobrist_side;
-static bool zobrist_ready = false;
+inline uint64_t zobrist_piece[2][7][BOARD_H][BOARD_W];
+inline uint64_t zobrist_side;
+inline bool zobrist_ready = false;
 
-static void init_zobrist(){
+inline void init_zobrist(){
     uint64_t s = 0x7A35C9D1E4F02B68ULL;
     auto rand64 = [&s]() -> uint64_t {
         s ^= s << 13; s ^= s >> 7; s ^= s << 17; return s;
@@ -34,7 +34,7 @@ static void init_zobrist(){
     zobrist_ready = true;
 }
 
-[[maybe_unused]] static uint64_t compute_hash(const State* state){
+inline uint64_t compute_hash(const State* state){
     if(!zobrist_ready){ init_zobrist(); }
     uint64_t h = 0;
     for(int p = 0; p < 2; p++){
@@ -69,28 +69,28 @@ struct TTEntry {
 };
 
 /* === Dynamic TT === */
-static std::vector<TTEntry> tt;
-static int tt_size_bits = DEFAULT_TT_SIZE_BITS;
-static int tt_mask = 0;
+inline std::vector<TTEntry> tt;
+inline int tt_size_bits = DEFAULT_TT_SIZE_BITS;
+inline int tt_mask = 0;
 
-[[maybe_unused]] static void tt_resize(int bits){
+inline void tt_resize(int bits){
     tt_size_bits = bits;
     int size = 1 << bits;
     tt_mask = size - 1;
     tt.assign(size, TTEntry{});
 }
 
-[[maybe_unused]] static void tt_init(){
+inline void tt_init(){
     if(tt.empty()){
         tt_resize(DEFAULT_TT_SIZE_BITS);
     }
 }
 
-[[maybe_unused]] static void tt_clear(){
+inline void tt_clear(){
     std::fill(tt.begin(), tt.end(), TTEntry{});
 }
 
-[[maybe_unused]] static TTEntry* tt_probe(uint64_t hash){
+inline TTEntry* tt_probe(uint64_t hash){
     tt_init();
     TTEntry& e = tt[hash & tt_mask];
     if(e.flag != TT_NONE && e.hash == hash){
@@ -99,7 +99,7 @@ static int tt_mask = 0;
     return nullptr;
 }
 
-[[maybe_unused]] static void tt_store(
+inline void tt_store(
     uint64_t hash,
     int depth,
     int score,

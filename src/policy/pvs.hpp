@@ -17,6 +17,7 @@ struct PVSParams {
     bool use_lmr = true;
     int  lmr_full_depth = 3;
     int  lmr_depth_limit = 3;
+    bool report_partial = true;
 
     static PVSParams from_map(const ParamMap& m){
         PVSParams p;
@@ -34,6 +35,7 @@ struct PVSParams {
         p.use_lmr            = param_bool(m, "UseLMR", true);
         p.lmr_full_depth     = param_int(m, "LMRFullDepth", 3);
         p.lmr_depth_limit    = param_int(m, "LMRDepthLimit", 3);
+        p.report_partial     = param_bool(m, "ReportPartial", true);
         return p;
     }
 };

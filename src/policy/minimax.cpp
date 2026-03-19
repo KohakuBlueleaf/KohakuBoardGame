@@ -22,6 +22,9 @@ int MiniMax::eval_ctx(State *state, int depth, SearchContext& ctx,
     if(state->game_state == WIN){
         return 100000;
     }
+    if(state->game_state == DRAW){
+        return 0;
+    }
     if(depth <= 0){
         return state->evaluate(p.use_nnue, p.use_kp_eval, p.use_eval_mobility);
     }
@@ -58,6 +61,9 @@ SearchResult MiniMax::search(State *state, int depth, SearchContext& ctx){
     }
 
     int best_score = M_MAX - 10;
+    int move_index = 0;
+    int total_moves = (int)state->legal_actions.size();
+
     for(auto& action : state->legal_actions){
         State *next = state->next_state(action);
         int score = -eval_ctx(next, depth - 1, ctx, p, 1);
@@ -66,7 +72,11 @@ SearchResult MiniMax::search(State *state, int depth, SearchContext& ctx){
         if(score > best_score){
             best_score = score;
             result.best_move = action;
+            if(p.report_partial && ctx.on_root_update){
+                ctx.on_root_update({result.best_move, best_score, depth, move_index + 1, total_moves});
+            }
         }
+        move_index++;
     }
 
     result.score = best_score;
@@ -85,6 +95,7 @@ ParamMap MiniMax::default_params(){
         {"UseNNUE", "true"},
         {"UseKPEval", "true"},
         {"UseEvalMobility", "true"},
+        {"ReportPartial", "true"},
     };
 }
 
@@ -93,5 +104,6 @@ std::vector<ParamDef> MiniMax::param_defs(){
         {"UseNNUE", ParamDef::CHECK, "true"},
         {"UseKPEval", ParamDef::CHECK, "true"},
         {"UseEvalMobility", ParamDef::CHECK, "true"},
+        {"ReportPartial", ParamDef::CHECK, "true"},
     };
 }

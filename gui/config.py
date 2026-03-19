@@ -96,6 +96,3 @@ FPS = 30
 
 # Algorithm selection
 DEFAULT_ALGORITHM = "pvs"
-
-# Max search depth (0 = use time limit instead)
-DEFAULT_MAX_DEPTH = 0

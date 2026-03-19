@@ -6,7 +6,7 @@
 
 /* === Game rules === */
 #define RANDOM_SEED 123
-#define timeout 2
+#define TIMEOUT_LIMIT 2
 #define MAX_STEP 100
 
 /* === Compile-time features === */
