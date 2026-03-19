@@ -57,7 +57,12 @@ RECORD_V1_SIZE = struct.calcsize(RECORD_V1_FMT)
 RECORD_V2_FMT = "<60sbhbH"
 RECORD_V2_SIZE = struct.calcsize(RECORD_V2_FMT)
 
+# v3: board(60) + player(1) + score(2) + result(1) + ply(2) + best_move(2) = 68 bytes
+RECORD_V3_FMT = "<60sbhbHH"
+RECORD_V3_SIZE = struct.calcsize(RECORD_V3_FMT)
+
 SCORE_FILTER = 10000
+NO_MOVE = 0xFFFF
 
 
 # ---------------------------------------------------------------------------
@@ -65,15 +70,16 @@ SCORE_FILTER = 10000
 # ---------------------------------------------------------------------------
 def read_bin_file(
     path: str,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Read a single .bin data file (supports v1 and v2 formats).
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Read a single .bin data file (supports v1, v2, and v3 formats).
 
     Returns:
-        boards:  (N, 2, 6, 5) int8
-        players: (N,) int8
-        scores:  (N,) int16
-        results: (N,) int8  — game result from STM perspective (1=win, 0=draw, -1=loss)
-        plies:   (N,) uint16 — ply count (0 for v1 data)
+        boards:     (N, 2, 6, 5) int8
+        players:    (N,) int8
+        scores:     (N,) int16
+        results:    (N,) int8  — game result from STM perspective (1=win, 0=draw, -1=loss)
+        plies:      (N,) uint16 — ply count (0 for v1 data)
+        best_moves: (N,) uint16 — best move (NO_MOVE=0xFFFF for v1/v2 data)
     """
     with open(path, "rb") as f:
         hdr_data = f.read(HEADER_SIZE)
@@ -105,6 +111,18 @@ def read_bin_file(
                     ("ply", "<u2"),
                 ]
             )
+        elif version == 3:
+            record_size = RECORD_V3_SIZE
+            dt = np.dtype(
+                [
+                    ("board", np.int8, (60,)),
+                    ("player", np.int8),
+                    ("score", "<i2"),
+                    ("result", np.int8),
+                    ("ply", "<u2"),
+                    ("best_move", "<u2"),
+                ]
+            )
         else:
             raise ValueError(f"Unknown data version {version} in {path}")
 
@@ -127,35 +145,46 @@ def read_bin_file(
         results = np.zeros(count, dtype=np.int8)
         plies = np.zeros(count, dtype=np.uint16)
 
-    return boards, players, scores, results, plies
+    if version >= 3:
+        best_moves = records["best_move"].copy()
+    else:
+        best_moves = np.full(count, NO_MOVE, dtype=np.uint16)
+
+    return boards, players, scores, results, plies, best_moves
 
 
 def load_all_data(
     pattern: str,
     min_ply: int = 0,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Load and concatenate data from all files matching *pattern*."""
     files = sorted(glob.glob(pattern))
     if not files:
         print(f"Error: no files match '{pattern}'")
         sys.exit(1)
 
-    all_boards, all_players, all_scores, all_results, all_plies = [], [], [], [], []
+    all_boards, all_players, all_scores, all_results, all_plies, all_best_moves = (
+        [], [], [], [], [], [],
+    )
     for fp in files:
         print(f"  Loading {fp} ...", end="", flush=True)
-        b, p, s, r, ply = read_bin_file(fp)
-        print(f" {len(b)} records (v{'2' if r.any() else '1'})")
+        b, p, s, r, ply, bm = read_bin_file(fp)
+        has_moves = np.any(bm != NO_MOVE)
+        ver_str = "3" if has_moves else ("2" if r.any() else "1")
+        print(f" {len(b)} records (v{ver_str})")
         all_boards.append(b)
         all_players.append(p)
         all_scores.append(s)
         all_results.append(r)
         all_plies.append(ply)
+        all_best_moves.append(bm)
 
     boards = np.concatenate(all_boards)
     players = np.concatenate(all_players)
     scores = np.concatenate(all_scores)
     results = np.concatenate(all_results)
     plies = np.concatenate(all_plies)
+    best_moves = np.concatenate(all_best_moves)
 
     total = len(scores)
 
@@ -170,10 +199,11 @@ def load_all_data(
     scores = scores[mask]
     results = results[mask]
     plies = plies[mask]
+    best_moves = best_moves[mask]
     filtered = total - len(scores)
     print(f"  Total: {total} records, filtered {filtered}, kept {len(scores)}")
 
-    return boards, players, scores, results, plies
+    return boards, players, scores, results, plies, best_moves
 
 
 # ---------------------------------------------------------------------------
@@ -295,35 +325,44 @@ def board_to_halfkp_indices(
 class PSDenseDataset(Dataset):
     """PS features — precomputed dense tensors."""
 
-    def __init__(self, white_feats, black_feats, stm, scores, results):
+    def __init__(self, white_feats, black_feats, stm, scores, results, best_moves=None):
         self.white_feats = torch.from_numpy(white_feats)
         self.black_feats = torch.from_numpy(black_feats)
         self.stm = torch.from_numpy(stm)
         self.scores = torch.from_numpy(scores.astype(np.float32))
         self.results = torch.from_numpy(results.astype(np.float32))
+        self.best_moves = (
+            torch.from_numpy(best_moves.astype(np.int64)) if best_moves is not None else None
+        )
 
     def __len__(self):
         return len(self.scores)
 
     def __getitem__(self, idx):
-        return (
+        items = (
             self.white_feats[idx],
             self.black_feats[idx],
             self.stm[idx],
             self.scores[idx],
             self.results[idx],
         )
+        if self.best_moves is not None:
+            items = items + (self.best_moves[idx],)
+        return items
 
 
 class HalfKPSparseDataset(Dataset):
     """HalfKP — sparse indices expanded to dense on access."""
 
-    def __init__(self, white_indices, black_indices, stm, scores, results):
+    def __init__(self, white_indices, black_indices, stm, scores, results, best_moves=None):
         self.white_indices = white_indices
         self.black_indices = black_indices
         self.stm = torch.from_numpy(stm)
         self.scores = torch.from_numpy(scores.astype(np.float32))
         self.results = torch.from_numpy(results.astype(np.float32))
+        self.best_moves = (
+            torch.from_numpy(best_moves.astype(np.int64)) if best_moves is not None else None
+        )
 
     def __len__(self):
         return len(self.scores)
@@ -341,7 +380,10 @@ class HalfKPSparseDataset(Dataset):
         if len(valid_b) > 0:
             b[valid_b.astype(np.int64)] = 1.0
 
-        return w, b, self.stm[idx], self.scores[idx], self.results[idx]
+        items = (w, b, self.stm[idx], self.scores[idx], self.results[idx])
+        if self.best_moves is not None:
+            items = items + (self.best_moves[idx],)
+        return items
 
 
 # ---------------------------------------------------------------------------
@@ -359,17 +401,24 @@ class MiniChessNNUE(nn.Module):
         accum_size: int = 128,
         l1_size: int = 32,
         l2_size: int = 32,
+        use_policy: bool = False,
     ):
         super().__init__()
         self.feature_size = feature_size
         self.accum_size = accum_size
         self.l1_size = l1_size
         self.l2_size = l2_size
+        self.use_policy = use_policy
 
         self.ft = nn.Linear(feature_size, accum_size)
         self.l1 = nn.Linear(accum_size * 2, l1_size)
         self.l2 = nn.Linear(l1_size, l2_size)
         self.out = nn.Linear(l2_size, 1)
+
+        if use_policy:
+            POLICY_SIZE = 900  # 30*30 from-to squares
+            self.policy_l1 = nn.Linear(accum_size * 2, 128)
+            self.policy_out = nn.Linear(128, POLICY_SIZE)
 
     def forward(self, white_features, black_features, stm):
         w_accum = screlu(self.ft(white_features))
@@ -380,10 +429,17 @@ class MiniChessNNUE(nn.Module):
         nstm_accum = torch.where(stm_mask, w_accum, b_accum)
 
         x = torch.cat([stm_accum, nstm_accum], dim=1)
-        x = screlu(self.l1(x))
-        x = screlu(self.l2(x))
-        x = self.out(x)
-        return x.squeeze(1)
+
+        # Value head
+        v = screlu(self.l1(x))
+        v = screlu(self.l2(v))
+        value = self.out(v).squeeze(1)
+
+        if self.use_policy:
+            p = torch.relu(self.policy_l1(x))  # ReLU not SCReLU for policy
+            policy_logits = self.policy_out(p)
+            return value, policy_logits
+        return value
 
 
 # ---------------------------------------------------------------------------
@@ -408,6 +464,36 @@ def nnue_loss(
     wdl = (result + 1.0) / 2.0
     target = (1.0 - wdl_weight) * score_sig + wdl_weight * wdl
     return torch.mean((pred_sig - target) ** 2)
+
+
+POLICY_SIZE = 900
+
+
+def dual_loss(
+    value_pred: torch.Tensor,
+    policy_logits: torch.Tensor,
+    score: torch.Tensor,
+    result: torch.Tensor,
+    best_move: torch.Tensor,
+    wdl_weight: float,
+    policy_weight: float = 0.1,
+) -> torch.Tensor:
+    """Combined value + policy loss.
+
+    Policy loss is only computed on records that have a valid best move
+    (best_move != NO_MOVE).
+    """
+    # Value loss (unchanged)
+    value_loss = nnue_loss(value_pred, score, result, wdl_weight)
+
+    # Policy loss: only on records that HAVE a best move
+    has_move = best_move != NO_MOVE
+    if has_move.any() and policy_logits is not None:
+        valid_logits = policy_logits[has_move]
+        valid_targets = best_move[has_move]
+        policy_loss = nn.functional.cross_entropy(valid_logits, valid_targets)
+        return value_loss + policy_weight * policy_loss
+    return value_loss
 
 
 # ---------------------------------------------------------------------------
@@ -457,6 +543,8 @@ def export_binary_weights(model: MiniChessNNUE, path: str) -> None:
 
     total_bytes = os.path.getsize(path)
     print(f"  Exported float weights to {path} ({total_bytes} bytes)")
+    if model.use_policy:
+        print("  Note: Policy head weights NOT exported to binary (C++ support pending)")
 
 
 def export_quantized_weights(model: MiniChessNNUE, path: str) -> None:
@@ -528,6 +616,8 @@ def export_quantized_weights(model: MiniChessNNUE, path: str) -> None:
         f"  L1 weight range: [{-l1_w_range:.4f}, {l1_w_range:.4f}] "
         f"(QB={QB}, clipped={int((l1_w_float.abs() > 127/QB).sum())})"
     )
+    if model.use_policy:
+        print("  Note: Policy head weights NOT exported to binary (C++ support pending)")
 
 
 # ---------------------------------------------------------------------------
@@ -542,7 +632,7 @@ def train(args: argparse.Namespace) -> None:
 
     # ---- Load data --------------------------------------------------------
     print("Loading data...")
-    boards, players, scores, results, plies = load_all_data(
+    boards, players, scores, results, plies, best_moves = load_all_data(
         args.data,
         min_ply=args.min_ply,
     )
@@ -553,6 +643,13 @@ def train(args: argparse.Namespace) -> None:
             "Falling back to pure score loss."
         )
         args.wdl_weight = 0.0
+
+    has_best_moves = np.any(best_moves != NO_MOVE)
+    if args.policy and not has_best_moves:
+        print(
+            "Warning: --policy enabled but no best_move data found (all v1/v2). "
+            "Policy loss will be skipped (value-only training)."
+        )
 
     # ---- Train/val split --------------------------------------------------
     N = len(scores)
@@ -565,6 +662,10 @@ def train(args: argparse.Namespace) -> None:
     print(f"Extracting {feature_type.upper()} features...")
     t0 = time.time()
 
+    # Prepare best_moves for datasets (pass only when policy is enabled)
+    bm_train = best_moves[train_idx] if args.policy else None
+    bm_val = best_moves[val_idx] if args.policy else None
+
     if feature_type == "ps":
         feature_size = PS_SIZE
         wf, bf, stm = board_to_ps_features(boards, players)
@@ -576,9 +677,11 @@ def train(args: argparse.Namespace) -> None:
             stm[train_idx],
             scores[train_idx],
             results[train_idx],
+            bm_train,
         )
         val_ds = PSDenseDataset(
-            wf[val_idx], bf[val_idx], stm[val_idx], scores[val_idx], results[val_idx]
+            wf[val_idx], bf[val_idx], stm[val_idx], scores[val_idx], results[val_idx],
+            bm_val,
         )
     elif feature_type == "halfkp":
         feature_size = HALFKP_SIZE
@@ -592,9 +695,11 @@ def train(args: argparse.Namespace) -> None:
             stm[train_idx],
             scores[train_idx],
             results[train_idx],
+            bm_train,
         )
         val_ds = HalfKPSparseDataset(
-            wi[val_idx], bi[val_idx], stm[val_idx], scores[val_idx], results[val_idx]
+            wi[val_idx], bi[val_idx], stm[val_idx], scores[val_idx], results[val_idx],
+            bm_val,
         )
     else:
         print(f"Error: unknown feature type '{feature_type}' (use 'ps' or 'halfkp')")
@@ -628,11 +733,14 @@ def train(args: argparse.Namespace) -> None:
         accum_size=args.accum_size,
         l1_size=32,
         l2_size=32,
+        use_policy=args.policy,
     ).to(device)
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Model parameters: {total_params:,}")
     print(f"WDL weight: {args.wdl_weight}")
+    if args.policy:
+        print(f"Policy head: enabled (weight={args.policy_weight})")
 
     # ---- Optimizer & scheduler --------------------------------------------
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -650,14 +758,29 @@ def train(args: argparse.Namespace) -> None:
         total_loss = 0.0
         n = 0
         with torch.no_grad():
-            for wf, bf, s, sc, res in tqdm(loader, desc=desc, leave=False):
-                wf = wf.to(device)
-                bf = bf.to(device)
-                s = s.to(device)
-                sc = sc.to(device)
-                res = res.to(device)
-                pred = model(wf, bf, s)
-                total_loss += nnue_loss(pred, sc, res, args.wdl_weight).item()
+            for batch in tqdm(loader, desc=desc, leave=False):
+                if len(batch) == 6:  # has best_move
+                    wf, bf, s, sc, res, bm = batch
+                else:
+                    wf, bf, s, sc, res = batch
+                    bm = None
+
+                wf, bf, s, sc, res = (
+                    wf.to(device), bf.to(device), s.to(device),
+                    sc.to(device), res.to(device),
+                )
+                if bm is not None:
+                    bm = bm.to(device)
+
+                if model.use_policy:
+                    value_pred, policy_logits = model(wf, bf, s)
+                    total_loss += dual_loss(
+                        value_pred, policy_logits, sc, res, bm,
+                        args.wdl_weight, args.policy_weight,
+                    ).item()
+                else:
+                    pred = model(wf, bf, s)
+                    total_loss += nnue_loss(pred, sc, res, args.wdl_weight).item()
                 n += 1
         return total_loss / max(n, 1)
 
@@ -681,15 +804,29 @@ def train(args: argparse.Namespace) -> None:
         n_batches = 0
 
         pbar = tqdm(train_loader, desc=f"Epoch {epoch:>3d}/{args.epochs}", leave=False)
-        for wf, bf, s, sc, res in pbar:
-            wf = wf.to(device)
-            bf = bf.to(device)
-            s = s.to(device)
-            sc = sc.to(device)
-            res = res.to(device)
+        for batch in pbar:
+            if len(batch) == 6:  # has best_move
+                wf, bf, s, sc, res, bm = batch
+            else:
+                wf, bf, s, sc, res = batch
+                bm = None
 
-            pred = model(wf, bf, s)
-            loss = nnue_loss(pred, sc, res, args.wdl_weight)
+            wf, bf, s, sc, res = (
+                wf.to(device), bf.to(device), s.to(device),
+                sc.to(device), res.to(device),
+            )
+            if bm is not None:
+                bm = bm.to(device)
+
+            if model.use_policy:
+                value_pred, policy_logits = model(wf, bf, s)
+                loss = dual_loss(
+                    value_pred, policy_logits, sc, res, bm,
+                    args.wdl_weight, args.policy_weight,
+                )
+            else:
+                pred = model(wf, bf, s)
+                loss = nnue_loss(pred, sc, res, args.wdl_weight)
 
             optimizer.zero_grad()
             loss.backward()
@@ -821,6 +958,17 @@ def main() -> None:
         type=str,
         default="models/nnue_v1.bin",
         help="Export binary weights to (default: models/nnue_v1.bin)",
+    )
+    parser.add_argument(
+        "--policy",
+        action="store_true",
+        help="Enable policy head (requires v3 data with best moves)",
+    )
+    parser.add_argument(
+        "--policy-weight",
+        type=float,
+        default=0.1,
+        help="Policy loss weight (default: 0.1)",
     )
     args = parser.parse_args()
     train(args)

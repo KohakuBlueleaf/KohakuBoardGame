@@ -38,7 +38,7 @@
 
 struct DataHeader {
     char magic[4];     // "MCDT" (MiniChess Data Training)
-    int32_t version;   // 1
+    int32_t version;   // 3
     int32_t count;     // number of records (updated at end)
 };
 
@@ -48,6 +48,7 @@ struct DataRecord {
     int16_t score;          // 2 bytes: PVS score from side-to-move perspective
     int8_t result;          // 1 byte: game result from STM perspective (1=win, 0=draw, -1=loss)
     uint16_t ply;           // 2 bytes: ply count from game start
+    uint16_t best_move;     // 2 bytes: encoded as from_sq*30+to_sq (0xFFFF = no move)
 };
 
 #pragma pack(pop)
@@ -214,7 +215,8 @@ static void play_game(
             eval_copy->get_legal_actions();
 
             SearchContext eval_ctx;
-            int score = PVS::search(eval_copy, cfg.depth, eval_ctx).score;
+            SearchResult eval_result = PVS::search(eval_copy, cfg.depth, eval_ctx);
+            int score = eval_result.score;
             delete eval_copy;
 
             if(score > 32767){ score = 32767; }
@@ -232,6 +234,16 @@ static void play_game(
             rec.score = (int16_t)score;
             rec.result = 0;  // placeholder, filled below
             rec.ply = (uint16_t)step;
+
+            Move bm = eval_result.best_move;
+            uint16_t encoded_move = 0xFFFF; // no move sentinel
+            if(bm != Move()){
+                int from_sq = bm.first.first * BOARD_W + bm.first.second;
+                int to_sq = bm.second.first * BOARD_W + bm.second.second;
+                encoded_move = (uint16_t)(from_sq * 30 + to_sq);
+            }
+            rec.best_move = encoded_move;
+
             records.push_back(rec);
         }
 
@@ -282,7 +294,7 @@ int main(int argc, char* argv[]){
     /* Write placeholder header (count will be updated at end) */
     DataHeader header;
     std::memcpy(header.magic, "MCDT", 4);
-    header.version = 2;
+    header.version = 3;
     header.count = 0;
     std::fwrite(&header, sizeof(DataHeader), 1, fp);
 
