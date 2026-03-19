@@ -305,6 +305,14 @@ class SidePanel:
         self.surface.blit(surf, (tx, ty))
 
     def _draw_score_plot(self, cx, cy, score_history, plot_w, plot_h):
+        """Score history chart.
+
+        score_history entries: (player, score_cp, source)
+        source: "white", "black", "analyze", "human"
+        - analyze/human: single gray line
+        - white: white line + dots
+        - black: dark line + dots (human side hidden)
+        """
         max_cp = self._SCORE_PLOT_MAX_CP
 
         pygame.draw.rect(self.surface, (30, 30, 34), (cx, cy, plot_w, plot_h))
@@ -313,20 +321,13 @@ class SidePanel:
         pygame.draw.line(
             self.surface, (80, 80, 80), (cx, mid_y), (cx + plot_w, mid_y), 1
         )
-
         for frac in (0.25, 0.75):
             ref_y = cy + int(plot_h * frac)
             pygame.draw.line(
                 self.surface, (45, 45, 50), (cx, ref_y), (cx + plot_w, ref_y), 1
             )
 
-        points = [
-            (i, player, score)
-            for i, (player, score) in enumerate(score_history)
-            if score is not None
-        ]
-
-        if not points:
+        if not score_history:
             pygame.draw.rect(self.surface, COLOR_TEXT_DIM, (cx, cy, plot_w, plot_h), 1)
             return
 
@@ -341,18 +342,55 @@ class SidePanel:
             sy = mid_y - int(clamped / max_cp * (plot_h // 2 - 2))
             return (sx, sy)
 
-        if len(points) >= 2:
-            screen_pts = [to_screen(idx, score) for idx, _, score in points]
-            pygame.draw.lines(self.surface, (100, 100, 110), False, screen_pts, 2)
+        # Separate points by source
+        white_pts = []
+        black_pts = []
+        single_pts = []
 
-        for idx, player, score in points:
-            sx, sy = to_screen(idx, score)
-            if player == 0:
+        for i, entry in enumerate(score_history):
+            player = entry[0]
+            score = entry[1]
+            source = entry[2] if len(entry) > 2 else "analyze"
+            if score is None:
+                continue
+            if source == "white":
+                white_pts.append((i, score))
+            elif source == "black":
+                black_pts.append((i, score))
+            elif source in ("analyze", "human"):
+                single_pts.append((i, player, score))
+
+        # Draw lines and dots per source
+        # Single line (analyze / human-human)
+        if single_pts:
+            if len(single_pts) >= 2:
+                pts = [to_screen(idx, s) for idx, _, s in single_pts]
+                pygame.draw.lines(self.surface, (120, 120, 130), False, pts, 2)
+            for idx, player, score in single_pts:
+                sx, sy = to_screen(idx, score)
+                c = (200, 200, 200) if player == 0 else (80, 80, 80)
+                pygame.draw.circle(self.surface, c, (sx, sy), 3)
+                pygame.draw.circle(self.surface, COLOR_TEXT_DIM, (sx, sy), 3, 1)
+
+        # White engine line
+        if white_pts:
+            if len(white_pts) >= 2:
+                pts = [to_screen(idx, s) for idx, s in white_pts]
+                pygame.draw.lines(self.surface, (200, 200, 200), False, pts, 2)
+            for idx, score in white_pts:
+                sx, sy = to_screen(idx, score)
                 pygame.draw.circle(self.surface, (230, 230, 230), (sx, sy), 3)
-                pygame.draw.circle(self.surface, (80, 80, 80), (sx, sy), 3, 1)
-            else:
-                pygame.draw.circle(self.surface, (40, 40, 40), (sx, sy), 3)
-                pygame.draw.circle(self.surface, (160, 160, 160), (sx, sy), 3, 1)
+                pygame.draw.circle(self.surface, (100, 100, 100), (sx, sy), 3, 1)
+
+        # Black engine line
+        if black_pts:
+            if len(black_pts) >= 2:
+                pts = [to_screen(idx, s) for idx, s in black_pts]
+                pygame.draw.lines(self.surface, (80, 80, 100), False, pts, 2)
+            for idx, score in black_pts:
+                sx, sy = to_screen(idx, score)
+                pygame.draw.circle(self.surface, (50, 50, 60), (sx, sy), 3)
+                pygame.draw.circle(self.surface, (140, 140, 160), (sx, sy), 3, 1)
 
         pygame.draw.rect(self.surface, COLOR_TEXT_DIM, (cx, cy, plot_w, plot_h), 1)
 

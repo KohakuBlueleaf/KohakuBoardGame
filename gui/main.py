@@ -517,7 +517,17 @@ class GameApp:
         self.move_history.append(move_str)
         self.last_move = move
         self.uci_moves.append(UCIEngine.move_to_uci(move))
-        self.score_history.append((mover, self.search_info.get("score_cp")))
+        # Determine score source
+        score_cp = self.search_info.get("score_cp")
+        if self.analyze["enabled"]:
+            source = "analyze"
+        elif mover == 0 and self.white["engine"] is not None:
+            source = "white"
+        elif mover == 1 and self.black["engine"] is not None:
+            source = "black"
+        else:
+            source = "human"
+        self.score_history.append((mover, score_cp, source))
 
         self.side_panel._scroll_offset = max(0, len(self.move_history))
         self.selected_piece = None
