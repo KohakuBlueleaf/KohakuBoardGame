@@ -185,9 +185,19 @@ def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
         if bestmove is not None and last_info is not None:
             break
 
-    # If no bestmove but we have info with currmove, use that
-    if bestmove is None and last_info and last_info.get("currmove"):
-        bestmove = last_info["currmove"]
+    # If no bestmove, extract from last info (pv or currmove)
+    if bestmove is None and last_info:
+        pv = last_info.get("pv")
+        if pv and len(pv) > 0:
+            bestmove = pv[0]
+        elif last_info.get("currmove"):
+            bestmove = last_info["currmove"]
+
+    # Debug: dump raw output if no move found
+    if bestmove is None:
+        print(f"  [DEBUG] No bestmove found. stdout lines={len(lines)}")
+        for i, l in enumerate(lines[-10:]):
+            print(f"  [DEBUG]   {i}: {l.strip()}")
 
     return bestmove, last_info
 
@@ -319,9 +329,8 @@ def run_game(
 
             if bestmove_uci is None:
                 if verbose:
-                    print(
-                        f"  >> {side_name} engine failed to return a move! {side_name} loses."
-                    )
+                    print(f"  >> {side_name} engine failed to return a move! {side_name} loses.")
+                    print(f"     algo={algo_name}, moves={len(uci_moves)}, last_info={info}")
                 return "black" if is_white else "white"
 
             try:
