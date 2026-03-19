@@ -117,8 +117,9 @@ def get_engine_move(engine, uci_moves, time_limit, depth=0):
 
     timeout_sec = 300.0 if depth > 0 else (time_limit / 1000.0) + 10.0
     if not event.wait(timeout=timeout_sec):
+        # Engine didn't respond — kill it (caller should recreate)
         try:
-            engine.stop()
+            engine.quit()
         except Exception:
             pass
         return None, None

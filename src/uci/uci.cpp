@@ -238,11 +238,10 @@ static void do_search(
 /* === Command: go === */
 
 static void cmd_go(std::istringstream& iss){
-    // Abandon any running search — don't block
+    // Stop old search and wait for it to finish
     g_ctx.stop = true;
-    g_search_gen++;  // old thread sees generation mismatch, exits silently
     if(g_search_thread.joinable()){
-        g_search_thread.detach();
+        g_search_thread.join();
     }
 
     int max_depth = 0;
@@ -432,17 +431,10 @@ void loop(){
             cmd_go(iss);
         }else if(cmd == "stop"){
             g_ctx.stop = true;
-            g_search_gen++;
-            // Send bestmove immediately so the GUI isn't stuck waiting
-            if(g_searching){
-                // The old thread will exit silently (gen mismatch)
-                Move bm = g_best_move;
-                send("bestmove " + move_to_str(bm));
-                g_searching = false;
-            }
             if(g_search_thread.joinable()){
-                g_search_thread.detach();
+                g_search_thread.join();
             }
+            // Thread has exited and sent bestmove (if alive)
         }else if(cmd == "d"){
             cmd_display();
         }else if(cmd == "quit"){

@@ -262,11 +262,11 @@ class GameApp:
             return
         if not self.analyze["enabled"]:
             return
+        # Kill old engine and create fresh — instant stop, no races
+        self._kill_analyze_engine()
         engine = self._get_or_create_analyze_engine()
         if engine is None:
             return
-        # Send position + go directly. Engine's generation counter
-        # handles superseding any in-flight search.
         self.search_info = {}
         if self.uci_moves:
             engine.set_position(moves=list(self.uci_moves))
@@ -280,10 +280,17 @@ class GameApp:
         self._analyze_active = True
 
     def _stop_analysis(self):
-        if self._analyze_active and self._analyze_engine is not None:
-            self._analyze_engine.stop()
+        self._kill_analyze_engine()
         self._analyze_active = False
         self.search_info = {}
+
+    def _kill_analyze_engine(self):
+        if self._analyze_engine is not None:
+            try:
+                self._analyze_engine.quit()
+            except Exception:
+                pass
+            self._analyze_engine = None
 
     def _on_analyze_info(self, info_dict):
         """Normalize score to white's perspective for the score bar."""
