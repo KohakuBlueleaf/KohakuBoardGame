@@ -136,7 +136,7 @@ class GameApp:
         if exe_path is None:
             return
 
-        self._algo_options = {}   # algo_name -> [option_dicts]
+        self._algo_options = {}  # algo_name -> [option_dicts]
         self._algo_defaults = {}  # algo_name -> {name: default_val}
 
         try:
@@ -652,7 +652,11 @@ class GameApp:
     def draw(self):
         self.screen.fill(COLOR_BG)
 
-        pv = self.search_info.get("pv") if self.analyze["enabled"] or self.ai_thinking else None
+        pv = (
+            self.search_info.get("pv")
+            if self.analyze["enabled"] or self.ai_thinking
+            else None
+        )
         self.board_renderer.draw(
             self.game_state,
             selected=self.selected_piece,
@@ -739,8 +743,12 @@ class GameApp:
         dialog.attributes("-topmost", True)
         pad = {"padx": 10, "pady": 4}
 
-        white_engine_var = tk.StringVar(value=engine_names[_engine_index(self.white["engine"])])
-        black_engine_var = tk.StringVar(value=engine_names[_engine_index(self.black["engine"])])
+        white_engine_var = tk.StringVar(
+            value=engine_names[_engine_index(self.white["engine"])]
+        )
+        black_engine_var = tk.StringVar(
+            value=engine_names[_engine_index(self.black["engine"])]
+        )
         w_algo_var = tk.StringVar(value=self.white["algo"])
         b_algo_var = tk.StringVar(value=self.black["algo"])
         w_depth_var = tk.IntVar(value=self.white["depth"])
@@ -750,50 +758,105 @@ class GameApp:
         black_params = dict(self.black["params"])
         applied = [False]
 
-        def _build_side_frame(parent, row, label, engine_var, algo_var, depth_var, params):
+        def _build_side_frame(
+            parent, row, label, engine_var, algo_var, depth_var, params
+        ):
             frame = ttk.LabelFrame(parent, text=label)
             frame.grid(row=row, column=0, columnspan=2, sticky="ew", **pad)
-            ttk.Label(frame, text="Player:").grid(row=0, column=0, sticky="w", padx=4, pady=2)
-            combo = ttk.Combobox(frame, textvariable=engine_var, values=engine_names, state="readonly", width=22)
+            ttk.Label(frame, text="Player:").grid(
+                row=0, column=0, sticky="w", padx=4, pady=2
+            )
+            combo = ttk.Combobox(
+                frame,
+                textvariable=engine_var,
+                values=engine_names,
+                state="readonly",
+                width=22,
+            )
             combo.grid(row=0, column=1, columnspan=4, sticky="ew", padx=4, pady=2)
-            ttk.Label(frame, text="Algorithm:").grid(row=1, column=0, sticky="w", padx=4, pady=2)
-            algo_cb = ttk.Combobox(frame, textvariable=algo_var, values=algo_list, state="readonly", width=10)
+            ttk.Label(frame, text="Algorithm:").grid(
+                row=1, column=0, sticky="w", padx=4, pady=2
+            )
+            algo_cb = ttk.Combobox(
+                frame,
+                textvariable=algo_var,
+                values=algo_list,
+                state="readonly",
+                width=10,
+            )
             algo_cb.grid(row=1, column=1, sticky="w", padx=4, pady=2)
-            pbtn = ttk.Button(frame, text="Params...", command=lambda: self._open_params_dialog(dialog, algo_var.get(), params), width=8)
+            pbtn = ttk.Button(
+                frame,
+                text="Params...",
+                command=lambda: self._open_params_dialog(
+                    dialog, algo_var.get(), params
+                ),
+                width=8,
+            )
             pbtn.grid(row=1, column=2, sticky="w", padx=4, pady=2)
-            ttk.Label(frame, text="Depth:").grid(row=1, column=3, sticky="w", padx=4, pady=2)
+            ttk.Label(frame, text="Depth:").grid(
+                row=1, column=3, sticky="w", padx=4, pady=2
+            )
             dspin = ttk.Spinbox(frame, from_=0, to=20, textvariable=depth_var, width=4)
             dspin.grid(row=1, column=4, sticky="w", padx=4, pady=2)
             ai_widgets = [algo_cb, pbtn, dspin]
+
             def _on_algo_change(e=None):
                 new_algo = algo_var.get()
                 params.clear()
                 params.update(self._algo_defaults.get(new_algo, {}))
+
             algo_cb.bind("<<ComboboxSelected>>", _on_algo_change)
             return combo, ai_widgets
 
-        w_combo, w_widgets = _build_side_frame(dialog, 0, "White", white_engine_var, w_algo_var, w_depth_var, white_params)
-        b_combo, b_widgets = _build_side_frame(dialog, 1, "Black", black_engine_var, b_algo_var, b_depth_var, black_params)
+        w_combo, w_widgets = _build_side_frame(
+            dialog, 0, "White", white_engine_var, w_algo_var, w_depth_var, white_params
+        )
+        b_combo, b_widgets = _build_side_frame(
+            dialog, 1, "Black", black_engine_var, b_algo_var, b_depth_var, black_params
+        )
 
-        ttk.Label(dialog, text="Time limit (s):").grid(row=2, column=0, sticky="w", **pad)
-        ttk.Spinbox(dialog, from_=1, to=30, textvariable=time_var, width=5).grid(row=2, column=1, sticky="w", **pad)
+        ttk.Label(dialog, text="Time limit (s):").grid(
+            row=2, column=0, sticky="w", **pad
+        )
+        ttk.Spinbox(dialog, from_=1, to=30, textvariable=time_var, width=5).grid(
+            row=2, column=1, sticky="w", **pad
+        )
 
         def _update():
             for w in w_widgets:
-                st = ("readonly" if isinstance(w, ttk.Combobox) else "normal") if white_engine_var.get() != "Human" else "disabled"
+                st = (
+                    ("readonly" if isinstance(w, ttk.Combobox) else "normal")
+                    if white_engine_var.get() != "Human"
+                    else "disabled"
+                )
                 w.configure(state=st)
             for w in b_widgets:
-                st = ("readonly" if isinstance(w, ttk.Combobox) else "normal") if black_engine_var.get() != "Human" else "disabled"
+                st = (
+                    ("readonly" if isinstance(w, ttk.Combobox) else "normal")
+                    if black_engine_var.get() != "Human"
+                    else "disabled"
+                )
                 w.configure(state=st)
+
         w_combo.bind("<<ComboboxSelected>>", lambda e: _update())
         b_combo.bind("<<ComboboxSelected>>", lambda e: _update())
         _update()
 
         btn_frame = ttk.Frame(dialog)
         btn_frame.grid(row=3, column=0, columnspan=2, pady=10)
-        ttk.Button(btn_frame, text="Start", command=lambda: [applied.__setitem__(0, True), dialog.destroy()], width=10).grid(row=0, column=0, padx=8)
-        ttk.Button(btn_frame, text="Cancel", command=dialog.destroy, width=10).grid(row=0, column=1, padx=8)
-        dialog.bind("<Return>", lambda e: [applied.__setitem__(0, True), dialog.destroy()])
+        ttk.Button(
+            btn_frame,
+            text="Start",
+            command=lambda: [applied.__setitem__(0, True), dialog.destroy()],
+            width=10,
+        ).grid(row=0, column=0, padx=8)
+        ttk.Button(btn_frame, text="Cancel", command=dialog.destroy, width=10).grid(
+            row=0, column=1, padx=8
+        )
+        dialog.bind(
+            "<Return>", lambda e: [applied.__setitem__(0, True), dialog.destroy()]
+        )
         dialog.bind("<Escape>", lambda e: dialog.destroy())
 
         dialog.update_idletasks()
@@ -806,16 +869,46 @@ class GameApp:
         if not applied[0]:
             return
 
-        w_idx = engine_names.index(white_engine_var.get()) if white_engine_var.get() in engine_names else 0
-        b_idx = engine_names.index(black_engine_var.get()) if black_engine_var.get() in engine_names else 0
+        w_idx = (
+            engine_names.index(white_engine_var.get())
+            if white_engine_var.get() in engine_names
+            else 0
+        )
+        b_idx = (
+            engine_names.index(black_engine_var.get())
+            if black_engine_var.get() in engine_names
+            else 0
+        )
 
-        if engine_paths[w_idx] != self.white["engine"] or w_algo_var.get() != self.white["algo"] or white_params != self.white["params"]:
+        if (
+            engine_paths[w_idx] != self.white["engine"]
+            or w_algo_var.get() != self.white["algo"]
+            or white_params != self.white["params"]
+        ):
             self._quit_engine("white_uci_engine")
-        if engine_paths[b_idx] != self.black["engine"] or b_algo_var.get() != self.black["algo"] or black_params != self.black["params"]:
+        if (
+            engine_paths[b_idx] != self.black["engine"]
+            or b_algo_var.get() != self.black["algo"]
+            or black_params != self.black["params"]
+        ):
             self._quit_engine("black_uci_engine")
 
-        self.white.update({"engine": engine_paths[w_idx], "algo": w_algo_var.get(), "params": white_params, "depth": max(0, min(20, w_depth_var.get()))})
-        self.black.update({"engine": engine_paths[b_idx], "algo": b_algo_var.get(), "params": black_params, "depth": max(0, min(20, b_depth_var.get()))})
+        self.white.update(
+            {
+                "engine": engine_paths[w_idx],
+                "algo": w_algo_var.get(),
+                "params": white_params,
+                "depth": max(0, min(20, w_depth_var.get())),
+            }
+        )
+        self.black.update(
+            {
+                "engine": engine_paths[b_idx],
+                "algo": b_algo_var.get(),
+                "params": black_params,
+                "depth": max(0, min(20, b_depth_var.get())),
+            }
+        )
         self.time_limit = max(1, min(30, time_var.get()))
         self.new_game()
 
@@ -846,8 +939,16 @@ class GameApp:
         dialog.attributes("-topmost", True)
         pad = {"padx": 10, "pady": 4}
 
-        analyze_engine_names = [name for name, _path in self._available_engines] or ["(none)"]
-        analyze_engine_var = tk.StringVar(value="(auto)" if self.analyze["engine"] is None else engine_names[_engine_index(self.analyze["engine"])])
+        analyze_engine_names = [name for name, _path in self._available_engines] or [
+            "(none)"
+        ]
+        analyze_engine_var = tk.StringVar(
+            value=(
+                "(auto)"
+                if self.analyze["engine"] is None
+                else engine_names[_engine_index(self.analyze["engine"])]
+            )
+        )
         analyze_algo_var = tk.StringVar(value=self.analyze["algo"])
         time_var = tk.IntVar(value=self.time_limit)
         analyze_params = dict(self.analyze["params"])
@@ -857,28 +958,63 @@ class GameApp:
         af = ttk.LabelFrame(dialog, text="Analyze Engine")
         af.grid(row=0, column=0, columnspan=2, sticky="ew", **pad)
         ttk.Label(af, text="Engine:").grid(row=0, column=0, sticky="w", padx=4, pady=2)
-        ttk.Combobox(af, textvariable=analyze_engine_var, values=["(auto)"] + analyze_engine_names, state="readonly", width=22).grid(row=0, column=1, columnspan=3, sticky="ew", padx=4, pady=2)
-        ttk.Label(af, text="Algorithm:").grid(row=1, column=0, sticky="w", padx=4, pady=2)
-        a_algo_cb = ttk.Combobox(af, textvariable=analyze_algo_var, values=algo_list, state="readonly", width=10)
+        ttk.Combobox(
+            af,
+            textvariable=analyze_engine_var,
+            values=["(auto)"] + analyze_engine_names,
+            state="readonly",
+            width=22,
+        ).grid(row=0, column=1, columnspan=3, sticky="ew", padx=4, pady=2)
+        ttk.Label(af, text="Algorithm:").grid(
+            row=1, column=0, sticky="w", padx=4, pady=2
+        )
+        a_algo_cb = ttk.Combobox(
+            af,
+            textvariable=analyze_algo_var,
+            values=algo_list,
+            state="readonly",
+            width=10,
+        )
         a_algo_cb.grid(row=1, column=1, sticky="w", padx=4, pady=2)
-        ttk.Button(af, text="Params...", command=lambda: self._open_params_dialog(dialog, analyze_algo_var.get(), analyze_params), width=8).grid(row=1, column=2, sticky="w", padx=4, pady=2)
+        ttk.Button(
+            af,
+            text="Params...",
+            command=lambda: self._open_params_dialog(
+                dialog, analyze_algo_var.get(), analyze_params
+            ),
+            width=8,
+        ).grid(row=1, column=2, sticky="w", padx=4, pady=2)
 
         def _on_a_algo(e=None):
             new_algo = analyze_algo_var.get()
             analyze_params.clear()
             analyze_params.update(self._algo_defaults.get(new_algo, {}))
+
         a_algo_cb.bind("<<ComboboxSelected>>", _on_a_algo)
 
         # Time limit
-        ttk.Label(dialog, text="Time limit (s):").grid(row=1, column=0, sticky="w", **pad)
-        ttk.Spinbox(dialog, from_=1, to=30, textvariable=time_var, width=5).grid(row=1, column=1, sticky="w", **pad)
+        ttk.Label(dialog, text="Time limit (s):").grid(
+            row=1, column=0, sticky="w", **pad
+        )
+        ttk.Spinbox(dialog, from_=1, to=30, textvariable=time_var, width=5).grid(
+            row=1, column=1, sticky="w", **pad
+        )
 
         # Buttons
         bf = ttk.Frame(dialog)
         bf.grid(row=2, column=0, columnspan=2, pady=10)
-        ttk.Button(bf, text="Save", command=lambda: [applied.__setitem__(0, True), dialog.destroy()], width=10).grid(row=0, column=0, padx=8)
-        ttk.Button(bf, text="Cancel", command=dialog.destroy, width=10).grid(row=0, column=1, padx=8)
-        dialog.bind("<Return>", lambda e: [applied.__setitem__(0, True), dialog.destroy()])
+        ttk.Button(
+            bf,
+            text="Save",
+            command=lambda: [applied.__setitem__(0, True), dialog.destroy()],
+            width=10,
+        ).grid(row=0, column=0, padx=8)
+        ttk.Button(bf, text="Cancel", command=dialog.destroy, width=10).grid(
+            row=0, column=1, padx=8
+        )
+        dialog.bind(
+            "<Return>", lambda e: [applied.__setitem__(0, True), dialog.destroy()]
+        )
         dialog.bind("<Escape>", lambda e: dialog.destroy())
 
         dialog.update_idletasks()
@@ -892,9 +1028,21 @@ class GameApp:
             return
 
         a_name = analyze_engine_var.get()
-        new_analyze_engine = None if a_name in ("(auto)", "(none)") else engine_paths[engine_names.index(a_name)] if a_name in engine_names else None
+        new_analyze_engine = (
+            None
+            if a_name in ("(auto)", "(none)")
+            else (
+                engine_paths[engine_names.index(a_name)]
+                if a_name in engine_names
+                else None
+            )
+        )
 
-        if new_analyze_engine != self.analyze["engine"] or analyze_algo_var.get() != self.analyze["algo"] or analyze_params != self.analyze["params"]:
+        if (
+            new_analyze_engine != self.analyze["engine"]
+            or analyze_algo_var.get() != self.analyze["algo"]
+            or analyze_params != self.analyze["params"]
+        ):
             self._quit_engine("_analyze_engine")
 
         self.analyze["engine"] = new_analyze_engine

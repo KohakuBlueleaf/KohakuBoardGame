@@ -80,7 +80,9 @@ class BoardRenderer:
     # Public API
     # -----------------------------------------------------------------
 
-    def draw(self, state, selected=None, legal_moves=None, last_move=None, pv_arrows=None):
+    def draw(
+        self, state, selected=None, legal_moves=None, last_move=None, pv_arrows=None
+    ):
         self._draw_squares()
         self._draw_last_move(last_move)
         self._draw_selected(selected)
@@ -338,8 +340,10 @@ class BoardRenderer:
             # Background circle for readability
             nr = max(num_surf.get_width(), num_surf.get_height()) // 2 + 3
             pygame.draw.circle(
-                overlay, (0, 0, 0, min(200, alpha)),
-                (int(num_x), int(num_y)), nr,
+                overlay,
+                (0, 0, 0, min(200, alpha)),
+                (int(num_x), int(num_y)),
+                nr,
             )
             overlay.blit(
                 num_surf,

@@ -43,7 +43,11 @@ class Button:
             bg = (45, 45, 50)
             fg = (90, 90, 90)
         elif self.active:
-            bg = (40, 100, 60) if not self.rect.collidepoint(mouse_pos) else (50, 120, 70)
+            bg = (
+                (40, 100, 60)
+                if not self.rect.collidepoint(mouse_pos)
+                else (50, 120, 70)
+            )
             fg = (200, 255, 200)
         elif self.rect.collidepoint(mouse_pos):
             bg = COLOR_BTN_HOVER
@@ -90,14 +94,39 @@ class SidePanel:
 
         # Bottom row: New Game | Settings
         btn_y2 = PANEL_Y + PANEL_H - self._BTN_BOTTOM_MARGIN - self._BTN_HEIGHT
-        self.btn_new_game = Button(bx, btn_y2, btn2_w, self._BTN_HEIGHT, "New Game", self.font_btn)
-        self.btn_settings = Button(bx + btn2_w + self._BTN_GAP, btn_y2, btn2_w, self._BTN_HEIGHT, "Settings", self.font_btn)
+        self.btn_new_game = Button(
+            bx, btn_y2, btn2_w, self._BTN_HEIGHT, "New Game", self.font_btn
+        )
+        self.btn_settings = Button(
+            bx + btn2_w + self._BTN_GAP,
+            btn_y2,
+            btn2_w,
+            self._BTN_HEIGHT,
+            "Settings",
+            self.font_btn,
+        )
 
         # Top row: Undo | Analyze | Stop
         btn_y1 = btn_y2 - self._BTN_HEIGHT - self._BTN_GAP
-        self.btn_undo = Button(bx, btn_y1, btn3_w, self._BTN_HEIGHT, "Undo", self.font_btn)
-        self.btn_analyze = Button(bx + btn3_w + self._BTN_GAP, btn_y1, btn3_w, self._BTN_HEIGHT, "Analyze", self.font_btn)
-        self.btn_stop = Button(bx + 2 * (btn3_w + self._BTN_GAP), btn_y1, btn3_w, self._BTN_HEIGHT, "Stop", self.font_btn)
+        self.btn_undo = Button(
+            bx, btn_y1, btn3_w, self._BTN_HEIGHT, "Undo", self.font_btn
+        )
+        self.btn_analyze = Button(
+            bx + btn3_w + self._BTN_GAP,
+            btn_y1,
+            btn3_w,
+            self._BTN_HEIGHT,
+            "Analyze",
+            self.font_btn,
+        )
+        self.btn_stop = Button(
+            bx + 2 * (btn3_w + self._BTN_GAP),
+            btn_y1,
+            btn3_w,
+            self._BTN_HEIGHT,
+            "Stop",
+            self.font_btn,
+        )
 
         self._scroll_offset = 0
         self._frame = 0
@@ -287,7 +316,9 @@ class SidePanel:
             pygame.draw.rect(self.surface, (50, 50, 50), (x, y, w, black_h))
         # White on bottom
         if white_h > 0:
-            pygame.draw.rect(self.surface, (230, 230, 230), (x, y + black_h, w, white_h))
+            pygame.draw.rect(
+                self.surface, (230, 230, 230), (x, y + black_h, w, white_h)
+            )
 
         pygame.draw.rect(self.surface, COLOR_TEXT_DIM, (x, y, w, h), 1)
 

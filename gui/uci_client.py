@@ -138,14 +138,17 @@ class UCIEngine:
         Safe to call even if not searching.
         """
         import threading as _threading
+
         if not self._searching:
             return True
         event = _threading.Event()
         old_done = self._done_callback
+
         def _on_done(bm):
             event.set()
             if old_done:
                 old_done(bm)
+
         self._done_callback = _on_done
         self._send("stop")
         result = event.wait(timeout=timeout)
