@@ -677,8 +677,13 @@ class GameApp:
     # ------------------------------------------------------------------
 
     def new_game(self):
-        self.game_state = MiniChessState.initial()
+        # Kill all engines first (stops any in-flight search instantly)
+        self._stop_analysis()
+        self._kill_analyze_engine()
+        for attr in ("white_uci_engine", "black_uci_engine"):
+            self._quit_engine(attr)
 
+        self.game_state = MiniChessState.initial()
         self.selected_piece = None
         self.legal_moves_for_selected = []
         self.last_move = None
@@ -693,18 +698,7 @@ class GameApp:
         self._last_ai_time = 0.0
         self._paused = False
         self._undo_stack = []
-        self._stop_analysis()
-
-        # Mark game as explicitly started
         self._game_started = True
-
-        for attr in ("white_uci_engine", "black_uci_engine"):
-            engine = getattr(self, attr, None)
-            if engine is not None and engine.is_alive():
-                try:
-                    engine.new_game()
-                except Exception:
-                    pass
 
         self._trigger_ai_if_needed()
 
