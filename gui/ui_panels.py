@@ -261,6 +261,8 @@ class SidePanel:
         self._draw_move_table(table_x, inner_y, table_w, inner_h, move_history)
 
     def _draw_eval_bar(self, x, y, w, h, score_cp):
+        """Vertical eval bar. White on bottom, black on top.
+        Positive score = white better = white section grows upward."""
         max_cp = self._SCORE_PLOT_MAX_CP
 
         if score_cp is not None:
@@ -272,10 +274,12 @@ class SidePanel:
         white_h = int(h * white_pct / 100)
         black_h = h - white_h
 
-        if white_h > 0:
-            pygame.draw.rect(self.surface, (230, 230, 230), (x, y, w, white_h))
+        # Black on top
         if black_h > 0:
-            pygame.draw.rect(self.surface, (50, 50, 50), (x, y + white_h, w, black_h))
+            pygame.draw.rect(self.surface, (50, 50, 50), (x, y, w, black_h))
+        # White on bottom
+        if white_h > 0:
+            pygame.draw.rect(self.surface, (230, 230, 230), (x, y + black_h, w, white_h))
 
         pygame.draw.rect(self.surface, COLOR_TEXT_DIM, (x, y, w, h), 1)
 
