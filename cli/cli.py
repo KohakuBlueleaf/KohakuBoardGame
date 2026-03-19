@@ -1,4 +1,8 @@
-"""MiniChess CLI - Run AI vs AI or Human vs AI matches via UBGI protocol (backward compatible with UCI)."""
+"""UBGI CLI - Run AI vs AI or Human vs AI matches via UBGI protocol (backward compatible with UCI).
+
+Supports multiple game types via --game flag. Board display and move input
+adapt to the chosen game. When --game is not specified, defaults to minichess.
+"""
 
 import argparse
 import sys
@@ -12,39 +16,52 @@ if sys.platform == "win32":
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from gui.game_engine import MiniChessState, format_move
-from gui.uci_client import UCIEngine
-from gui.config import (
-    BOARD_H,
-    BOARD_W,
-    MAX_STEP,
-    PIECE_UNICODE,
-    COL_LABELS,
-    ROW_LABELS,
-)
+# ---------------------------------------------------------------------------
+# Game-agnostic UCI info parsing (no game-specific imports needed)
+# ---------------------------------------------------------------------------
+
+try:
+    from gui.ubgi_client import UBGIEngine as _UBGIEngineStatic
+    _parse_info = _UBGIEngineStatic.parse_info
+except ImportError:
+    _parse_info = lambda line: {}  # fallback: no info parsing
+
+# ---------------------------------------------------------------------------
+# Game context -- populated once by _init_game(), replaces per-module globals
+# ---------------------------------------------------------------------------
+
+_game_ctx = {}  # populated by _init_game()
+
+
+def _init_game(game_name, board_size=None):
+    """Initialize game-specific context. Called once from main()."""
+    if game_name == "minichess":
+        from cli.games.minichess import get_context
+        _game_ctx.update(get_context())
+    elif game_name == "gomoku":
+        from cli.games.gomoku import get_context
+        _game_ctx.update(get_context(board_size or 9))
+    else:
+        _game_ctx.update({"name": "generic"})
 
 ALGO_CHOICES = ["pvs", "alphabeta", "minimax", "random"]
 
+# ---------------------------------------------------------------------------
+# Board display (game-specific)
+# ---------------------------------------------------------------------------
+
 
 def print_board(state):
-    """Print board with Unicode chess pieces from White's perspective."""
-    print()
-    print("    " + "  ".join(COL_LABELS))
-    for r in range(BOARD_H):
-        rank_label = ROW_LABELS[r]
-        row_chars = []
-        for c in range(BOARD_W):
-            w_piece = state.board[0][r][c]
-            b_piece = state.board[1][r][c]
-            if w_piece:
-                row_chars.append(PIECE_UNICODE[0][w_piece])
-            elif b_piece:
-                row_chars.append(PIECE_UNICODE[1][b_piece])
-            else:
-                row_chars.append(".")
-        print(f" {rank_label}  " + "  ".join(row_chars) + f"  {rank_label}")
-    print("    " + "  ".join(COL_LABELS))
-    print()
+    """Dispatch to the appropriate board printer via _game_ctx."""
+    printer = _game_ctx.get("print_board")
+    if printer is not None:
+        printer(state, _game_ctx)
+    # Generic: no board display
+
+
+# ---------------------------------------------------------------------------
+# Formatting helpers
+# ---------------------------------------------------------------------------
 
 
 def format_nodes(n):
@@ -95,6 +112,30 @@ def format_search_info(info):
     return ", ".join(parts)
 
 
+def format_move_display(move_or_uci, state=None):
+    """Format a move for display, adapting to the active game type.
+
+    For minichess: uses the algebraic format_move (e.g. 'B2->B3').
+    For gomoku: shows the coordinate (e.g. 'E5').
+    For generic: shows the raw UCI string.
+    """
+    game_name = _game_ctx.get("name", "generic")
+    if game_name == "minichess" and not isinstance(move_or_uci, str):
+        return _game_ctx["format_move"](move_or_uci)
+    elif game_name == "gomoku" and isinstance(move_or_uci, str):
+        # Gomoku UCI move is like "e5" (column letter + row number)
+        return move_or_uci.upper()
+    else:
+        if isinstance(move_or_uci, str):
+            return move_or_uci
+        return str(move_or_uci)
+
+
+# ---------------------------------------------------------------------------
+# Engine communication (game-agnostic)
+# ---------------------------------------------------------------------------
+
+
 def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
     """Spawn engine, send UBGI/UCI commands, kill after timeout, parse output.
 
@@ -118,7 +159,7 @@ def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
         proc.stdin.write((cmd + "\n").encode())
         proc.stdin.flush()
 
-    # Setup phase — blocking communicate for handshake (UBGI, backward compatible with UCI)
+    # Setup phase -- blocking communicate for handshake (UBGI, backward compatible with UCI)
     setup_cmds = ["ubgi"]
     setup_cmds.append(f"setoption name Algorithm value {algo}")
     for p in (params or []):
@@ -143,7 +184,7 @@ def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
         if line_str in ("readyok", "ubgiok", "uciok"):
             break
 
-    # Now send go — timer starts HERE
+    # Now send go -- timer starts HERE
     bestmove = None
     last_info = None
 
@@ -156,7 +197,7 @@ def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
                 break
             line = raw.decode("utf-8", errors="replace").strip()
             if line.startswith("info ") and "depth" in line:
-                last_info = UCIEngine.parse_info(line)
+                last_info = _parse_info(line)
             elif line.startswith("bestmove"):
                 parts = line.split()
                 bestmove = parts[1] if len(parts) >= 2 else None
@@ -170,7 +211,7 @@ def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
         proc.kill()
         stdout = proc.stdout.read()
 
-    # Parse killed output — iterate from last to first for robustness
+    # Parse killed output -- iterate from last to first for robustness
     # (last line may be truncated by kill)
     lines = stdout.decode("utf-8", errors="replace").splitlines()
     for line in reversed(lines):
@@ -180,7 +221,7 @@ def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
             if len(parts) >= 2:
                 bestmove = parts[1]
         if last_info is None and line.startswith("info ") and "depth" in line:
-            parsed = UCIEngine.parse_info(line)
+            parsed = _parse_info(line)
             if parsed and "depth" in parsed:
                 last_info = parsed
         if bestmove is not None and last_info is not None:
@@ -203,52 +244,30 @@ def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
     return bestmove, last_info
 
 
-def get_human_move(state):
-    """Prompt human player for a move via numbered list or algebraic notation."""
-    legal = state.legal_actions
-    player_name = "White" if state.player == 0 else "Black"
+# ---------------------------------------------------------------------------
+# Human move input (generic fallback)
+# ---------------------------------------------------------------------------
 
-    print(f"  {player_name}'s legal moves:")
-    entries = [f"{i + 1:>3}. {format_move(mv)}" for i, mv in enumerate(legal)]
-    cols = 4
-    for i in range(0, len(entries), cols):
-        row = entries[i : i + cols]
-        print("  " + "    ".join(f"{e:<16}" for e in row))
-    print()
+
+def get_human_move_generic(uci_moves):
+    """Prompt human player for a raw UCI move string (generic game)."""
+    side_name = "Player 1" if len(uci_moves) % 2 == 0 else "Player 2"
+    print(f"  {side_name}'s turn.")
 
     while True:
         try:
-            raw = input(f"  Enter move number (or algebraic e.g. b2b3): ").strip()
+            raw = input("  Enter move (UCI format): ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nGame aborted.")
             sys.exit(0)
 
-        if not raw:
-            continue
+        if raw:
+            return raw
 
-        try:
-            num = int(raw)
-            if 1 <= num <= len(legal):
-                return legal[num - 1]
-            print(f"  Invalid number. Enter 1-{len(legal)}.")
-            continue
-        except ValueError:
-            pass
 
-        uci_str = raw.replace("-", "").replace(">", "").lower()
-        if len(uci_str) == 4:
-            try:
-                move = UCIEngine.uci_to_move(uci_str)
-                if move in legal:
-                    return move
-                print(f"  '{raw}' is not a legal move.")
-                continue
-            except (ValueError, IndexError, KeyError):
-                pass
-
-        print(
-            f"  Could not parse '{raw}'. Enter a move number or algebraic (e.g. b2b3)."
-        )
+# ---------------------------------------------------------------------------
+# Game loop
+# ---------------------------------------------------------------------------
 
 
 def _quit_engine(engine):
@@ -276,9 +295,19 @@ def run_game(
 
     Returns "white", "black", or "draw".
     """
-    state = MiniChessState.initial()
+    game_name = _game_ctx.get("name", "generic")
+    has_state = game_name != "generic"
     uci_moves = []
     move_number = 0
+
+    # Initialize game state based on game type
+    if has_state:
+        if "make_state" in _game_ctx:
+            state = _game_ctx["make_state"](_game_ctx.get("board_size", 9))
+        else:
+            state = _game_ctx["state_class"].initial()
+    else:
+        state = None  # generic: no local state
 
     if verbose:
         if game_num is not None and total_games is not None:
@@ -288,27 +317,52 @@ def run_game(
         print(f"  White: {'Human' if white_path == 'human' else white_algo}")
         print(f"  Black: {'Human' if black_path == 'human' else black_algo}")
         print(f"  Time limit: {time_limit}ms per move")
-        print_board(state)
+        if has_state:
+            print_board(state)
 
     while True:
-        result, winner = state.check_game_over()
-        if result == "win":
-            winner_str = "White" if winner == 0 else "Black"
-            if verbose:
-                print(f"  >> {winner_str} wins! (king capture available)")
-            return "white" if winner == 0 else "black"
-        elif result == "draw":
-            if verbose:
-                print(f"  >> Draw! (step limit reached, equal material)")
-            return "draw"
+        # --- Check game over ---
+        if has_state:
+            check_fn = _game_ctx.get("check_game_over")
+            result, winner = check_fn(state)
+            if result == "win":
+                if game_name == "minichess":
+                    winner_str = "White" if winner == 0 else "Black"
+                    color = "white" if winner == 0 else "black"
+                elif game_name == "gomoku":
+                    winner_str = "Player 1 (X)" if winner == 1 else "Player 2 (O)"
+                    color = "white" if winner == 1 else "black"
+                else:
+                    winner_str = str(winner)
+                    color = "white" if winner in (0, 1) else "black"
+                if verbose:
+                    print(f"  >> {winner_str} wins!")
+                return color
+            elif result == "draw":
+                if verbose:
+                    print(f"  >> Draw!")
+                return "draw"
+            elif result == "no_moves":
+                if verbose:
+                    loser = "White" if winner == 1 else "Black"
+                    print(f"  >> {loser} has no legal moves!")
+                # winner value is the winning side
+                if game_name == "minichess":
+                    return "white" if winner == 0 else "black"
+                else:
+                    return "white" if winner == 1 else "black"
 
-        if not state.legal_actions:
-            if verbose:
-                side = "White" if state.player == 0 else "Black"
-                print(f"  >> {side} has no legal moves!")
-            return "black" if state.player == 0 else "white"
+            # Determine which side to move
+            if game_name == "minichess":
+                is_white = state.player == 0
+            elif game_name == "gomoku":
+                is_white = state["player"] == 1  # player 1 = "white" (first player)
+            else:
+                is_white = len(uci_moves) % 2 == 0
+        else:
+            # Generic: no game-over detection, rely on engine
+            is_white = len(uci_moves) % 2 == 0
 
-        is_white = state.player == 0
         engine_path = white_path if is_white else black_path
         algo_name = white_algo if is_white else black_algo
         side_name = "White" if is_white else "Black"
@@ -316,13 +370,23 @@ def run_game(
         if is_white:
             move_number += 1
 
-        move = None
+        bestmove_uci = None
         info = None
 
         if engine_path == "human":
-            if verbose:
-                print(f"  Step {state.step}/{MAX_STEP}")
-            move = get_human_move(state)
+            # Human move input
+            human_fn = _game_ctx.get("get_human_move")
+            if human_fn is not None:
+                if game_name == "minichess" and verbose:
+                    print(f"  Step {state.step}/{_game_ctx['max_step']}")
+                result = human_fn(state, _game_ctx)
+                # For minichess, result is a move tuple; for gomoku, a UCI string
+                if game_name == "minichess":
+                    bestmove_uci = _game_ctx["move_to_uci"](result)
+                else:
+                    bestmove_uci = result
+            else:
+                bestmove_uci = get_human_move_generic(uci_moves)
         else:
             bestmove_uci, info = get_engine_move(
                 engine_path, algo_name, params, uci_moves, time_limit, depth=depth
@@ -334,36 +398,66 @@ def run_game(
                     print(f"     algo={algo_name}, moves={len(uci_moves)}, last_info={info}")
                 return "black" if is_white else "white"
 
-            try:
-                move = UCIEngine.uci_to_move(bestmove_uci)
-            except (ValueError, IndexError, KeyError):
-                if verbose:
-                    print(
-                        f"  >> {side_name} engine returned invalid move '{bestmove_uci}'! {side_name} loses."
-                    )
-                return "black" if is_white else "white"
+            # Move validation (for games with state)
+            if has_state:
+                try:
+                    move = _game_ctx["uci_to_move"](bestmove_uci)
+                except (ValueError, IndexError, KeyError):
+                    if verbose:
+                        print(
+                            f"  >> {side_name} engine returned invalid move '{bestmove_uci}'! {side_name} loses."
+                        )
+                    return "black" if is_white else "white"
 
-            if move not in state.legal_actions:
-                if verbose:
-                    print(
-                        f"  >> {side_name} engine returned illegal move {format_move(move)}! {side_name} loses."
-                    )
-                return "black" if is_white else "white"
+                if game_name == "minichess":
+                    if move not in state.legal_actions:
+                        if verbose:
+                            print(
+                                f"  >> {side_name} engine returned illegal move {_game_ctx['format_move'](move)}! {side_name} loses."
+                            )
+                        return "black" if is_white else "white"
+                elif game_name == "gomoku":
+                    # Validate placement is on an empty square and in bounds
+                    _, (r, c) = move
+                    size = state["size"]
+                    if r < 0 or r >= size or c < 0 or c >= size:
+                        if verbose:
+                            print(
+                                f"  >> {side_name} engine returned out-of-bounds move '{bestmove_uci}'! {side_name} loses."
+                            )
+                        return "black" if is_white else "white"
+                    if state["board"][r][c] != 0:
+                        if verbose:
+                            print(
+                                f"  >> {side_name} engine returned move to occupied square '{bestmove_uci}'! {side_name} loses."
+                            )
+                        return "black" if is_white else "white"
 
-        uci_str = UCIEngine.move_to_uci(move)
-        uci_moves.append(uci_str)
+        # For generic games, if engine returns "none" or "(none)", it means no moves
+        if game_name == "generic" and bestmove_uci in ("none", "(none)", "0000"):
+            if verbose:
+                print(f"  >> {side_name} has no moves. Game over.")
+            return "black" if is_white else "white"
 
+        uci_moves.append(bestmove_uci)
+
+        # Display move
         if verbose:
             prefix = f"{move_number}." if is_white else f"{move_number}..."
             info_str = format_search_info(info)
-            line = f"  {prefix} {side_name}: {format_move(move)}"
+            display_move = format_move_display(bestmove_uci)
+            line = f"  {prefix} {side_name}: {display_move}"
             if info_str:
                 line += f" ({info_str})"
             print(line)
 
-        state = state.next_state(move)
+        # Advance local state
+        if has_state:
+            apply_fn = _game_ctx.get("apply_move")
+            if apply_fn is not None:
+                state, _ = apply_fn(state, bestmove_uci, _game_ctx)
 
-        if verbose:
+        if verbose and has_state:
             print_board(state)
 
 
@@ -462,17 +556,24 @@ def run_tournament(
 
 
 def main():
-    """Parse arguments and run MiniChess CLI."""
+    """Parse arguments and run UBGI CLI."""
+
     parser = argparse.ArgumentParser(
-        description="MiniChess CLI - Run AI vs AI or Human vs AI matches via UBGI protocol (backward compatible with UCI).",
+        description="UBGI CLI - Run AI vs AI or Human vs AI matches via UBGI protocol (backward compatible with UCI).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Examples:
   %(prog)s --white build/minichess-uci.exe --black build/minichess-uci.exe --time 2000 --games 10
   %(prog)s --white human --black build/minichess-uci.exe --time 2000
-  %(prog)s --white build/minichess-uci.exe --black build/minichess-uci.exe --white-algo pvs --black-algo alphabeta --time 2000
+  %(prog)s --game gomoku --white build/gomoku.exe --black build/gomoku.exe --depth 6
+  %(prog)s --game generic --white build/engine.exe --black build/engine.exe --time 5000
 """,
     )
 
+    parser.add_argument(
+        "--game", default="minichess",
+        help="Game type for board display and move input (default: minichess). "
+             "Built-in: minichess, gomoku. Use 'generic' for any other UBGI engine.",
+    )
     parser.add_argument(
         "--white", required=True, help='Path to UBGI/UCI engine for White, or "human".'
     )
@@ -513,8 +614,14 @@ def main():
         "--param", action="append", default=[],
         help="Set engine param: --param UseNNUE=false. Can repeat.",
     )
+    parser.add_argument(
+        "--board-size", type=int, default=9,
+        help="Board size for gomoku (default: 9).",
+    )
 
     args = parser.parse_args()
+
+    _init_game(args.game.lower(), board_size=args.board_size)
 
     if args.quiet:
         verbose = False
