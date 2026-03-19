@@ -166,11 +166,25 @@ static void do_search(
         if(my_gen != g_search_gen.load()){ return; }
         best_move = upd.best_move;
         g_best_move = upd.best_move;
+
+        auto now = std::chrono::high_resolution_clock::now();
+        int64_t elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - search_start
+        ).count();
+        uint64_t cur_nodes = total_nodes + ctx.nodes;
+        uint64_t nps = (elapsed_ms > 0)
+            ? (cur_nodes * 1000ULL / static_cast<uint64_t>(elapsed_ms))
+            : 0;
+
         std::ostringstream oss;
         oss << "info depth " << upd.depth
+            << " seldepth " << ctx.seldepth
+            << " score cp " << upd.score
+            << " nodes " << cur_nodes
+            << " time " << elapsed_ms
+            << " nps " << nps
             << " currmove " << move_to_str(upd.best_move)
-            << " currmovenumber " << upd.move_number
-            << " score cp " << upd.score;
+            << " currmovenumber " << upd.move_number;
         send(oss.str());
     };
 
