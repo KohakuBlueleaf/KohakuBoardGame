@@ -265,30 +265,19 @@ class GameApp:
         engine = self._get_or_create_analyze_engine()
         if engine is None:
             return
-
-        moves_snapshot = list(self.uci_moves)
-
-        # Stop any running search, then use isready to sync
-        if self._analyze_active:
-            engine.stop()
+        # Send position + go directly. Engine's generation counter
+        # handles superseding any in-flight search.
         self.search_info = {}
-        self._analyze_active = False  # shows "Loading..." until go fires
-
-        # Send position, then isready. When readyok arrives, send go.
-        if moves_snapshot:
-            engine.set_position(moves=moves_snapshot)
+        if self.uci_moves:
+            engine.set_position(moves=list(self.uci_moves))
         else:
             engine.set_position()
-
-        def _on_ready():
-            engine.go(
-                infinite=True,
-                info_callback=self._on_analyze_info,
-                done_callback=self._on_analyze_done,
-            )
-            self._analyze_active = True
-
-        engine.send_ready(_on_ready)
+        engine.go(
+            infinite=True,
+            info_callback=self._on_analyze_info,
+            done_callback=self._on_analyze_done,
+        )
+        self._analyze_active = True
 
     def _stop_analysis(self):
         if self._analyze_active and self._analyze_engine is not None:
@@ -663,7 +652,7 @@ class GameApp:
             mode=self.mode,
             time_limit=self.time_limit,
             search_info=self.search_info,
-            paused=self._paused or (self.analyze["enabled"] and not self._analyze_active),
+            paused=self._paused,
             analyze_enabled=self.analyze["enabled"],
             gaming=self._is_gaming(),
         )

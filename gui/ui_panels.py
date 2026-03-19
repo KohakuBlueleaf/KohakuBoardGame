@@ -182,7 +182,7 @@ class SidePanel:
 
         status_text = None
         status_color = COLOR_TEXT
-        if paused:
+        if analyze_enabled and paused:
             status_text = "Paused"
             status_color = (200, 200, 100)
         elif analyze_enabled and search_info.get("depth") is not None:
@@ -193,6 +193,9 @@ class SidePanel:
             n_dots = (self._frame // (FPS // 3)) % 3 + 1
             status_text = "Loading" + "." * n_dots
             status_color = (180, 180, 100)
+        elif paused:
+            status_text = "Paused"
+            status_color = (200, 200, 100)
         elif ai_thinking:
             n_dots = (self._frame // (FPS // 3)) % 3 + 1
             status_text = "AI thinking" + "." * n_dots
