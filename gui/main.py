@@ -92,6 +92,7 @@ class GameApp:
         # Analyze mode
         self._analyze_engine = None
         self._analyzing = False
+        self._analyze_gen = 0  # generation counter to ignore stale bestmove
         self._undo_stack = []
 
         # AI vs AI pacing
@@ -121,10 +122,12 @@ class GameApp:
     # ------------------------------------------------------------------
 
     def _probe_engine_options(self):
-        """Launch a temporary engine to read its UCI options, then quit it.
+        """Probe engine to get per-algorithm option sets.
 
-        Populates self._engine_options, self._engine_algorithms, and
-        default params for each side from the engine's option lines.
+        Launches a temp engine, reads default algo's options, then
+        switches to each algorithm to read its specific options.
+        Stores: _engine_algorithms, _algo_options[algo] = [opt_dicts],
+        _algo_defaults[algo] = {name: default_val}.
         """
         exe_path = (
             self.white["engine"]
@@ -133,35 +136,65 @@ class GameApp:
         )
         if exe_path is None:
             return
+
+        self._algo_options = {}   # algo_name -> [option_dicts]
+        self._algo_defaults = {}  # algo_name -> {name: default_val}
+
         try:
             probe = UCIEngine(exe_path)
-            self._engine_options = list(probe.options)
-            probe.quit()
+            initial_options = list(probe.options)
         except RuntimeError:
             return
 
-        # Extract algorithm list from the combo option named "Algorithm"
-        for opt in self._engine_options:
+        # Extract algorithm list
+        for opt in initial_options:
             if opt["name"] == "Algorithm" and opt["type"] == "combo":
                 self._engine_algorithms = list(opt.get("vars", []))
-                # Use the engine's default algorithm
                 if opt.get("default") in self._engine_algorithms:
-                    self.white["algo"] = opt["default"]
-                    self.black["algo"] = opt["default"]
-                    self.analyze["algo"] = opt["default"]
+                    default_algo = opt["default"]
+                    self.white["algo"] = default_algo
+                    self.black["algo"] = default_algo
+                    self.analyze["algo"] = default_algo
                 break
 
-        # Build default params dict (skip Algorithm and Hash-like globals)
-        default_params = {}
-        for opt in self._engine_options:
-            if opt["name"] == "Algorithm":
-                continue
-            default_params[opt["name"]] = opt.get("default", "")
+        # Store options for the default algo (already loaded)
+        if self._engine_algorithms:
+            default_algo = self._engine_algorithms[0]
+            algo_opts = [o for o in initial_options if o["name"] != "Algorithm"]
+            self._algo_options[default_algo] = algo_opts
+            self._algo_defaults[default_algo] = {
+                o["name"]: o.get("default", "") for o in algo_opts
+            }
 
-        # Initialize each side's params with defaults
-        self.white["params"] = dict(default_params)
-        self.black["params"] = dict(default_params)
-        self.analyze["params"] = dict(default_params)
+            # Probe each other algorithm by switching and re-reading options
+            for algo in self._engine_algorithms[1:]:
+                try:
+                    probe.set_option("Algorithm", algo)
+                    # Re-handshake to get new options
+                    probe._send("uci")
+                    probe.options = []
+                    probe._wait_for_uciok(timeout=3.0)
+                    algo_opts = [o for o in probe.options if o["name"] != "Algorithm"]
+                    self._algo_options[algo] = algo_opts
+                    self._algo_defaults[algo] = {
+                        o["name"]: o.get("default", "") for o in algo_opts
+                    }
+                except Exception:
+                    self._algo_options[algo] = []
+                    self._algo_defaults[algo] = {}
+
+        try:
+            probe.quit()
+        except Exception:
+            pass
+
+        # Keep _engine_options as the default algo's options for backward compat
+        self._engine_options = initial_options
+
+        # Initialize each side's params with their algo's defaults
+        for side in (self.white, self.black, self.analyze):
+            algo = side["algo"]
+            side["params"] = dict(self._algo_defaults.get(algo, {}))
 
     def _get_or_create_uci_engine(self, side_config, attr_name):
         """Create or reuse a UCI engine for a given side configuration.
@@ -239,10 +272,12 @@ class GameApp:
             engine.set_position(moves=list(self.uci_moves))
         else:
             engine.set_position()
+        self._analyze_gen += 1
+        my_gen = self._analyze_gen
         engine.go(
             infinite=True,
             info_callback=self._on_analyze_info,
-            done_callback=self._on_analyze_done,
+            done_callback=lambda bm: self._on_analyze_done(bm, my_gen),
         )
         self._analyzing = True
 
@@ -252,7 +287,9 @@ class GameApp:
                 self._analyze_engine.stop()
             except Exception:
                 pass
-        self._analyzing = False
+        # Don't set _analyzing = False here — let _on_analyze_done handle it
+        # via generation check. This prevents the race where stop's bestmove
+        # arrives after a new go was already sent.
 
     def _on_analyze_info(self, info_dict):
         """Normalize score to white's perspective for the score bar."""
@@ -263,8 +300,10 @@ class GameApp:
             info_dict["pv"] = self.search_info["pv"]
         self.search_info = info_dict
 
-    def _on_analyze_done(self, bestmove_str):
-        self._analyzing = False
+    def _on_analyze_done(self, bestmove_str, gen):
+        # Only clear _analyzing if this is from the current generation
+        if gen == self._analyze_gen:
+            self._analyzing = False
 
     # ------------------------------------------------------------------
     # Pause / Undo
@@ -724,9 +763,9 @@ class GameApp:
             dspin.grid(row=1, column=4, sticky="w", padx=4, pady=2)
             ai_widgets = [algo_cb, pbtn, dspin]
             def _on_algo_change(e=None):
-                for opt in self._engine_options:
-                    if opt["name"] != "Algorithm":
-                        params[opt["name"]] = opt.get("default", "")
+                new_algo = algo_var.get()
+                params.clear()
+                params.update(self._algo_defaults.get(new_algo, {}))
             algo_cb.bind("<<ComboboxSelected>>", _on_algo_change)
             return combo, ai_widgets
 
@@ -822,9 +861,9 @@ class GameApp:
         ttk.Button(af, text="Params...", command=lambda: self._open_params_dialog(dialog, analyze_algo_var.get(), analyze_params), width=8).grid(row=1, column=2, sticky="w", padx=4, pady=2)
 
         def _on_a_algo(e=None):
-            for opt in self._engine_options:
-                if opt["name"] != "Algorithm":
-                    analyze_params[opt["name"]] = opt.get("default", "")
+            new_algo = analyze_algo_var.get()
+            analyze_params.clear()
+            analyze_params.update(self._algo_defaults.get(new_algo, {}))
         a_algo_cb.bind("<<ComboboxSelected>>", _on_a_algo)
 
         # Time limit
@@ -882,8 +921,8 @@ class GameApp:
         sub.grab_set()
         sub.attributes("-topmost", True)
 
-        # Build options from engine options, skipping "Algorithm"
-        opts = [o for o in self._engine_options if o["name"] != "Algorithm"]
+        # Build options for this specific algorithm
+        opts = self._algo_options.get(algo_name, [])
 
         if not opts:
             ttk.Label(sub, text="No parameters available.").grid(
