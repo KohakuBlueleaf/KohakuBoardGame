@@ -28,6 +28,7 @@ class UCIEngine:
         self._searching = False
         self._info_callback = None
         self._done_callback = None
+        self._ready_callback = None  # fired on "readyok"
         self.options = []  # Parsed option dicts from the UCI handshake
 
         # Launch the subprocess
@@ -119,6 +120,11 @@ class UCIEngine:
                 daemon=True,
             )
             self._reader_thread.start()
+
+    def send_ready(self, callback):
+        """Send 'isready' and call callback() when 'readyok' is received."""
+        self._ready_callback = callback
+        self._send("isready")
 
     def stop(self):
         """Send 'stop' to abort current search."""
@@ -267,6 +273,15 @@ class UCIEngine:
                     if cb is not None:
                         try:
                             cb(bestmove)
+                        except Exception:
+                            pass
+
+                elif line.strip() == "readyok":
+                    cb = self._ready_callback
+                    self._ready_callback = None
+                    if cb is not None:
+                        try:
+                            cb()
                         except Exception:
                             pass
         except Exception:
