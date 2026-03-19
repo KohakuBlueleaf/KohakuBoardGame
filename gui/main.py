@@ -89,10 +89,10 @@ class GameApp:
         self.white_uci_engine = None
         self.black_uci_engine = None
 
-        # Analyze mode
+        # Analyze mode: state = "idle" | "running" | "stopping"
         self._analyze_engine = None
-        self._analyzing = False
-        self._analyze_gen = 0  # generation counter to ignore stale bestmove
+        self._analyze_state = "idle"
+        self._analyze_pending = None  # queued (uci_moves, gen) to start after stop completes
         self._undo_stack = []
 
         # AI vs AI pacing
@@ -266,28 +266,45 @@ class GameApp:
         engine = self._get_or_create_analyze_engine()
         if engine is None:
             return
-        # Stop current search and wait for bestmove before starting new one
-        if self._analyzing:
-            engine.stop_and_wait(timeout=2.0)
-            self._analyzing = False
-        # Now safe to send new position + go
-        if self.uci_moves:
-            engine.set_position(moves=list(self.uci_moves))
+
+        moves_snapshot = list(self.uci_moves)
+
+        if self._analyze_state == "running":
+            # Queue the new search — it will launch when stop completes
+            self._analyze_pending = moves_snapshot
+            self._analyze_state = "stopping"
+            engine.stop()  # non-blocking; _on_analyze_done will fire
+            return
+
+        if self._analyze_state == "stopping":
+            # Already stopping — just update the pending request
+            self._analyze_pending = moves_snapshot
+            return
+
+        # State is idle — launch immediately
+        self._launch_analysis(engine, moves_snapshot)
+
+    def _launch_analysis(self, engine, moves_snapshot):
+        if moves_snapshot:
+            engine.set_position(moves=moves_snapshot)
         else:
             engine.set_position()
-        self._analyze_gen += 1
-        my_gen = self._analyze_gen
         engine.go(
             infinite=True,
             info_callback=self._on_analyze_info,
-            done_callback=lambda bm: self._on_analyze_done(bm, my_gen),
+            done_callback=self._on_analyze_done,
         )
-        self._analyzing = True
+        self._analyze_state = "running"
 
     def _stop_analysis(self):
-        if self._analyzing and self._analyze_engine is not None:
-            self._analyze_engine.stop_and_wait(timeout=2.0)
-        self._analyzing = False
+        self._analyze_pending = None
+        if self._analyze_state == "running" and self._analyze_engine is not None:
+            self._analyze_state = "stopping"
+            self._analyze_engine.stop()  # non-blocking
+        elif self._analyze_state == "stopping":
+            pass  # already stopping
+        else:
+            self._analyze_state = "idle"
 
     def _on_analyze_info(self, info_dict):
         """Normalize score to white's perspective for the score bar."""
@@ -298,10 +315,19 @@ class GameApp:
             info_dict["pv"] = self.search_info["pv"]
         self.search_info = info_dict
 
-    def _on_analyze_done(self, bestmove_str, gen):
-        # Only clear _analyzing if this is from the current generation
-        if gen == self._analyze_gen:
-            self._analyzing = False
+    def _on_analyze_done(self, bestmove_str):
+        if self._analyze_state == "stopping" and self._analyze_pending is not None:
+            # Previous search stopped — launch the queued one
+            moves = self._analyze_pending
+            self._analyze_pending = None
+            engine = self._analyze_engine
+            if engine is not None and self.analyze["enabled"]:
+                self.search_info = {}
+                self._launch_analysis(engine, moves)
+            else:
+                self._analyze_state = "idle"
+        else:
+            self._analyze_state = "idle"
 
     # ------------------------------------------------------------------
     # Pause / Undo
@@ -658,7 +684,7 @@ class GameApp:
             mode=self.mode,
             time_limit=self.time_limit,
             search_info=self.search_info,
-            paused=self._paused or (self.analyze["enabled"] and not self._analyzing),
+            paused=self._paused or (self.analyze["enabled"] and not self._analyze_state == "running"),
             analyze_enabled=self.analyze["enabled"],
             gaming=self._is_gaming(),
         )
