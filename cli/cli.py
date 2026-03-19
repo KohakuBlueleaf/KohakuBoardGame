@@ -169,14 +169,21 @@ def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
         proc.kill()
         stdout = proc.stdout.read()
 
-    # Parse killed output — find last info and bestmove
-    for line in stdout.decode("utf-8", errors="replace").splitlines():
+    # Parse killed output — iterate from last to first for robustness
+    # (last line may be truncated by kill)
+    lines = stdout.decode("utf-8", errors="replace").splitlines()
+    for line in reversed(lines):
         line = line.strip()
-        if line.startswith("info ") and "depth" in line:
-            last_info = UCIEngine.parse_info(line)
-        elif line.startswith("bestmove"):
+        if bestmove is None and line.startswith("bestmove"):
             parts = line.split()
-            bestmove = parts[1] if len(parts) >= 2 else None
+            if len(parts) >= 2:
+                bestmove = parts[1]
+        if last_info is None and line.startswith("info ") and "depth" in line:
+            parsed = UCIEngine.parse_info(line)
+            if parsed and "depth" in parsed:
+                last_info = parsed
+        if bestmove is not None and last_info is not None:
+            break
 
     # If no bestmove but we have info with currmove, use that
     if bestmove is None and last_info and last_info.get("currmove"):
