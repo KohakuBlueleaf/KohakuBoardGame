@@ -94,10 +94,10 @@ def format_search_info(info):
     return ", ".join(parts)
 
 
-def get_engine_move(engine, uci_moves, time_limit, depth=0):
-    """Get a move from a UCI engine synchronously.
+def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
+    """Spawn a fresh engine, search, kill it when done or on timeout.
 
-    Returns (bestmove_uci_str, info_dict) or (None, None) on error.
+    Returns (bestmove_uci_str, info_dict).
     """
     result = {}
     event = threading.Event()
@@ -109,21 +109,34 @@ def get_engine_move(engine, uci_moves, time_limit, depth=0):
         result["bestmove"] = bestmove
         event.set()
 
+    engine = UCIEngine(engine_path)
+    engine.set_option("Algorithm", algo)
+    for p in (params or []):
+        if "=" in p:
+            k, v = p.split("=", 1)
+            engine.set_option(k, v)
+
     engine.set_position(moves=uci_moves if uci_moves else None)
     if depth > 0:
         engine.go(depth=depth, info_callback=on_info, done_callback=on_done)
+        timeout_sec = 300.0
     else:
         engine.go(movetime=time_limit, info_callback=on_info, done_callback=on_done)
+        timeout_sec = (time_limit / 1000.0) + 1.0  # tight timeout
 
-    timeout_sec = 300.0 if depth > 0 else (time_limit / 1000.0) + 10.0
     if not event.wait(timeout=timeout_sec):
-        # Engine didn't respond — kill it (caller should recreate)
+        # Time's up — kill process immediately
         try:
             engine.quit()
         except Exception:
             pass
-        return None, None
+        # Use whatever we got so far
+        return result.get("bestmove"), result.get("info")
 
+    try:
+        engine.quit()
+    except Exception:
+        pass
     return result.get("bestmove"), result.get("info")
 
 
@@ -185,8 +198,8 @@ def _quit_engine(engine):
 
 
 def run_game(
-    white_engine,
-    black_engine,
+    white_path,
+    black_path,
     time_limit,
     white_algo,
     black_algo,
@@ -194,6 +207,7 @@ def run_game(
     game_num=None,
     total_games=None,
     depth=0,
+    params=None,
 ):
     """Run a single game between two players.
 
@@ -203,18 +217,13 @@ def run_game(
     uci_moves = []
     move_number = 0
 
-    if white_engine is not None:
-        white_engine.new_game()
-    if black_engine is not None:
-        black_engine.new_game()
-
     if verbose:
         if game_num is not None and total_games is not None:
             print(f"=== Game {game_num}/{total_games} ===")
         else:
             print("=== New Game ===")
-        print(f"  White: {'Human' if white_engine is None else white_algo}")
-        print(f"  Black: {'Human' if black_engine is None else black_algo}")
+        print(f"  White: {'Human' if white_path == 'human' else white_algo}")
+        print(f"  Black: {'Human' if black_path == 'human' else black_algo}")
         print(f"  Time limit: {time_limit}ms per move")
         print_board(state)
 
@@ -237,7 +246,7 @@ def run_game(
             return "black" if state.player == 0 else "white"
 
         is_white = state.player == 0
-        engine = white_engine if is_white else black_engine
+        engine_path = white_path if is_white else black_path
         algo_name = white_algo if is_white else black_algo
         side_name = "White" if is_white else "Black"
 
@@ -247,13 +256,13 @@ def run_game(
         move = None
         info = None
 
-        if engine is None:
+        if engine_path == "human":
             if verbose:
                 print(f"  Step {state.step}/{MAX_STEP}")
             move = get_human_move(state)
         else:
             bestmove_uci, info = get_engine_move(
-                engine, uci_moves, time_limit, depth=depth
+                engine_path, algo_name, params, uci_moves, time_limit, depth=depth
             )
 
             if bestmove_uci is None:
@@ -307,22 +316,6 @@ def run_tournament(
     black_wins = 0
     color_draws = 0
 
-    engines = {}
-
-    def get_or_create_engine(path, algo, params=None):
-        if path == "human":
-            return None
-        key = (path, algo)
-        if key not in engines:
-            eng = UCIEngine(path)
-            eng.set_option("Algorithm", algo)
-            for p in (params or []):
-                if "=" in p:
-                    k, v = p.split("=", 1)
-                    eng.set_option(k, v)
-            engines[key] = eng
-        return engines[key]
-
     try:
         for game_idx in range(num_games):
             if game_idx % 2 == 0:
@@ -333,9 +326,6 @@ def run_tournament(
                 w_path, w_algo = engine2_path, algo2
                 b_path, b_algo = engine1_path, algo1
                 engine1_is_white = False
-
-            w_engine = get_or_create_engine(w_path, w_algo, params)
-            b_engine = get_or_create_engine(b_path, b_algo, params)
 
             w_label = "Human" if w_path == "human" else w_algo
             b_label = "Human" if b_path == "human" else b_algo
@@ -351,8 +341,8 @@ def run_tournament(
                 )
 
             result = run_game(
-                w_engine,
-                b_engine,
+                w_path,
+                b_path,
                 time_limit,
                 w_label,
                 b_label,
@@ -360,6 +350,7 @@ def run_tournament(
                 game_num=game_idx + 1,
                 total_games=num_games,
                 depth=depth,
+                params=params,
             )
 
             if result == "white":
@@ -392,8 +383,7 @@ def run_tournament(
         print("\n\nTournament interrupted!")
 
     finally:
-        for eng in engines.values():
-            _quit_engine(eng)
+        pass  # engines are killed per-move, nothing to clean up
 
     total = engine1_wins + engine2_wins + draws
     print()
@@ -498,34 +488,16 @@ def main():
         )
         return
 
-    white_engine = None
-    black_engine = None
-
     try:
-        if args.white != "human":
-            white_engine = UCIEngine(args.white)
-            white_engine.set_option("Algorithm", args.white_algo)
-            for p in args.param:
-                if "=" in p:
-                    k, v = p.split("=", 1)
-                    white_engine.set_option(k, v)
-
-        if args.black != "human":
-            black_engine = UCIEngine(args.black)
-            black_engine.set_option("Algorithm", args.black_algo)
-            for p in args.param:
-                if "=" in p:
-                    k, v = p.split("=", 1)
-                    black_engine.set_option(k, v)
-
         result = run_game(
-            white_engine,
-            black_engine,
+            args.white,
+            args.black,
             args.time,
             args.white_algo if args.white != "human" else "Human",
             args.black_algo if args.black != "human" else "Human",
             verbose=verbose,
             depth=args.depth,
+            params=args.param,
         )
 
         result_map = {"white": "1-0", "black": "0-1", "draw": "1/2-1/2"}
@@ -533,10 +505,6 @@ def main():
 
     except KeyboardInterrupt:
         print("\nGame aborted.")
-
-    finally:
-        _quit_engine(white_engine)
-        _quit_engine(black_engine)
 
 
 if __name__ == "__main__":
