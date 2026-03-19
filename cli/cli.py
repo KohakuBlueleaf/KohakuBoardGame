@@ -3,7 +3,8 @@
 import argparse
 import sys
 import os
-import threading
+import time
+import subprocess
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -95,49 +96,84 @@ def format_search_info(info):
 
 
 def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
-    """Spawn a fresh engine, search, kill it when done or on timeout.
+    """Spawn engine, send commands, read until bestmove, kill it.
 
-    Returns (bestmove_uci_str, info_dict).
+    Uses a timer thread to kill the process on timeout.
+    Returns (bestmove_uci_str, last_info_dict) or (None, None).
     """
-    result = {}
-    event = threading.Event()
+    import threading
 
-    def on_info(info):
-        result["info"] = info
+    kwargs = {
+        "args": [os.path.abspath(engine_path)],
+        "stdin": subprocess.PIPE,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.DEVNULL,
+    }
+    if sys.platform == "win32":
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
 
-    def on_done(bestmove):
-        result["bestmove"] = bestmove
-        event.set()
+    try:
+        proc = subprocess.Popen(**kwargs)
+    except OSError:
+        return None, None
 
-    engine = UCIEngine(engine_path)
-    engine.set_option("Algorithm", algo)
+    def send(cmd):
+        try:
+            proc.stdin.write((cmd + "\n").encode())
+            proc.stdin.flush()
+        except Exception:
+            pass
+
+    # Send all commands
+    send("uci")
+    send(f"setoption name Algorithm value {algo}")
     for p in (params or []):
         if "=" in p:
             k, v = p.split("=", 1)
-            engine.set_option(k, v)
-
-    engine.set_position(moves=uci_moves if uci_moves else None)
-    if depth > 0:
-        engine.go(depth=depth, info_callback=on_info, done_callback=on_done)
-        timeout_sec = 300.0
+            send(f"setoption name {k} value {v}")
+    if uci_moves:
+        send("position startpos moves " + " ".join(uci_moves))
     else:
-        engine.go(movetime=time_limit, info_callback=on_info, done_callback=on_done)
-        timeout_sec = (time_limit / 1000.0) + 1.0  # tight timeout
+        send("position startpos")
+    if depth > 0:
+        send(f"go depth {depth}")
+    else:
+        send(f"go movetime {time_limit}")
 
-    if not event.wait(timeout=timeout_sec):
-        # Time's up — kill process immediately
-        try:
-            engine.quit()
-        except Exception:
-            pass
-        # Use whatever we got so far
-        return result.get("bestmove"), result.get("info")
+    # Timer to kill process if it takes too long
+    timeout_sec = (time_limit / 1000.0) + 5.0 if depth == 0 else 300.0
+    timer = threading.Timer(timeout_sec, lambda: proc.kill())
+    timer.start()
 
+    # Read stdout line by line until bestmove
+    bestmove = None
+    last_info = None
     try:
-        engine.quit()
+        while True:
+            raw = proc.stdout.readline()
+            if not raw:
+                break
+            line = raw.decode("utf-8", errors="replace").strip()
+            if line.startswith("info "):
+                last_info = UCIEngine.parse_info(line)
+            elif line.startswith("bestmove"):
+                parts = line.split()
+                bestmove = parts[1] if len(parts) >= 2 else None
+                break
     except Exception:
         pass
-    return result.get("bestmove"), result.get("info")
+    finally:
+        timer.cancel()
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=1)
+        except Exception:
+            pass
+
+    return bestmove, last_info
 
 
 def get_human_move(state):
