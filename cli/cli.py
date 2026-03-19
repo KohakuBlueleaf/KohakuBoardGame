@@ -41,6 +41,9 @@ def _init_game(game_name, board_size=None):
     elif game_name == "gomoku":
         from cli.games.gomoku import get_context
         _game_ctx.update(get_context(board_size or 9))
+    elif game_name == "minishogi":
+        from cli.games.minishogi import get_context
+        _game_ctx.update(get_context())
     else:
         _game_ctx.update({"name": "generic"})
 
@@ -122,6 +125,10 @@ def format_move_display(move_or_uci, state=None):
     game_name = _game_ctx.get("name", "generic")
     if game_name == "minichess" and not isinstance(move_or_uci, str):
         return _game_ctx["format_move"](move_or_uci)
+    elif game_name == "minishogi" and not isinstance(move_or_uci, str):
+        return _game_ctx["format_move"](move_or_uci)
+    elif game_name == "minishogi" and isinstance(move_or_uci, str):
+        return move_or_uci.upper()
     elif game_name == "gomoku" and isinstance(move_or_uci, str):
         # Gomoku UCI move is like "e5" (column letter + row number)
         return move_or_uci.upper()
@@ -329,6 +336,9 @@ def run_game(
                 if game_name == "minichess":
                     winner_str = "White" if winner == 0 else "Black"
                     color = "white" if winner == 0 else "black"
+                elif game_name == "minishogi":
+                    winner_str = "Sente" if winner == 0 else "Gote"
+                    color = "white" if winner == 0 else "black"
                 elif game_name == "gomoku":
                     winner_str = "Player 1 (X)" if winner == 1 else "Player 2 (O)"
                     color = "white" if winner == 1 else "black"
@@ -344,16 +354,19 @@ def run_game(
                 return "draw"
             elif result == "no_moves":
                 if verbose:
-                    loser = "White" if winner == 1 else "Black"
+                    if game_name == "minishogi":
+                        loser = "Sente" if winner == 1 else "Gote"
+                    else:
+                        loser = "White" if winner == 1 else "Black"
                     print(f"  >> {loser} has no legal moves!")
                 # winner value is the winning side
-                if game_name == "minichess":
+                if game_name == "minichess" or game_name == "minishogi":
                     return "white" if winner == 0 else "black"
                 else:
                     return "white" if winner == 1 else "black"
 
             # Determine which side to move
-            if game_name == "minichess":
+            if game_name == "minichess" or game_name == "minishogi":
                 is_white = state.player == 0
             elif game_name == "gomoku":
                 is_white = state["player"] == 1  # player 1 = "white" (first player)
@@ -377,11 +390,11 @@ def run_game(
             # Human move input
             human_fn = _game_ctx.get("get_human_move")
             if human_fn is not None:
-                if game_name == "minichess" and verbose:
+                if (game_name == "minichess" or game_name == "minishogi") and verbose:
                     print(f"  Step {state.step}/{_game_ctx['max_step']}")
                 result = human_fn(state, _game_ctx)
-                # For minichess, result is a move tuple; for gomoku, a UCI string
-                if game_name == "minichess":
+                # For minichess/minishogi, result is a move tuple; for gomoku, a UCI string
+                if game_name == "minichess" or game_name == "minishogi":
                     bestmove_uci = _game_ctx["move_to_uci"](result)
                 else:
                     bestmove_uci = result
@@ -409,7 +422,7 @@ def run_game(
                         )
                     return "black" if is_white else "white"
 
-                if game_name == "minichess":
+                if game_name == "minichess" or game_name == "minishogi":
                     if move not in state.legal_actions:
                         if verbose:
                             print(
@@ -572,7 +585,7 @@ def main():
     parser.add_argument(
         "--game", default="minichess",
         help="Game type for board display and move input (default: minichess). "
-             "Built-in: minichess, gomoku. Use 'generic' for any other UBGI engine.",
+             "Built-in: minichess, minishogi, gomoku. Use 'generic' for any other UBGI engine.",
     )
     parser.add_argument(
         "--white", required=True, help='Path to UBGI/UCI engine for White, or "human".'
