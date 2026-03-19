@@ -27,7 +27,7 @@
 #include <vector>
 
 #include "config.hpp"
-#include "./state/state.hpp"
+#include "state.hpp"
 #include "./policy/pvs.hpp"
 
 
@@ -37,18 +37,18 @@
 #pragma pack(push, 1)
 
 struct DataHeader {
-    char magic[4];     // "MCDT" (MiniChess Data Training)
-    int32_t version;   // 3
-    int32_t count;     // number of records (updated at end)
+    char magic[4];     /* "MCDT" (MiniChess Data Training) */
+    int32_t version;   /* format version */
+    int32_t count;     /* number of records (updated at end) */
 };
 
 struct DataRecord {
-    int8_t board[2][6][5];  // 60 bytes: both player boards
-    int8_t player;          // 1 byte: side to move (0 or 1)
-    int16_t score;          // 2 bytes: PVS score from side-to-move perspective
-    int8_t result;          // 1 byte: game result from STM perspective (1=win, 0=draw, -1=loss)
-    uint16_t ply;           // 2 bytes: ply count from game start
-    uint16_t best_move;     // 2 bytes: encoded as from_sq*30+to_sq (0xFFFF = no move)
+    int8_t board[2][6][5];  /* 60 bytes: both player boards */
+    int8_t player;          /* 1 byte: side to move (0 or 1) */
+    int16_t score;          /* 2 bytes: PVS score from STM perspective */
+    int8_t result;          /* 1 byte: game result from STM (1=win, 0=draw, -1=loss) */
+    uint16_t ply;           /* 2 bytes: ply count from game start */
+    uint16_t best_move;     /* 2 bytes: encoded as from_sq*30+to_sq (0xFFFF = none) */
 };
 
 #pragma pack(pop)
@@ -173,7 +173,7 @@ static void play_game(
     game->get_legal_actions();
 
     size_t first_record = records.size();
-    int winner = -1;  // -1=undecided, 0=white wins, 1=black wins, 2=draw
+    int winner = -1;  /* -1=undecided, 0=white, 1=black, 2=draw */
 
     int step = 0;
     while(step < MAX_STEP){
@@ -232,11 +232,11 @@ static void play_game(
             }
             rec.player = (int8_t)next->player;
             rec.score = (int16_t)score;
-            rec.result = 0;  // placeholder, filled below
+            rec.result = 0;  /* placeholder, filled below */
             rec.ply = (uint16_t)step;
 
             Move bm = eval_result.best_move;
-            uint16_t encoded_move = 0xFFFF; // no move sentinel
+            uint16_t encoded_move = 0xFFFF; /* no move sentinel */
             if(bm != Move()){
                 int from_sq = bm.first.first * BOARD_W + bm.first.second;
                 int to_sq = bm.second.first * BOARD_W + bm.second.second;
@@ -251,16 +251,16 @@ static void play_game(
         game = next;
     }
 
-    if(winner == -1){ winner = 2; }  // max steps reached -> draw
+    if(winner == -1){ winner = 2; }  /* max steps reached -> draw */
 
     /* Backfill game result for all positions in this game */
     for(size_t i = first_record; i < records.size(); i++){
         if(winner == 2){
-            records[i].result = 0;   // draw
+            records[i].result = 0;   /* draw */
         }else if(records[i].player == winner){
-            records[i].result = 1;   // STM won
+            records[i].result = 1;   /* STM won */
         }else{
-            records[i].result = -1;  // STM lost
+            records[i].result = -1;  /* STM lost */
         }
     }
 

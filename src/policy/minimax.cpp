@@ -1,5 +1,5 @@
 #include <utility>
-#include "../state/state.hpp"
+#include "state.hpp"
 #include "minimax.hpp"
 
 
@@ -18,9 +18,9 @@ int MiniMax::eval_ctx(State *state, int depth, SearchContext& ctx,
         return 0;
     }
 
-    /*-- terminal / leaf checks --*/
+    /* === Terminal / leaf checks === */
     if(state->game_state == WIN){
-        return 100000;
+        return P_MAX;
     }
     if(state->game_state == DRAW){
         return 0;
@@ -29,8 +29,8 @@ int MiniMax::eval_ctx(State *state, int depth, SearchContext& ctx,
         return state->evaluate(p.use_nnue, p.use_kp_eval, p.use_eval_mobility);
     }
 
-    /*-- negamax loop --*/
-    int best_score = -100000;
+    /* === Negamax loop === */
+    int best_score = M_MAX;
     for(auto& action : state->legal_actions){
         State *next = state->next_state(action);
         int score = -eval_ctx(next, depth - 1, ctx, p, ply + 1);

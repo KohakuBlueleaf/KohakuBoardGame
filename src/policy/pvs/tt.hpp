@@ -1,52 +1,21 @@
 #pragma once
 #include <cstdint>
 #include <vector>
-#include "../../config.hpp"
-#include "../../state/state.hpp"
+#include "config.hpp"
+#include "state.hpp"
 
 /*============================================================
- * Transposition Table (Zobrist hashing + position cache)
+ * Transposition Table (position cache)
+ *
+ * Hash computation is delegated to State::hash() so each game
+ * can implement its own Zobrist scheme.
  *
  * TT is dynamically allocated so size can be changed at
  * runtime via UCI "Hash" option (tt_resize).
  *============================================================*/
 
-/* === Zobrist random keys === */
-inline uint64_t zobrist_piece[2][7][BOARD_H][BOARD_W];
-inline uint64_t zobrist_side;
-inline bool zobrist_ready = false;
-
-inline void init_zobrist(){
-    uint64_t s = 0x7A35C9D1E4F02B68ULL;
-    auto rand64 = [&s]() -> uint64_t {
-        s ^= s << 13; s ^= s >> 7; s ^= s << 17; return s;
-    };
-    for(int p = 0; p < 2; p++){
-        for(int t = 0; t < 7; t++){
-            for(int r = 0; r < BOARD_H; r++){
-                for(int c = 0; c < BOARD_W; c++){
-                    zobrist_piece[p][t][r][c] = rand64();
-                }
-            }
-        }
-    }
-    zobrist_side = rand64();
-    zobrist_ready = true;
-}
-
 inline uint64_t compute_hash(const State* state){
-    if(!zobrist_ready){ init_zobrist(); }
-    uint64_t h = 0;
-    for(int p = 0; p < 2; p++){
-        for(int r = 0; r < BOARD_H; r++){
-            for(int c = 0; c < BOARD_W; c++){
-                int piece = state->board.board[p][r][c];
-                if(piece){ h ^= zobrist_piece[p][piece][r][c]; }
-            }
-        }
-    }
-    if(state->player){ h ^= zobrist_side; }
-    return h;
+    return state->hash();
 }
 
 /* === TT entry === */

@@ -1,8 +1,8 @@
 #pragma once
 #include <algorithm>
 #include <vector>
-#include "../../config.hpp"
-#include "../../state/state.hpp"
+#include "config.hpp"
+#include "state.hpp"
 #include "../pvs.hpp"
 #include "killer_moves.hpp"
 
@@ -21,11 +21,11 @@ inline int score_move(
 ){
     int to_r = move.second.first;
     int to_c = move.second.second;
-    int captured = state->board.board[1 - state->player][to_r][to_c];
+    int captured = state->piece_at(1 - state->player, to_r, to_c);
     if(captured){
         int from_r = move.first.first;
         int from_c = move.first.second;
-        int attacker = state->board.board[state->player][from_r][from_c];
+        int attacker = state->piece_at(state->player, from_r, from_c);
         return piece_val[captured] * 100 - piece_val[attacker];
     }
     if(is_killer(ply, move, killer_slots)){

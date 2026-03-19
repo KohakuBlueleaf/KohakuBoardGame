@@ -1,9 +1,9 @@
 #pragma once
 #include <algorithm>
 #include <vector>
-#include "../../config.hpp"
-#include "../../state/state.hpp"
-#include "../../search_types.hpp"
+#include "config.hpp"
+#include "state.hpp"
+#include "search_types.hpp"
 #include "../pvs.hpp"
 #include "move_ordering.hpp"
 
@@ -56,7 +56,7 @@ inline int quiescence_ctx(
     for(auto& move : state->legal_actions){
         int to_r = move.second.first;
         int to_c = move.second.second;
-        if(state->board.board[1 - state->player][to_r][to_c]){
+        if(state->piece_at(1 - state->player, to_r, to_c)){
             captures.push_back(move);
         }
     }

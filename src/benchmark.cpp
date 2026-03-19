@@ -3,7 +3,7 @@
 #include <iomanip>
 
 #include "config.hpp"
-#include "./state/state.hpp"
+#include "state.hpp"
 #include "./policy/registry.hpp"
 #ifdef USE_NNUE
 #include "./nnue/nnue.hpp"

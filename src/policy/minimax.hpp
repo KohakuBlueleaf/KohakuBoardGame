@@ -1,5 +1,5 @@
 #pragma once
-#include "../search_types.hpp"
+#include "search_types.hpp"
 
 struct MMParams {
     bool use_nnue = true;

@@ -1,19 +1,18 @@
 #pragma once
-#include "state/base_state.hpp"
+#include "base_state.hpp"
 #include "search_params.hpp"
 #include <vector>
 #include <cstdint>
 #include <functional>
 
-// Forward declaration so policy headers can use State* without full include
 class State;
 
 struct RootUpdate {
     Move best_move;
     int score;
     int depth;
-    int move_number;   // which root move just finished (1-based)
-    int total_moves;   // total root moves
+    int move_number;
+    int total_moves;
 };
 
 struct SearchContext {

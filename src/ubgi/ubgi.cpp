@@ -1,4 +1,3 @@
-// Standard headers.
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -11,8 +10,8 @@
 #include <cstdlib>
 
 #include "ubgi.hpp"
-#include "../config.hpp"
-#include "../search_types.hpp"
+#include "config.hpp"
+#include "search_types.hpp"
 #include "../policy/registry.hpp"
 #include "../policy/pvs/tt.hpp"
 
@@ -29,12 +28,12 @@ static Board              g_board;
 static int                g_player = 0;
 static int                g_step   = 0;
 static const AlgoEntry*   g_algo   = nullptr;
-static ParamMap            g_params;
-static SearchContext       g_ctx;
-static std::thread         g_search_thread;
-static std::mutex          g_io_mutex;
-static std::atomic<bool>   g_searching{false};
-static Move                g_best_move;
+static ParamMap           g_params;
+static SearchContext      g_ctx;
+static std::thread        g_search_thread;
+static std::mutex         g_io_mutex;
+static std::atomic<bool>  g_searching{false};
+static Move               g_best_move;
 
 
 /* === Helpers === */
@@ -48,20 +47,36 @@ static void send(const std::string& msg){
 /* === Move Conversion === */
 
 std::string move_to_str(const Move& m){
+    /* Placement move: from == to → output just the destination */
+    if(m.first == m.second){
+        char buf[3];
+        buf[0] = 'a' + static_cast<char>(m.second.second);
+        buf[1] = '0' + static_cast<char>(BOARD_H) - static_cast<char>(m.second.first);
+        buf[2] = '\0';
+        return std::string(buf);
+    }
+    /* Board move: from + to */
     char buf[5];
     buf[0] = 'a' + static_cast<char>(m.first.second);
-    buf[1] = '6' - static_cast<char>(m.first.first);
+    buf[1] = '0' + static_cast<char>(BOARD_H) - static_cast<char>(m.first.first);
     buf[2] = 'a' + static_cast<char>(m.second.second);
-    buf[3] = '6' - static_cast<char>(m.second.first);
+    buf[3] = '0' + static_cast<char>(BOARD_H) - static_cast<char>(m.second.first);
     buf[4] = '\0';
     return std::string(buf);
 }
 
 Move str_to_move(const std::string& s){
+    if(s.size() <= 2){
+        /* Placement move: just destination */
+        size_t col = static_cast<size_t>(s[0] - 'a');
+        size_t row = static_cast<size_t>(('0' + BOARD_H) - s[1]);
+        return Move(Point(row, col), Point(row, col));
+    }
+    /* Board move: from + to */
     size_t from_col = static_cast<size_t>(s[0] - 'a');
-    size_t from_row = static_cast<size_t>('6' - s[1]);
+    size_t from_row = static_cast<size_t>(('0' + BOARD_H) - s[1]);
     size_t to_col   = static_cast<size_t>(s[2] - 'a');
-    size_t to_row   = static_cast<size_t>('6' - s[3]);
+    size_t to_row   = static_cast<size_t>(('0' + BOARD_H) - s[3]);
     return Move(Point(from_row, from_col), Point(to_row, to_col));
 }
 
@@ -74,21 +89,34 @@ void set_position(
     int& player,
     int& step
 ){
-    Board start_board;
-    board = start_board;
-    player = 0;
-    step = 0;
-
     std::istringstream iss(line);
     std::string token;
-    iss >> token;  // "startpos"
+    iss >> token; /* "startpos" or "board" */
 
-    if(iss >> token && token == "moves"){
+    if(token == "board"){
+        /* position board <encoded_board> <side: 0 or 1> [moves ...] */
+        std::string board_str;
+        int side = 0;
+        iss >> board_str >> side;
+        State state;
+        state.decode_board(board_str, side);
+        board = state.board;
+        player = state.player;
+        step = 0;
+    }else{
+        /* position startpos [moves ...] */
+        Board start_board;
+        board = start_board;
+        player = 0;
+        step = 0;
+    }
+
+    /* Replay any trailing moves */
+    std::string moves_token;
+    if(iss >> moves_token && moves_token == "moves"){
         std::string move_str;
         while(iss >> move_str){
-            if(move_str.size() < 4){
-                continue;
-            }
+            if(move_str.size() < 2){ continue; }
             Move mv = str_to_move(move_str);
             State current(board, player);
             current.get_legal_actions();
@@ -118,10 +146,6 @@ static std::string format_pv(const std::vector<Move>& pv){
 
 /* === Search Dispatch (worker thread) === */
 
-/* === Search generation counter === */
-// Each `go` increments this. The search thread checks it to know
-// if it has been superseded (abandoned). If so, it silently exits
-// without sending bestmove — the new search owns output now.
 static std::atomic<uint32_t> g_search_gen{0};
 
 static void do_search(
@@ -136,10 +160,9 @@ static void do_search(
     State state(board, player);
     state.get_legal_actions();
 
-    // Check if we've been superseded or stopped
     auto alive = [&](){
         if(my_gen != g_search_gen.load()){ return false; }
-        if(g_ctx.stop){ ctx.stop = true; }  // propagate global stop to local ctx
+        if(g_ctx.stop){ ctx.stop = true; }
         return !ctx.stop;
     };
 
@@ -238,7 +261,6 @@ static void do_search(
 /* === Command: go === */
 
 static void cmd_go(std::istringstream& iss){
-    // Stop old search and wait for it to finish
     g_ctx.stop = true;
     if(g_search_thread.joinable()){
         g_search_thread.join();
@@ -269,7 +291,9 @@ static void cmd_go(std::istringstream& iss){
     g_searching = true;
     uint32_t gen = g_search_gen.load();
     g_best_move = Move();
-    g_search_thread = std::thread(do_search, max_depth, movetime_ms, infinite, gen, ctx, g_board, g_player);
+    g_search_thread = std::thread(
+        do_search, max_depth, movetime_ms, infinite, gen, ctx, g_board, g_player
+    );
 }
 
 
@@ -330,7 +354,6 @@ static void cmd_setoption(std::istringstream& iss){
             g_params[name] = value;
         }
     }else{
-        // Any param that's not Algorithm or Hash goes into the param map
         g_params[name] = value;
     }
 }
@@ -339,6 +362,7 @@ static void cmd_setoption(std::istringstream& iss){
 /* === Command: d (debug display) === */
 
 static void cmd_display(){
+    State state(g_board, g_player);
     std::ostringstream oss;
     oss << "\n  ";
     for(int c = 0; c < BOARD_W; c++){
@@ -350,17 +374,7 @@ static void cmd_display(){
         int row_label = BOARD_H - r;
         oss << row_label << " ";
         for(int c = 0; c < BOARD_W; c++){
-            int w = static_cast<int>(g_board.board[0][r][c]);
-            int b = static_cast<int>(g_board.board[1][r][c]);
-            if(w){
-                const char* names = ".PRNBQK";
-                oss << " " << names[w] << " ";
-            }else if(b){
-                const char* names = ".prnbqk";
-                oss << " " << names[b] << " ";
-            }else{
-                oss << " . ";
-            }
+            oss << state.cell_display(r, c);
         }
         oss << " " << row_label << "\n";
     }
@@ -403,10 +417,9 @@ void loop(){
     nnue::init();
     #endif
 
-    // Track which handshake command was used for backward compat
     std::string handshake_cmd;
-
     std::string line;
+
     while(std::getline(std::cin, line)){
         if(!line.empty() && line.back() == '\r'){
             line.pop_back();
@@ -421,12 +434,12 @@ void loop(){
 
         if(cmd == "uci" || cmd == "ubgi"){
             handshake_cmd = cmd;
-            send("id name MiniChess");
-            send("id author MiniChess Team");
-            // Game description options
-            send("option name GameName type string default MiniChess");
-            send("option name BoardWidth type spin default 5 min 1 max 26");
-            send("option name BoardHeight type spin default 6 min 1 max 26");
+            State id_state;
+            send(std::string("id name ") + id_state.game_name());
+            send(std::string("id author ") + id_state.game_name() + " Team");
+            send(std::string("option name GameName type string default ") + id_state.game_name());
+            send("option name BoardWidth type spin default " + std::to_string(BOARD_W) + " min 1 max 26");
+            send("option name BoardHeight type spin default " + std::to_string(BOARD_H) + " min 1 max 26");
             send(algo_option_str());
             for(auto& pd : g_algo->param_defs){
                 if(pd.type == ParamDef::CHECK){
@@ -436,7 +449,6 @@ void loop(){
                          + " min " + std::to_string(pd.min_val) + " max " + std::to_string(pd.max_val));
                 }
             }
-            // Global options (not algo-specific)
             send("option name Hash type spin default 18 min 10 max 24");
             #ifdef USE_NNUE
             send("option name NNUEFile type string default " + std::string(NNUE_FILE));
@@ -444,7 +456,7 @@ void loop(){
             if(handshake_cmd == "ubgi"){
                 send("ubgiok");
             }else{
-                send("uciok");  // backward compat
+                send("uciok");
             }
         }else if(cmd == "isready"){
             send("readyok");
@@ -459,9 +471,7 @@ void loop(){
             if(g_search_thread.joinable()){
                 g_search_thread.join();
             }
-            // Thread has exited and sent bestmove (if alive)
         }else if(cmd == "ucinewgame" || cmd == "ubginewgame"){
-            // Reset board state for a new game
             g_board = Board();
             g_player = 0;
             g_step = 0;
@@ -470,13 +480,12 @@ void loop(){
         }else if(cmd == "quit"){
             g_ctx.stop = true;
             if(g_search_thread.joinable()){
-                g_search_thread.join();  // wait for search to finish + send bestmove
+                g_search_thread.join();
             }
             break;
         }
     }
 
-    // Don't join on exit — detached threads clean up on process exit
     if(g_search_thread.joinable()){
         g_search_thread.detach();
     }

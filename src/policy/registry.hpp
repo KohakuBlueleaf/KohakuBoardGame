@@ -11,7 +11,7 @@
 #include <string>
 #include <functional>
 #include <vector>
-#include "../search_types.hpp"
+#include "search_types.hpp"
 #include "pvs.hpp"
 #include "alphabeta.hpp"
 #include "minimax.hpp"

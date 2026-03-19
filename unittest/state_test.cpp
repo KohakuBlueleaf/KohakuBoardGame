@@ -4,8 +4,8 @@
 #include <chrono>
 #include <cstdlib>
 
-#include "../src/state/state.hpp"
-#include "../src/config.hpp"
+#include "../src/games/minichess/state.hpp"
+#include "../src/games/minichess/config.hpp"
 
 
 // Compare two move lists (order-independent)

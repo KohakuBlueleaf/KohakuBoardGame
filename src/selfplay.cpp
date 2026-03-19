@@ -1,7 +1,7 @@
 #include <iostream>
 
 #include "config.hpp"
-#include "./state/state.hpp"
+#include "state.hpp"
 #include "./policy/alphabeta.hpp"
 #ifdef USE_NNUE
 #include "./nnue/nnue.hpp"
@@ -25,7 +25,7 @@ int main(){
     std::cout << std::endl;
 
     int step = 0;
-    while(1){
+    while(true){
         /* === White's turn === */
         step += 1;
         if(game->game_state == WIN){ break; }

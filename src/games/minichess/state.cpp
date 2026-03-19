@@ -4,9 +4,9 @@
 #include <cstdlib>
 
 #include "./state.hpp"
-#include "../config.hpp"
+#include "config.hpp"
 #ifdef USE_NNUE
-#include "../nnue/nnue.hpp"
+#include "../../nnue/nnue.hpp"
 #endif
 
 
@@ -592,4 +592,120 @@ std::string State::encode_state(){
         ss << "\n";
     }
     return ss.str();
+}
+
+
+BaseState* State::create_null_state() const {
+    State* s = new State(this->board, 1 - this->player);
+    s->get_legal_actions();
+    return s;
+}
+
+
+/* === Board serialization === */
+static const char* piece_chars = ".PRNBQK";
+static const char* piece_chars_lower = ".prnbqk";
+
+std::string State::encode_board() const {
+    std::string s;
+    for(int r = 0; r < BOARD_H; r++){
+        if(r > 0){ s += '/'; }
+        for(int c = 0; c < BOARD_W; c++){
+            int w = board.board[0][r][c];
+            int b = board.board[1][r][c];
+            if(w > 0 && w <= 6){
+                s += piece_chars[w];
+            }else if(b > 0 && b <= 6){
+                s += piece_chars_lower[b];
+            }else{
+                s += '.';
+            }
+        }
+    }
+    return s;
+}
+
+void State::decode_board(const std::string& s, int side_to_move){
+    player = side_to_move;
+    game_state = UNKNOWN;
+    board = Board{};
+    int r = 0, c = 0;
+    for(char ch : s){
+        if(ch == '/'){
+            r++;
+            c = 0;
+            continue;
+        }
+        if(r >= BOARD_H || c >= BOARD_W){ break; }
+        if(ch >= 'A' && ch <= 'Z'){
+            for(int p = 1; p <= 6; p++){
+                if(piece_chars[p] == ch){ board.board[0][r][c] = p; break; }
+            }
+        }else if(ch >= 'a' && ch <= 'z'){
+            for(int p = 1; p <= 6; p++){
+                if(piece_chars_lower[p] == ch){ board.board[1][r][c] = p; break; }
+            }
+        }
+        c++;
+    }
+    get_legal_actions();
+}
+
+
+/*============================================================
+ * Zobrist hash for transposition table
+ *============================================================*/
+static uint64_t zobrist_piece[2][7][BOARD_H][BOARD_W];
+static uint64_t zobrist_side;
+static bool zobrist_ready = false;
+
+static void init_zobrist(){
+    uint64_t s = 0x7A35C9D1E4F02B68ULL;
+    auto rand64 = [&s]() -> uint64_t {
+        s ^= s << 13; s ^= s >> 7; s ^= s << 17; return s;
+    };
+    for(int p = 0; p < 2; p++){
+        for(int t = 0; t < 7; t++){
+            for(int r = 0; r < BOARD_H; r++){
+                for(int c = 0; c < BOARD_W; c++){
+                    zobrist_piece[p][t][r][c] = rand64();
+                }
+            }
+        }
+    }
+    zobrist_side = rand64();
+    zobrist_ready = true;
+}
+
+uint64_t State::hash() const {
+    if(!zobrist_ready){ init_zobrist(); }
+    uint64_t h = 0;
+    for(int p = 0; p < 2; p++){
+        for(int r = 0; r < BOARD_H; r++){
+            for(int c = 0; c < BOARD_W; c++){
+                int piece = this->board.board[p][r][c];
+                if(piece){ h ^= zobrist_piece[p][piece][r][c]; }
+            }
+        }
+    }
+    if(this->player){ h ^= zobrist_side; }
+    return h;
+}
+
+
+/*============================================================
+ * Cell display for protocol (d command)
+ *============================================================*/
+std::string State::cell_display(int row, int col) const {
+    int w = static_cast<int>(board.board[0][row][col]);
+    int b = static_cast<int>(board.board[1][row][col]);
+    if(w){
+        const char* names = ".PRNBQK";
+        return std::string(" ") + names[w] + " ";
+    }else if(b){
+        const char* names = ".prnbqk";
+        return std::string(" ") + names[b] + " ";
+    }else{
+        return " . ";
+    }
 }

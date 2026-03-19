@@ -1,26 +1,39 @@
 #include <cstdlib>
-#include "../state/state.hpp"
+#include "state.hpp"
 #include "random.hpp"
 
+
+/*============================================================
+ * Random — search
+ *
+ * Pick a uniformly random legal move.
+ *============================================================*/
 SearchResult Random::search(State *state, int depth, SearchContext& ctx){
     ctx.reset();
     SearchResult result;
     result.depth = 1;
+
     if(!state->legal_actions.size()){
         state->get_legal_actions();
     }
+
     auto actions = state->legal_actions;
     if(actions.empty()){
         result.best_move = Move();
         return result;
     }
-    result.best_move = actions[(rand()+depth)%actions.size()];
+
+    result.best_move = actions[(rand() + depth) % actions.size()];
     result.score = 0;
     result.nodes = 1;
     result.pv = {result.best_move};
     return result;
 }
 
+
+/*============================================================
+ * Random — default_params / param_defs
+ *============================================================*/
 ParamMap Random::default_params(){
     return {};
 }

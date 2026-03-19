@@ -1,10 +1,10 @@
 #pragma once
 
-#include "../config.hpp"
+#include "config.hpp"
 
 #ifdef USE_NNUE
 
-#include "../state/state.hpp"
+#include "state.hpp"
 
 namespace nnue {
 

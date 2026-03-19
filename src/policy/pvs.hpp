@@ -1,5 +1,5 @@
 #pragma once
-#include "../search_types.hpp"
+#include "search_types.hpp"
 
 /* === PVS-specific params (parsed from ParamMap for fast access) === */
 struct PVSParams {

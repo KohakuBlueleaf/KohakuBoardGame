@@ -1,40 +1,35 @@
-#ifndef __STATE_H__
-#define __STATE_H__
-
+#pragma once
 #include <string>
 #include <cstdlib>
 #include <vector>
 #include <utility>
 
 #include "base_state.hpp"
-#include "../config.hpp"
+#include "config.hpp"
 
 
-class Board{
-  public:
+class Board {
+public:
     char board[2][BOARD_H][BOARD_W] = {{
-      //white
-      {0, 0, 0, 0, 0},
-      {0, 0, 0, 0, 0},
-      {0, 0, 0, 0, 0},
-      {0, 0, 0, 0, 0},
-      {1, 1, 1, 1, 1},
-      {2, 3, 4, 5, 6},
+        {0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0},
+        {1, 1, 1, 1, 1},
+        {2, 3, 4, 5, 6},
     }, {
-      //black
-      {6, 5, 4, 3, 2},
-      {1, 1, 1, 1, 1},
-      {0, 0, 0, 0, 0},
-      {0, 0, 0, 0, 0},
-      {0, 0, 0, 0, 0},
-      {0, 0, 0, 0, 0},
+        {6, 5, 4, 3, 2},
+        {1, 1, 1, 1, 1},
+        {0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0},
     }};
 };
 
 
 class State : public BaseState {
-  public:
-    //You may want to add more property for a state
+public:
     Board board;
     int score = 0;
 
@@ -51,10 +46,19 @@ class State : public BaseState {
     std::string encode_output() const override;
     std::string encode_state();
 
-    // Game description
+    BaseState* create_null_state() const override;
+
+    int piece_at(int player, int row, int col) const override {
+        return board.board[player][row][col];
+    }
+    uint64_t hash() const override;
+    std::string cell_display(int row, int col) const override;
+
+    std::string encode_board() const override;
+    void decode_board(const std::string& s, int side_to_move) override;
+
+    /* === Game description === */
     int board_h() const override { return BOARD_H; }
     int board_w() const override { return BOARD_W; }
     const char* game_name() const override { return "MiniChess"; }
 };
-
-#endif

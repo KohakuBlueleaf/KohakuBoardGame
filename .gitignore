@@ -222,3 +222,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+REQUIREMENTS.md
+
+# Temp files
+gamelog.txt
+*.png

@@ -1,6 +1,6 @@
 #pragma once
-#include "../../config.hpp"
-#include "../../state/state.hpp"
+#include "config.hpp"
+#include "state.hpp"
 
 /*============================================================
  * Killer Move Table

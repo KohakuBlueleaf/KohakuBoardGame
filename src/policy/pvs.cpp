@@ -3,8 +3,8 @@
 #include <utility>
 #include <cstdint>
 #include "pvs.hpp"
-#include "../state/state.hpp"
-#include "../config.hpp"
+#include "state.hpp"
+#include "config.hpp"
 #include "pvs/tt.hpp"
 #include "pvs/killer_moves.hpp"
 #include "pvs/move_ordering.hpp"
@@ -93,24 +93,25 @@ int PVS::eval_ctx(
 
     /* === Null move pruning === */
     if(p.use_null_move && can_null && depth >= p.null_move_r + 1){
-        State* null_state = new State(state->board, 1 - state->player);
-        null_state->get_legal_actions();
-
-        if(null_state->game_state != WIN && null_state->game_state != DRAW){
-            int null_score = -eval_ctx(
-                null_state, depth - 1 - p.null_move_r,
-                -beta, -(beta - 1), ctx, p, ply + 1, false
-            );
-            if(ctx.stop){
-                delete state;
-                return 0;
+        BaseState* null_base = state->create_null_state();
+        if(null_base != nullptr){
+            State* null_state = static_cast<State*>(null_base);
+            if(null_state->game_state != WIN && null_state->game_state != DRAW){
+                int null_score = -eval_ctx(
+                    null_state, depth - 1 - p.null_move_r,
+                    -beta, -(beta - 1), ctx, p, ply + 1, false
+                );
+                if(ctx.stop){
+                    delete state;
+                    return 0;
+                }
+                if(null_score >= beta){
+                    delete state;
+                    return beta;
+                }
+            }else{
+                delete null_state;
             }
-            if(null_score >= beta){
-                delete state;
-                return beta;
-            }
-        }else{
-            delete null_state;
         }
     }
 
@@ -143,7 +144,7 @@ int PVS::eval_ctx(
             ) {
                 int to_r = move.second.first;
                 int to_c = move.second.second;
-                bool is_capture = state->board.board[1 - state->player][to_r][to_c] != 0;
+                bool is_capture = state->piece_at(1 - state->player, to_r, to_c) != 0;
                 if(!is_capture){
                     if(p.use_killer_moves){
                         if(!is_killer(ply, move, p.killer_slots)){
@@ -204,7 +205,7 @@ int PVS::eval_ctx(
             if(p.use_killer_moves){
                 int to_r = move.second.first;
                 int to_c = move.second.second;
-                bool is_capture = state->board.board[1 - state->player][to_r][to_c] != 0;
+                bool is_capture = state->piece_at(1 - state->player, to_r, to_c) != 0;
                 if(!is_capture){
                     store_killer(ply, move, p.killer_slots);
                 }
@@ -270,14 +271,19 @@ SearchResult PVS::search(State *state, int depth, SearchContext& ctx){
 
         if(first_child){
             score = -eval_ctx(
-                state->next_state(move), depth - 1,
-                -beta, -alpha, ctx, p, 1, true
+                state->next_state(move),
+                depth - 1,
+                -beta,
+                -alpha,
+                ctx,
+                p,
+                1,
+                true
             );
             first_child = false;
         }else{
             score = -eval_ctx(
-                state->next_state(move), depth - 1,
-                -(alpha + 1), -alpha, ctx, p, 1, true
+                state->next_state(move), depth - 1, -(alpha + 1), -alpha, ctx, p, 1, true
             );
             if(score > alpha && score < beta){
                 score = -eval_ctx(
@@ -308,8 +314,8 @@ SearchResult PVS::search(State *state, int depth, SearchContext& ctx){
     result.depth     = depth;
     result.seldepth  = ctx.seldepth;
     result.nodes     = ctx.nodes;
-    result.pv = extract_pv(state, depth + 10);  // try beyond nominal depth
-    // Always ensure best_move is the first PV move
+    result.pv = extract_pv(state, depth + 10);
+    /* Ensure best_move is the first PV move */
     if(result.pv.empty() && best_move != Move()){
         result.pv = {best_move};
     }else if(!result.pv.empty() && result.pv[0] != best_move && best_move != Move()){
@@ -329,7 +335,6 @@ std::vector<Move> PVS::extract_pv(State *state, int max_len){
     State* cur = new State(state->board, state->player);
     cur->get_legal_actions();
 
-    // Use a set to detect TT cycles (avoid infinite loops)
     std::vector<uint64_t> seen;
 
     for(int i = 0; i < max_len; i++){
@@ -338,7 +343,7 @@ std::vector<Move> PVS::extract_pv(State *state, int max_len){
         }
         uint64_t hash = compute_hash(cur);
 
-        // Cycle detection
+        /* Cycle detection */
         bool cycle = false;
         for(auto h : seen){
             if(h == hash){ cycle = true; break; }
@@ -352,7 +357,7 @@ std::vector<Move> PVS::extract_pv(State *state, int max_len){
         }
         Move mv = tte->get_move();
 
-        // Validate legality
+        /* Validate legality */
         bool legal = false;
         for(auto& m : cur->legal_actions){
             if(m == mv){ legal = true; break; }

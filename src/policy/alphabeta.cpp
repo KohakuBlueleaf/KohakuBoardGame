@@ -1,6 +1,6 @@
 #include <utility>
 #include "alphabeta.hpp"
-#include "../state/state.hpp"
+#include "state.hpp"
 
 
 /*============================================================
@@ -19,10 +19,10 @@ int AlphaBeta::eval_ctx(State *state, int depth, int alpha, int beta,
         return 0;
     }
 
-    /*-- terminal / leaf checks --*/
+    /* === Terminal / leaf checks === */
     GameState now_res = state->game_state;
     if(now_res == WIN){
-        return 100000;
+        return P_MAX;
     }
     if(now_res == DRAW){
         return 0;
@@ -31,7 +31,7 @@ int AlphaBeta::eval_ctx(State *state, int depth, int alpha, int beta,
         return state->evaluate(p.use_nnue, p.use_kp_eval, p.use_eval_mobility);
     }
 
-    /*-- alpha-beta pruning loop --*/
+    /* === Alpha-beta loop === */
     for(auto& move : state->legal_actions){
         State *next = state->next_state(move);
         int score = -eval_ctx(next, depth - 1, -beta, -alpha, ctx, p, ply + 1);
