@@ -312,6 +312,16 @@ static void cmd_setoption(std::istringstream& iss){
             tt_resize(bits);
             send("info string TT resized to 2^" + value + " entries");
         }
+    }else if(name == "NNUEFile"){
+        #ifdef USE_NNUE
+        if(nnue::init(value.c_str())){
+            send("info string NNUE loaded: " + value);
+        }else{
+            send("info string ERROR: failed to load NNUE from " + value);
+        }
+        #else
+        send("info string ERROR: NNUE not compiled in");
+        #endif
     }else if(name == "UseNNUE"){
         bool want = (value == "true" || value == "1");
         if(want && !nnue_available()){
@@ -420,6 +430,9 @@ void loop(){
             }
             // Global options (not algo-specific)
             send("option name Hash type spin default 18 min 10 max 24");
+            #ifdef USE_NNUE
+            send("option name NNUEFile type string default " + std::string(NNUE_FILE));
+            #endif
             send("uciok");
         }else if(cmd == "isready"){
             send("readyok");
