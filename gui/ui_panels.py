@@ -3,9 +3,9 @@
 import pygame
 
 try:
-    from gui.config import *
+    import gui.config as cfg
 except ImportError:
-    from config import *
+    import config as cfg
 
 
 def _make_font(size, bold=False):
@@ -50,13 +50,13 @@ class Button:
             )
             fg = (200, 255, 200)
         elif self.rect.collidepoint(mouse_pos):
-            bg = COLOR_BTN_HOVER
-            fg = COLOR_BTN_TEXT
+            bg = cfg.COLOR_BTN_HOVER
+            fg = cfg.COLOR_BTN_TEXT
         else:
-            bg = COLOR_BTN
-            fg = COLOR_BTN_TEXT
+            bg = cfg.COLOR_BTN
+            fg = cfg.COLOR_BTN_TEXT
         pygame.draw.rect(surface, bg, self.rect, border_radius=6)
-        pygame.draw.rect(surface, COLOR_TEXT_DIM, self.rect, width=1, border_radius=6)
+        pygame.draw.rect(surface, cfg.COLOR_TEXT_DIM, self.rect, width=1, border_radius=6)
         label = self.font.render(self.text, True, fg)
         lx = self.rect.x + (self.rect.width - label.get_width()) // 2
         ly = self.rect.y + (self.rect.height - label.get_height()) // 2
@@ -76,24 +76,24 @@ class SidePanel:
     _BTN_GAP = 10
     _BTN_BOTTOM_MARGIN = 14
     _DOT_RADIUS = 12
-    _SCORE_PLOT_MAX_CP = 500
+    _SCORE_PLOT_MAX_CP = None  # set from cfg at draw time
     _HISTORY_LINE_H = 20
 
     def __init__(self, surface):
         self.surface = surface
 
-        self.font_title = _make_font(FONT_SIZE_STATUS, bold=True)
-        self.font_normal = _make_font(FONT_SIZE_PANEL)
-        self.font_btn = _make_font(FONT_SIZE_BTN, bold=True)
-        self.font_bold = _make_font(FONT_SIZE_PANEL, bold=True)
-        self.font_small = _make_font(FONT_SIZE_PANEL - 2)
+        self.font_title = _make_font(cfg.FONT_SIZE_STATUS, bold=True)
+        self.font_normal = _make_font(cfg.FONT_SIZE_PANEL)
+        self.font_btn = _make_font(cfg.FONT_SIZE_BTN, bold=True)
+        self.font_bold = _make_font(cfg.FONT_SIZE_PANEL, bold=True)
+        self.font_small = _make_font(cfg.FONT_SIZE_PANEL - 2)
 
-        btn2_w = (PANEL_WIDTH - 2 * self._PAD_LEFT - self._BTN_GAP) // 2
-        btn3_w = (PANEL_WIDTH - 2 * self._PAD_LEFT - 2 * self._BTN_GAP) // 3
-        bx = PANEL_X + self._PAD_LEFT
+        btn2_w = (cfg.PANEL_WIDTH - 2 * self._PAD_LEFT - self._BTN_GAP) // 2
+        btn3_w = (cfg.PANEL_WIDTH - 2 * self._PAD_LEFT - 2 * self._BTN_GAP) // 3
+        bx = cfg.PANEL_X + self._PAD_LEFT
 
         # Bottom row: New Game | Settings
-        btn_y2 = PANEL_Y + PANEL_H - self._BTN_BOTTOM_MARGIN - self._BTN_HEIGHT
+        btn_y2 = cfg.PANEL_Y + cfg.PANEL_H - self._BTN_BOTTOM_MARGIN - self._BTN_HEIGHT
         self.btn_new_game = Button(
             bx, btn_y2, btn2_w, self._BTN_HEIGHT, "New Game", self.font_btn
         )
@@ -142,26 +142,34 @@ class SidePanel:
         game_result=None,
         ai_depth=None,
         mode="human_vs_human",
-        time_limit=DEFAULT_TIMEOUT,
+        time_limit=cfg.DEFAULT_TIMEOUT,
         search_info=None,
         paused=False,
         analyze_enabled=False,
         gaming=False,
+        player_labels=None,
+        player_colors=None,
     ):
         self._frame += 1
         mouse_pos = pygame.mouse.get_pos()
         if search_info is None:
             search_info = {}
+        if player_labels is None:
+            player_labels = {0: "White", 1: "Black"}
+        if player_colors is None:
+            player_colors = {0: (255, 255, 255), 1: (30, 30, 30)}
+        p0_name = player_labels.get(0, "White")
+        p1_name = player_labels.get(1, "Black")
 
         _draw_rounded_rect(
             self.surface,
-            (PANEL_X, PANEL_Y, PANEL_WIDTH, PANEL_H),
-            COLOR_PANEL_BG,
+            (cfg.PANEL_X, cfg.PANEL_Y, cfg.PANEL_WIDTH, cfg.PANEL_H),
+            cfg.COLOR_PANEL_BG,
             radius=10,
         )
 
-        cx = PANEL_X + self._PAD_LEFT
-        cy = PANEL_Y + self._PAD_TOP
+        cx = cfg.PANEL_X + self._PAD_LEFT
+        cy = cfg.PANEL_Y + self._PAD_TOP
 
         # Title: mode + gaming state indicator
         mode_labels = {
@@ -177,23 +185,21 @@ class SidePanel:
             title_color = (100, 200, 220)  # cyan
         elif game_result is not None and game_result != "stopped":
             title_label = mode_labels.get(mode, mode)
-            title_color = COLOR_TEXT_DIM  # dimmed = game over
+            title_color = cfg.COLOR_TEXT_DIM  # dimmed = game over
         else:
             title_label = "Free Play"
-            title_color = COLOR_TEXT
+            title_color = cfg.COLOR_TEXT
         surf = self.font_title.render(title_label, True, title_color)
         self.surface.blit(surf, (cx, cy))
         cy += surf.get_height() + self._SECTION_GAP
 
         if game_result is not None:
-            text, color = self._result_info(game_result)
+            text, color = self._result_info(game_result, player_labels)
             surf = self.font_bold.render(text, True, color)
             self.surface.blit(surf, (cx, cy))
             cy += surf.get_height() + self._LINE_GAP
         else:
-            dot_color = (
-                COLOR_WHITE_PIECE if state.current_player == 0 else COLOR_BLACK_PIECE
-            )
+            dot_color = player_colors.get(state.current_player, (180, 180, 180))
             dot_cx = cx + self._DOT_RADIUS
             dot_cy = cy + self._DOT_RADIUS
             pygame.draw.circle(
@@ -201,40 +207,40 @@ class SidePanel:
             )
             pygame.draw.circle(
                 self.surface,
-                COLOR_TEXT_DIM,
+                cfg.COLOR_TEXT_DIM,
                 (dot_cx, dot_cy),
                 self._DOT_RADIUS,
                 width=1,
             )
-            who = "White to move" if state.current_player == 0 else "Black to move"
-            surf = self.font_normal.render(who, True, COLOR_TEXT)
+            who = f"{p0_name} to move" if state.current_player == 0 else f"{p1_name} to move"
+            surf = self.font_normal.render(who, True, cfg.COLOR_TEXT)
             self.surface.blit(surf, (cx + self._DOT_RADIUS * 2 + 8, cy + 2))
             cy += max(surf.get_height(), self._DOT_RADIUS * 2) + self._LINE_GAP
 
         surf = self.font_normal.render(
-            f"Step {state.step} / {MAX_STEP}", True, COLOR_TEXT_DIM
+            f"Step {state.step} / {cfg.MAX_STEP}", True, cfg.COLOR_TEXT_DIM
         )
         self.surface.blit(surf, (cx, cy))
         cy += surf.get_height() + self._SECTION_GAP
 
         status_text = None
-        status_color = COLOR_TEXT
+        status_color = cfg.COLOR_TEXT
         if analyze_enabled and paused:
             status_text = "Paused"
             status_color = (200, 200, 100)
         elif analyze_enabled and search_info.get("depth") is not None:
-            n_dots = (self._frame // (FPS // 3)) % 3 + 1
+            n_dots = (self._frame // (cfg.FPS // 3)) % 3 + 1
             status_text = "Analyzing" + "." * n_dots
             status_color = (100, 200, 220)
         elif analyze_enabled:
-            n_dots = (self._frame // (FPS // 3)) % 3 + 1
+            n_dots = (self._frame // (cfg.FPS // 3)) % 3 + 1
             status_text = "Loading" + "." * n_dots
             status_color = (180, 180, 100)
         elif paused:
             status_text = "Paused"
             status_color = (200, 200, 100)
         elif ai_thinking:
-            n_dots = (self._frame // (FPS // 3)) % 3 + 1
+            n_dots = (self._frame // (cfg.FPS // 3)) % 3 + 1
             status_text = "AI thinking" + "." * n_dots
         if status_text:
             surf = self.font_normal.render(status_text, True, status_color)
@@ -261,9 +267,9 @@ class SidePanel:
 
         top_btn = self.btn_undo
         sep_y = top_btn.rect.y - self._SECTION_GAP - 2
-        x1 = PANEL_X + self._SEPARATOR_INSET
-        x2 = PANEL_X + PANEL_WIDTH - self._SEPARATOR_INSET
-        pygame.draw.line(self.surface, COLOR_TEXT_DIM, (x1, sep_y), (x2, sep_y), 1)
+        x1 = cfg.PANEL_X + self._SEPARATOR_INSET
+        x2 = cfg.PANEL_X + cfg.PANEL_WIDTH - self._SEPARATOR_INSET
+        pygame.draw.line(self.surface, cfg.COLOR_TEXT_DIM, (x1, sep_y), (x2, sep_y), 1)
 
         self.btn_new_game.draw(self.surface, mouse_pos)
         self.btn_settings.draw(self.surface, mouse_pos)
@@ -272,60 +278,63 @@ class SidePanel:
     # Bottom panel (eval bar | score plot | move table)
     # ==================================================================
 
-    def draw_bottom(self, score_cp, score_history, move_history):
-        bx = BOTTOM_X
-        by = BOTTOM_Y
-        bw = WINDOW_W - 2 * BOTTOM_X
-        bh = BOTTOM_H
+    def draw_bottom(self, score_cp, score_history, move_history, player_colors=None):
+        if player_colors is None:
+            player_colors = {0: (255, 255, 255), 1: (30, 30, 30)}
+        bx = cfg.BOTTOM_X
+        by = cfg.BOTTOM_Y
+        bw = cfg.WINDOW_W - 2 * cfg.BOTTOM_X
+        bh = cfg.BOTTOM_H
         pad = 8
 
-        _draw_rounded_rect(self.surface, (bx, by, bw, bh), COLOR_PANEL_BG, radius=8)
+        _draw_rounded_rect(self.surface, (bx, by, bw, bh), cfg.COLOR_PANEL_BG, radius=8)
 
         inner_x = bx + pad
         inner_y = by + pad
         inner_h = bh - 2 * pad
 
-        eval_w = BOTTOM_EVAL_W
-        self._draw_eval_bar(inner_x, inner_y, eval_w, inner_h, score_cp)
+        eval_w = cfg.BOTTOM_EVAL_W
+        self._draw_eval_bar(inner_x, inner_y, eval_w, inner_h, score_cp, player_colors)
 
-        plot_x = inner_x + eval_w + BOTTOM_GAP
-        remaining_w = bw - 2 * pad - eval_w - BOTTOM_GAP
+        plot_x = inner_x + eval_w + cfg.BOTTOM_GAP
+        remaining_w = bw - 2 * pad - eval_w - cfg.BOTTOM_GAP
         plot_w = remaining_w // 2
-        self._draw_score_plot(plot_x, inner_y, score_history, plot_w, inner_h)
+        self._draw_score_plot(plot_x, inner_y, score_history, plot_w, inner_h, player_colors)
 
-        table_x = plot_x + plot_w + BOTTOM_GAP
+        table_x = plot_x + plot_w + cfg.BOTTOM_GAP
         table_w = bw - (table_x - bx) - pad
         self._draw_move_table(table_x, inner_y, table_w, inner_h, move_history)
 
-    def _draw_eval_bar(self, x, y, w, h, score_cp):
-        """Vertical eval bar. White on bottom, black on top.
-        Positive score = white better = white section grows upward."""
-        max_cp = self._SCORE_PLOT_MAX_CP
+    def _draw_eval_bar(self, x, y, w, h, score_cp, player_colors):
+        """Vertical eval bar. Player0 on bottom, player1 on top.
+        Positive score = player0 better = player0 section grows upward."""
+        max_cp = getattr(cfg, "SCORE_PLOT_MAX_CP", 500)
+        p0_color = player_colors.get(0, (230, 230, 230))
+        p1_color = player_colors.get(1, (50, 50, 50))
 
         if score_cp is not None:
             clamped = max(-max_cp, min(max_cp, score_cp))
-            white_pct = 50 + clamped * 50 / max_cp
+            p0_pct = 50 + clamped * 50 / max_cp
         else:
-            white_pct = 50
+            p0_pct = 50
 
-        white_h = int(h * white_pct / 100)
-        black_h = h - white_h
+        p0_h = int(h * p0_pct / 100)
+        p1_h = h - p0_h
 
-        # Black on top
-        if black_h > 0:
-            pygame.draw.rect(self.surface, (50, 50, 50), (x, y, w, black_h))
-        # White on bottom
-        if white_h > 0:
-            pygame.draw.rect(
-                self.surface, (230, 230, 230), (x, y + black_h, w, white_h)
-            )
+        # Player1 on top
+        if p1_h > 0:
+            pygame.draw.rect(self.surface, p1_color, (x, y, w, p1_h))
+        # Player0 on bottom
+        if p0_h > 0:
+            pygame.draw.rect(self.surface, p0_color, (x, y + p1_h, w, p0_h))
 
-        pygame.draw.rect(self.surface, COLOR_TEXT_DIM, (x, y, w, h), 1)
+        pygame.draw.rect(self.surface, cfg.COLOR_TEXT_DIM, (x, y, w, h), 1)
 
         if score_cp is not None:
-            score_pawns = score_cp / 100.0
+            divisor = getattr(cfg, "SCORE_DISPLAY_DIV", 100)
+            score_display = score_cp / divisor
             sign = "+" if score_cp >= 0 else ""
-            text = f"{sign}{score_pawns:.1f}"
+            text = f"{sign}{score_display:.1f}"
         else:
             text = "0.0"
         surf = self.font_small.render(text, True, (180, 180, 0))
@@ -335,16 +344,20 @@ class SidePanel:
         pygame.draw.rect(self.surface, (40, 40, 44), bg_rect)
         self.surface.blit(surf, (tx, ty))
 
-    def _draw_score_plot(self, cx, cy, score_history, plot_w, plot_h):
+    def _draw_score_plot(self, cx, cy, score_history, plot_w, plot_h, player_colors):
         """Score history chart.
 
         score_history entries: (player, score_cp, source)
-        source: "white", "black", "analyze", "human"
-        - analyze/human: single gray line
-        - white: white line + dots
-        - black: dark line + dots (human side hidden)
+        source: "white"/"black" (legacy) or "p0"/"p1", "analyze", "human"
+        Higher = player0 better, lower = player1 better.
+        Colors come from player_colors dict.
         """
-        max_cp = self._SCORE_PLOT_MAX_CP
+        max_cp = getattr(cfg, "SCORE_PLOT_MAX_CP", 500)
+        p0_color = player_colors.get(0, (230, 230, 230))
+        p1_color = player_colors.get(1, (50, 50, 50))
+        # Lighter variants for lines
+        p0_line = tuple(min(255, c + 40) for c in p0_color)
+        p1_line = tuple(min(255, c + 40) for c in p1_color)
 
         pygame.draw.rect(self.surface, (30, 30, 34), (cx, cy, plot_w, plot_h))
 
@@ -359,7 +372,7 @@ class SidePanel:
             )
 
         if not score_history:
-            pygame.draw.rect(self.surface, COLOR_TEXT_DIM, (cx, cy, plot_w, plot_h), 1)
+            pygame.draw.rect(self.surface, cfg.COLOR_TEXT_DIM, (cx, cy, plot_w, plot_h), 1)
             return
 
         n_total = len(score_history)
@@ -374,8 +387,8 @@ class SidePanel:
             return (sx, sy)
 
         # Separate points by source
-        white_pts = []
-        black_pts = []
+        p0_pts = []
+        p1_pts = []
         single_pts = []
 
         for i, entry in enumerate(score_history):
@@ -384,14 +397,13 @@ class SidePanel:
             source = entry[2] if len(entry) > 2 else "analyze"
             if score is None:
                 continue
-            if source == "white":
-                white_pts.append((i, score))
-            elif source == "black":
-                black_pts.append((i, score))
+            if source in ("white", "p0"):
+                p0_pts.append((i, score))
+            elif source in ("black", "p1"):
+                p1_pts.append((i, score))
             elif source in ("analyze", "human"):
                 single_pts.append((i, player, score))
 
-        # Draw lines and dots per source
         # Single line (analyze / human-human)
         if single_pts:
             if len(single_pts) >= 2:
@@ -399,42 +411,43 @@ class SidePanel:
                 pygame.draw.lines(self.surface, (120, 120, 130), False, pts, 2)
             for idx, player, score in single_pts:
                 sx, sy = to_screen(idx, score)
-                c = (200, 200, 200) if player == 0 else (80, 80, 80)
+                c = p0_color if player == 0 else p1_color
                 pygame.draw.circle(self.surface, c, (sx, sy), 3)
-                pygame.draw.circle(self.surface, COLOR_TEXT_DIM, (sx, sy), 3, 1)
+                pygame.draw.circle(self.surface, cfg.COLOR_TEXT_DIM, (sx, sy), 3, 1)
 
-        # White engine line
-        if white_pts:
-            if len(white_pts) >= 2:
-                pts = [to_screen(idx, s) for idx, s in white_pts]
-                pygame.draw.lines(self.surface, (200, 200, 200), False, pts, 2)
-            for idx, score in white_pts:
+        # Player0 engine line
+        if p0_pts:
+            if len(p0_pts) >= 2:
+                pts = [to_screen(idx, s) for idx, s in p0_pts]
+                pygame.draw.lines(self.surface, p0_line, False, pts, 2)
+            for idx, score in p0_pts:
                 sx, sy = to_screen(idx, score)
-                pygame.draw.circle(self.surface, (230, 230, 230), (sx, sy), 3)
-                pygame.draw.circle(self.surface, (100, 100, 100), (sx, sy), 3, 1)
+                pygame.draw.circle(self.surface, p0_color, (sx, sy), 3)
+                pygame.draw.circle(self.surface, cfg.COLOR_TEXT_DIM, (sx, sy), 3, 1)
 
-        # Black engine line
-        if black_pts:
-            if len(black_pts) >= 2:
-                pts = [to_screen(idx, s) for idx, s in black_pts]
-                pygame.draw.lines(self.surface, (80, 80, 100), False, pts, 2)
-            for idx, score in black_pts:
+        # Player1 engine line
+        if p1_pts:
+            if len(p1_pts) >= 2:
+                pts = [to_screen(idx, s) for idx, s in p1_pts]
+                pygame.draw.lines(self.surface, p1_line, False, pts, 2)
+            for idx, score in p1_pts:
                 sx, sy = to_screen(idx, score)
-                pygame.draw.circle(self.surface, (50, 50, 60), (sx, sy), 3)
-                pygame.draw.circle(self.surface, (140, 140, 160), (sx, sy), 3, 1)
+                pygame.draw.circle(self.surface, p1_color, (sx, sy), 3)
+                pygame.draw.circle(self.surface, cfg.COLOR_TEXT_DIM, (sx, sy), 3, 1)
 
-        pygame.draw.rect(self.surface, COLOR_TEXT_DIM, (cx, cy, plot_w, plot_h), 1)
+        pygame.draw.rect(self.surface, cfg.COLOR_TEXT_DIM, (cx, cy, plot_w, plot_h), 1)
 
-        label_top = self.font_small.render(f"+{max_cp/100:.0f}", True, (90, 90, 90))
-        label_bot = self.font_small.render(f"-{max_cp/100:.0f}", True, (90, 90, 90))
+        divisor = getattr(cfg, "SCORE_DISPLAY_DIV", 100)
+        label_top = self.font_small.render(f"+{max_cp / divisor:.0f}", True, (90, 90, 90))
+        label_bot = self.font_small.render(f"-{max_cp / divisor:.0f}", True, (90, 90, 90))
         self.surface.blit(label_top, (cx + 2, cy + 1))
         self.surface.blit(label_bot, (cx + 2, cy + plot_h - label_bot.get_height() - 1))
 
     def _draw_move_table(self, x, y, w, h, move_history):
         pygame.draw.rect(self.surface, (30, 30, 34), (x, y, w, h))
-        pygame.draw.rect(self.surface, COLOR_TEXT_DIM, (x, y, w, h), 1)
+        pygame.draw.rect(self.surface, cfg.COLOR_TEXT_DIM, (x, y, w, h), 1)
 
-        header = self.font_small.render("Moves", True, COLOR_TEXT_DIM)
+        header = self.font_small.render("Moves", True, cfg.COLOR_TEXT_DIM)
         self.surface.blit(header, (x + 4, y + 2))
         header_h = header.get_height() + 4
         pygame.draw.line(
@@ -457,8 +470,8 @@ class SidePanel:
         visible = move_history[start:end]
 
         ly = y + header_h + 2
-        color_even = COLOR_TEXT
-        color_odd = tuple(min(c + 15, 255) for c in COLOR_TEXT)
+        color_even = cfg.COLOR_TEXT
+        color_odd = tuple(min(c + 15, 255) for c in cfg.COLOR_TEXT)
 
         for idx, line in enumerate(visible):
             color = color_even if idx % 2 == 0 else color_odd
@@ -467,7 +480,7 @@ class SidePanel:
             ly += line_h
 
         if total > end:
-            dots = self.font_small.render("...", True, COLOR_TEXT_DIM)
+            dots = self.font_small.render("...", True, cfg.COLOR_TEXT_DIM)
             self.surface.blit(dots, (x + 4, ly))
 
     # ==================================================================
@@ -495,11 +508,15 @@ class SidePanel:
     # ==================================================================
 
     @staticmethod
-    def _result_info(game_result):
-        if game_result == "white_wins":
-            return "White wins!", (100, 220, 100)
-        if game_result == "black_wins":
-            return "Black wins!", (220, 80, 80)
+    def _result_info(game_result, player_labels=None):
+        if player_labels is None:
+            player_labels = {0: "White", 1: "Black"}
+        p0 = player_labels.get(0, "White")
+        p1 = player_labels.get(1, "Black")
+        if game_result in ("white_wins", "p0_wins"):
+            return f"{p0} wins!", (100, 220, 100)
+        if game_result in ("black_wins", "p1_wins"):
+            return f"{p1} wins!", (220, 80, 80)
         if game_result == "stopped":
             return "Game stopped", (180, 180, 180)
         return "Draw!", (200, 200, 100)
@@ -513,11 +530,11 @@ class SidePanel:
 
         if depth is not None:
             dt = f"Depth: {depth}/{seldepth}" if seldepth else f"Depth: {depth}"
-            surf = self.font_normal.render(dt, True, COLOR_TEXT_DIM)
+            surf = self.font_normal.render(dt, True, cfg.COLOR_TEXT_DIM)
             self.surface.blit(surf, (cx, cy))
             cy += surf.get_height() + self._LINE_GAP
         elif ai_depth is not None:
-            surf = self.font_normal.render(f"Depth: {ai_depth}", True, COLOR_TEXT_DIM)
+            surf = self.font_normal.render(f"Depth: {ai_depth}", True, cfg.COLOR_TEXT_DIM)
             self.surface.blit(surf, (cx, cy))
             cy += surf.get_height() + self._LINE_GAP
 
@@ -527,7 +544,7 @@ class SidePanel:
         if nps is not None:
             parts.append(f"NPS: {self._fmt(nps)}")
         if parts:
-            surf = self.font_normal.render("  ".join(parts), True, COLOR_TEXT_DIM)
+            surf = self.font_normal.render("  ".join(parts), True, cfg.COLOR_TEXT_DIM)
             self.surface.blit(surf, (cx, cy))
             cy += surf.get_height() + self._LINE_GAP
 
@@ -535,19 +552,19 @@ class SidePanel:
             tt = f"Time: {elapsed / 1000.0:.2f}s"
         else:
             tt = f"Time: {time_limit}s"
-        surf = self.font_normal.render(tt, True, COLOR_TEXT_DIM)
+        surf = self.font_normal.render(tt, True, cfg.COLOR_TEXT_DIM)
         self.surface.blit(surf, (cx, cy))
         cy += surf.get_height() + self._SECTION_GAP
         return cy
 
     def _draw_pv(self, cx, cy, pv_moves):
-        max_text_w = PANEL_WIDTH - 2 * self._PAD_LEFT
+        max_text_w = cfg.PANEL_WIDTH - 2 * self._PAD_LEFT
         pv_str = "PV: " + " ".join(pv_moves)
-        surf = self.font_normal.render(pv_str, True, COLOR_TEXT_DIM)
+        surf = self.font_normal.render(pv_str, True, cfg.COLOR_TEXT_DIM)
         if surf.get_width() > max_text_w:
             for n in range(len(pv_moves), 0, -1):
                 pv_str = "PV: " + " ".join(pv_moves[:n]) + " ..."
-                surf = self.font_normal.render(pv_str, True, COLOR_TEXT_DIM)
+                surf = self.font_normal.render(pv_str, True, cfg.COLOR_TEXT_DIM)
                 if surf.get_width() <= max_text_w:
                     break
         self.surface.blit(surf, (cx, cy))

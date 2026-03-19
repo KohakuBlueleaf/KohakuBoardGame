@@ -1,4 +1,4 @@
-"""MiniChess GUI configuration constants."""
+"""GUI configuration constants."""
 
 import os
 
@@ -96,3 +96,15 @@ FPS = 30
 
 # Algorithm selection
 DEFAULT_ALGORITHM = "pvs"
+
+# Piece symbols per game (extensible)
+GAME_PIECES = {
+    "MiniChess": {
+        0: {1: "\u2659", 2: "\u2656", 3: "\u2658", 4: "\u2657", 5: "\u2655", 6: "\u2654"},
+        1: {1: "\u265f", 2: "\u265c", 3: "\u265e", 4: "\u265d", 5: "\u265b", 6: "\u265a"},
+    },
+    "Gomoku": {
+        0: {1: "\u25cf"},  # black stone
+        1: {1: "\u25cb"},  # white stone
+    },
+}

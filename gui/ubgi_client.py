@@ -96,18 +96,21 @@ class UBGIEngine:
         self._send("isready")
         self._wait_for("readyok", timeout=5.0)
 
-    def set_position(self, moves=None):
-        """Send 'position startpos' or 'position startpos moves ...'.
+    def set_position(self, moves=None, board_str=None, side_to_move=0):
+        """Send position to engine.
 
         Args:
-            moves: list of move strings in UCI format (e.g. ['a2a3', 'e5e4']),
-                   or None for start position only.
+            moves: list of move strings (appended after position).
+            board_str: encoded board string for 'position board' command.
+            side_to_move: 0 or 1, used with board_str.
         """
-        if moves:
-            move_str = " ".join(moves)
-            self._send(f"position startpos moves {move_str}")
+        if board_str is not None:
+            cmd = f"position board {board_str} {side_to_move}"
         else:
-            self._send("position startpos")
+            cmd = "position startpos"
+        if moves:
+            cmd += " moves " + " ".join(moves)
+        self._send(cmd)
 
     def go(
         self,
@@ -548,53 +551,58 @@ class UBGIEngine:
 
     @staticmethod
     def move_to_uci(move):
-        """Convert ((from_r, from_c), (to_r, to_c)) to UCI string like 'a2a3'.
+        """Convert ((from_r, from_c), (to_r, to_c)) to UBGI move string.
 
-        Coordinate mapping:
-            Col: 0='a', 1='b', 2='c', 3='d', 4='e'
-            Row: 0='6', 1='5', 2='4', 3='3', 4='2', 5='1'
-
-        Example: ((4, 0), (3, 0)) -> 'a2a3'
+        Placement move (from == to): returns just 'e5' (2 chars).
+        Board move: returns 'a2a3' (4 chars).
+        Uses board_height from config for row mapping.
         """
+        try:
+            import gui.config as _c
+        except ImportError:
+            import config as _c
+        bh = _c.BOARD_H
         (fr, fc), (tr, tc) = move
-        col_chars = "abcde"
-        row_chars = "654321"
-        return col_chars[fc] + row_chars[fr] + col_chars[tc] + row_chars[tr]
+        col_ch = lambda c: chr(ord('a') + c)
+        row_ch = lambda r: str(bh - r)
+        if (fr, fc) == (tr, tc):
+            return col_ch(tc) + row_ch(tr)
+        return col_ch(fc) + row_ch(fr) + col_ch(tc) + row_ch(tr)
 
     @staticmethod
     def uci_to_move(uci_str):
-        """Convert UCI string like 'a2a3' to ((from_r, from_c), (to_r, to_c)).
+        """Convert UBGI move string to ((from_r, from_c), (to_r, to_c)).
 
-        Coordinate mapping:
-            'a'-'e' -> col 0-4
-            '1'-'6' -> row 5,4,3,2,1,0  (i.e. '6'->0, '5'->1, ..., '1'->5)
-
-        Example: 'a2a3' -> ((4, 0), (3, 0))
+        2-char string = placement (from == to).
+        4-char string = board move.
         """
-        if uci_str is None or len(uci_str) < 4:
-            return None
-        col_map = {"a": 0, "b": 1, "c": 2, "d": 3, "e": 4}
-        row_map = {"6": 0, "5": 1, "4": 2, "3": 3, "2": 4, "1": 5}
-
-        fc = col_map.get(uci_str[0])
-        fr = row_map.get(uci_str[1])
-        tc = col_map.get(uci_str[2])
-        tr = row_map.get(uci_str[3])
-
-        if any(v is None for v in (fc, fr, tc, tr)):
+        try:
+            import gui.config as _c
+        except ImportError:
+            import config as _c
+        bh = _c.BOARD_H
+        if uci_str is None or len(uci_str) < 2:
             return None
 
+        def parse_sq(s, offset):
+            col = ord(s[offset]) - ord('a')
+            row = bh - int(s[offset + 1])
+            return (row, col)
+
+        if len(uci_str) <= 2:
+            sq = parse_sq(uci_str, 0)
+            return (sq, sq)
+        fr, fc = parse_sq(uci_str, 0)
+        tr, tc = parse_sq(uci_str, 2)
         return ((fr, fc), (tr, tc))
 
 
-UCIEngine = UBGIEngine  # backward compatibility
 
+def discover_engines(build_dir):
+    """Find UBGI/UCI engine executables in build directory.
 
-def discover_uci_engines(build_dir):
-    """Find minichess-uci.exe (or similar UCI engines) in build directory.
-
-    Looks for executables whose name contains 'uci' in the build directory
-    and its subdirectories.
+    Looks for executables whose name contains 'uci' or 'ubgi' in the build
+    directory and its subdirectories.
 
     Args:
         build_dir: Path to the build directory.
@@ -626,7 +634,7 @@ def discover_uci_engines(build_dir):
                 full = os.path.join(scan_dir, entry)
                 if os.path.isfile(full):
                     name = os.path.splitext(entry)[0]
-                    if "uci" in name.lower():
+                    if "uci" in name.lower() or "ubgi" in name.lower():
                         results.append((name, full))
         except OSError:
             continue

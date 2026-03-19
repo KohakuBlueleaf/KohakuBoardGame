@@ -5,10 +5,12 @@ communication, and action file parsing.
 """
 
 try:
-    from gui.config import *
+    import gui.config as cfg
 except ImportError:
-    from config import *
+    import config as cfg
 
+PLAYER_LABELS = {0: "White", 1: "Black"}
+PLAYER_COLORS = {0: (255, 255, 255), 1: (30, 30, 30)}
 
 # ---------------------------------------------------------------------------
 # Move tables (exact port from state.cpp)
@@ -60,28 +62,28 @@ _material_table = [0, 2, 6, 7, 8, 20, 100]
 
 def _make_initial_board():
     """Return the starting position as board[2][BOARD_H][BOARD_W]."""
-    board = [[[0] * BOARD_W for _ in range(BOARD_H)] for _ in range(2)]
+    board = [[[0] * cfg.BOARD_W for _ in range(cfg.BOARD_H)] for _ in range(2)]
     # White (player 0)
     # Row 4: pawns
-    for c in range(BOARD_W):
-        board[0][4][c] = PAWN
+    for c in range(cfg.BOARD_W):
+        board[0][4][c] = cfg.PAWN
     # Row 5: rook, knight, bishop, queen, king
-    board[0][5][0] = ROOK
-    board[0][5][1] = KNIGHT
-    board[0][5][2] = BISHOP
-    board[0][5][3] = QUEEN
-    board[0][5][4] = KING
+    board[0][5][0] = cfg.ROOK
+    board[0][5][1] = cfg.KNIGHT
+    board[0][5][2] = cfg.BISHOP
+    board[0][5][3] = cfg.QUEEN
+    board[0][5][4] = cfg.KING
 
     # Black (player 1)
     # Row 1: pawns
-    for c in range(BOARD_W):
-        board[1][1][c] = PAWN
+    for c in range(cfg.BOARD_W):
+        board[1][1][c] = cfg.PAWN
     # Row 0: king, queen, bishop, knight, rook
-    board[1][0][0] = KING
-    board[1][0][1] = QUEEN
-    board[1][0][2] = BISHOP
-    board[1][0][3] = KNIGHT
-    board[1][0][4] = ROOK
+    board[1][0][0] = cfg.KING
+    board[1][0][1] = cfg.QUEEN
+    board[1][0][2] = cfg.BISHOP
+    board[1][0][3] = cfg.KNIGHT
+    board[1][0][4] = cfg.ROOK
 
     return board
 
@@ -133,18 +135,18 @@ class MiniChessState:
         self_board = self.board[self.player]
         oppn_board = self.board[1 - self.player]
 
-        for i in range(BOARD_H):
-            for j in range(BOARD_W):
+        for i in range(cfg.BOARD_H):
+            for j in range(cfg.BOARD_W):
                 now_piece = self_board[i][j]
                 if not now_piece:
                     continue
 
                 if now_piece == 1:  # Pawn
-                    if self.player and i < BOARD_H - 1:
+                    if self.player and i < cfg.BOARD_H - 1:
                         # Black pawn -- moves DOWN (row increases)
                         if not oppn_board[i + 1][j] and not self_board[i + 1][j]:
                             all_actions.append(((i, j), (i + 1, j)))
-                        if j < BOARD_W - 1:
+                        if j < cfg.BOARD_W - 1:
                             oppn_piece = oppn_board[i + 1][j + 1]
                             if oppn_piece > 0:
                                 all_actions.append(((i, j), (i + 1, j + 1)))
@@ -165,7 +167,7 @@ class MiniChessState:
                         # White pawn -- moves UP (row decreases)
                         if not oppn_board[i - 1][j] and not self_board[i - 1][j]:
                             all_actions.append(((i, j), (i - 1, j)))
-                        if j < BOARD_W - 1:
+                        if j < cfg.BOARD_W - 1:
                             oppn_piece = oppn_board[i - 1][j + 1]
                             if oppn_piece > 0:
                                 all_actions.append(((i, j), (i - 1, j + 1)))
@@ -192,11 +194,11 @@ class MiniChessState:
 
                     for part in range(st, end):
                         move_list = _move_table_rook_bishop[part]
-                        for k in range(max(BOARD_H, BOARD_W)):
+                        for k in range(max(cfg.BOARD_H, cfg.BOARD_W)):
                             dr, dc = move_list[k]
                             pr, pc = dr + i, dc + j
 
-                            if pr >= BOARD_H or pr < 0 or pc >= BOARD_W or pc < 0:
+                            if pr >= cfg.BOARD_H or pr < 0 or pc >= cfg.BOARD_W or pc < 0:
                                 break
                             if self_board[pr][pc]:
                                 break
@@ -217,7 +219,7 @@ class MiniChessState:
                         x = dr + i
                         y = dc + j
 
-                        if x >= BOARD_H or x < 0 or y >= BOARD_W or y < 0:
+                        if x >= cfg.BOARD_H or x < 0 or y >= cfg.BOARD_W or y < 0:
                             continue
                         if self_board[x][y]:
                             continue
@@ -233,7 +235,7 @@ class MiniChessState:
                     for dr, dc in _move_table_king:
                         pr, pc = dr + i, dc + j
 
-                        if pr >= BOARD_H or pr < 0 or pc >= BOARD_W or pc < 0:
+                        if pr >= cfg.BOARD_H or pr < 0 or pc >= cfg.BOARD_W or pc < 0:
                             continue
                         if self_board[pr][pc]:
                             continue
@@ -268,15 +270,15 @@ class MiniChessState:
         moved = new_board[self.player][fr][fc]
 
         # Promotion: pawn reaching the far rank becomes queen
-        if moved == PAWN and (tr == BOARD_H - 1 or tr == 0):
-            moved = QUEEN
+        if moved == cfg.PAWN and (tr == cfg.BOARD_H - 1 or tr == 0):
+            moved = cfg.QUEEN
 
         # Capture: clear opponent piece on destination
         if new_board[1 - self.player][tr][tc]:
-            new_board[1 - self.player][tr][tc] = EMPTY
+            new_board[1 - self.player][tr][tc] = cfg.EMPTY
 
         # Move the piece
-        new_board[self.player][fr][fc] = EMPTY
+        new_board[self.player][fr][fc] = cfg.EMPTY
         new_board[self.player][tr][tc] = moved
 
         ns = MiniChessState(new_board, 1 - self.player, self.step + 1)
@@ -305,11 +307,11 @@ class MiniChessState:
             # The current player can capture the king => current player wins
             return ("win", self.player)
 
-        if self.step > MAX_STEP:
+        if self.step > cfg.MAX_STEP:
             white_material = 0
             black_material = 0
-            for i in range(BOARD_H):
-                for j in range(BOARD_W):
+            for i in range(cfg.BOARD_H):
+                for j in range(cfg.BOARD_W):
                     piece = self.board[0][i][j]
                     if piece:
                         white_material += _material_table[piece]
@@ -344,9 +346,9 @@ class MiniChessState:
         lines = []
         lines.append(str(self.player))
         for pl in range(2):
-            for i in range(BOARD_H):
+            for i in range(cfg.BOARD_H):
                 lines.append(
-                    " ".join(str(self.board[pl][i][j]) for j in range(BOARD_W)) + " "
+                    " ".join(str(self.board[pl][i][j]) for j in range(cfg.BOARD_W)) + " "
                 )
             lines.append("")
         return "\n".join(lines) + "\n"
@@ -403,4 +405,4 @@ def format_move(move):
     Uses *COL_LABELS* and *ROW_LABELS* from config.
     """
     (fr, fc), (tr, tc) = move
-    return f"{COL_LABELS[fc]}{ROW_LABELS[fr]}->" f"{COL_LABELS[tc]}{ROW_LABELS[tr]}"
+    return f"{cfg.COL_LABELS[fc]}{cfg.ROW_LABELS[fr]}->" f"{cfg.COL_LABELS[tc]}{cfg.ROW_LABELS[tr]}"

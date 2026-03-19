@@ -1,55 +1,108 @@
-"""MiniChess GUI -- entry point and game loop."""
+"""UBGI GUI -- entry point and game loop."""
 
+import sys
 import time
+import argparse
 
 import pygame
 
 try:
-    from gui.config import *
-    from gui.game_engine import MiniChessState, format_move
     from gui.board_renderer import BoardRenderer
     from gui.ui_panels import SidePanel
-    from gui.uci_client import UCIEngine, discover_uci_engines
+    from gui.ubgi_client import UBGIEngine, discover_engines
+    import gui.config as _cfg
 except ImportError:
-    from config import *
-    from game_engine import MiniChessState, format_move
     from board_renderer import BoardRenderer
     from ui_panels import SidePanel
-    from uci_client import UCIEngine, discover_uci_engines
+    from ubgi_client import UBGIEngine, discover_engines
+    import config as _cfg
+
+
+def _get_game_module(game_name):
+    """Return (StateClass, format_move, RendererClass, player_labels, player_colors) for the given game."""
+    if game_name in ("Gomoku", "gomoku"):
+        try:
+            from gui.games.gomoku_engine import GomokuState, format_move, PLAYER_LABELS, PLAYER_COLORS
+            from gui.games.gomoku_renderer import GomokuRenderer
+        except ImportError:
+            from games.gomoku_engine import GomokuState, format_move, PLAYER_LABELS, PLAYER_COLORS
+            from games.gomoku_renderer import GomokuRenderer
+        return GomokuState, format_move, GomokuRenderer, PLAYER_LABELS, PLAYER_COLORS
+    try:
+        from gui.games.minichess_engine import MiniChessState, format_move, PLAYER_LABELS, PLAYER_COLORS
+        from gui.games.minichess_renderer import MiniChessRenderer
+    except ImportError:
+        from games.minichess_engine import MiniChessState, format_move, PLAYER_LABELS, PLAYER_COLORS
+        from games.minichess_renderer import MiniChessRenderer
+    return MiniChessState, format_move, MiniChessRenderer, PLAYER_LABELS, PLAYER_COLORS
+
+
+def _configure_board_size(game_name):
+    """Set config board dimensions based on game type."""
+    if game_name in ("Gomoku", "gomoku"):
+        _cfg.BOARD_H = 9
+        _cfg.BOARD_W = 9
+        _cfg.SQUARE_SIZE = 50  # smaller squares for bigger board
+        _cfg.MAX_STEP = _cfg.BOARD_H * _cfg.BOARD_W
+        _cfg.SCORE_PLOT_MAX_CP = 10000  # gomoku threats score large
+        _cfg.SCORE_DISPLAY_DIV = 2000  # normalize to ±5 range for display
+    else:
+        _cfg.BOARD_H = 6
+        _cfg.BOARD_W = 5
+        _cfg.SQUARE_SIZE = 80
+        _cfg.MAX_STEP = 100
+        _cfg.SCORE_PLOT_MAX_CP = 500  # chess centipawns
+        _cfg.SCORE_DISPLAY_DIV = 100  # centipawns → pawns
+    _cfg.BOARD_PIXEL_W = _cfg.BOARD_W * _cfg.SQUARE_SIZE
+    _cfg.BOARD_PIXEL_H = _cfg.BOARD_H * _cfg.SQUARE_SIZE
+    _cfg.COL_LABELS = "".join(chr(65 + i) for i in range(_cfg.BOARD_W))
+    _cfg.ROW_LABELS = "".join(str(_cfg.BOARD_H - i) for i in range(_cfg.BOARD_H))
+    _cfg.PANEL_X = _cfg.BOARD_X + _cfg.BOARD_PIXEL_W + 16
+    _cfg.BOTTOM_Y = _cfg.BOARD_Y + _cfg.BOARD_PIXEL_H + _cfg.LABEL_MARGIN + 4
+    _cfg.WINDOW_W = _cfg.PANEL_X + _cfg.PANEL_WIDTH + 12
+    _cfg.WINDOW_H = _cfg.BOTTOM_Y + _cfg.BOTTOM_H + 8
 
 
 class GameApp:
     """Main application class."""
 
-    def __init__(self):
-        pygame.init()
-        pygame.display.set_caption("MiniChess")
+    def __init__(self, game_name="minichess"):
+        # Configure board size BEFORE creating the window
+        _configure_board_size(game_name)
 
-        self.screen = pygame.display.set_mode((WINDOW_W, WINDOW_H))
+        pygame.init()
+        pygame.display.set_caption(game_name.capitalize())
+
+        self.screen = pygame.display.set_mode((_cfg.WINDOW_W, _cfg.WINDOW_H))
         self.clock = pygame.time.Clock()
 
-        self.board_renderer = BoardRenderer(self.screen)
+        # Select game module (state class, move formatter, renderer, labels, colors)
+        state_cls, fmt_move, renderer_cls, player_labels, player_colors = _get_game_module(game_name)
+        self._state_class = state_cls
+        self._format_move = fmt_move
+        self._game_name = game_name
+        self._player_labels = player_labels   # {0: "White"/"Black", 1: "Black"/"White"}
+        self._player_colors = player_colors   # {0: (r,g,b), 1: (r,g,b)}
+
+        game_renderer = renderer_cls(self.screen)
+        self.board_renderer = BoardRenderer(self.screen, game_renderer=game_renderer)
         self.side_panel = SidePanel(self.screen)
 
-        self.game_state = MiniChessState.initial()
+        self.game_state = state_cls.initial()
 
         # Discover engines
-        self._available_engines = discover_uci_engines(BUILD_DIR)
+        self._available_engines = discover_engines(_cfg.BUILD_DIR)
 
-        # Engine option definitions (list of dicts from UCIEngine.options)
+        # Engine option definitions
         self._engine_options = []
-        # Algorithm list read from engine's combo option
         self._engine_algorithms = []
-
-        # Game description from UBGI handshake (defaults for MiniChess)
-        self._game_name = "Unknown"
-        self._board_width = 5
-        self._board_height = 6
+        self._board_width = _cfg.BOARD_W
+        self._board_height = _cfg.BOARD_H
 
         # Per-side state
         self.white = {
             "engine": None,  # path or None for human
-            "algo": DEFAULT_ALGORITHM,
+            "algo": _cfg.DEFAULT_ALGORITHM,
             "params": {},  # algo-specific search params
             "depth": 0,  # 0 = use time limit
         }
@@ -57,18 +110,18 @@ class GameApp:
             "engine": (
                 self._available_engines[0][1] if self._available_engines else None
             ),
-            "algo": DEFAULT_ALGORITHM,
+            "algo": _cfg.DEFAULT_ALGORITHM,
             "params": {},
             "depth": 0,
         }
         self.analyze = {
             "enabled": False,
             "engine": None,  # auto-select first available
-            "algo": DEFAULT_ALGORITHM,
+            "algo": _cfg.DEFAULT_ALGORITHM,
             "params": {},
         }
 
-        self.time_limit = DEFAULT_TIMEOUT
+        self.time_limit = _cfg.DEFAULT_TIMEOUT
 
         self._probe_engine_options()
 
@@ -145,7 +198,7 @@ class GameApp:
         self._algo_defaults = {}  # algo_name -> {name: default_val}
 
         try:
-            probe = UCIEngine(exe_path)
+            probe = UBGIEngine(exe_path)
             initial_options = list(probe.options)
         except RuntimeError:
             return
@@ -216,7 +269,7 @@ class GameApp:
         if existing is not None and existing.is_alive():
             return existing
         try:
-            engine = UCIEngine(side_config["engine"])
+            engine = UBGIEngine(side_config["engine"])
             engine.set_option("Algorithm", side_config["algo"])
             for name, value in side_config["params"].items():
                 engine.set_option(name, str(value))
@@ -258,7 +311,7 @@ class GameApp:
         if exe_path is None:
             return None
         try:
-            engine = UCIEngine(exe_path)
+            engine = UBGIEngine(exe_path)
             engine.set_option("Algorithm", self.analyze["algo"])
             for name, value in self.analyze["params"].items():
                 engine.set_option(name, str(value))
@@ -303,7 +356,7 @@ class GameApp:
             self._analyze_engine = None
 
     def _on_analyze_info(self, info_dict):
-        """Normalize score to white's perspective for the score bar."""
+        """Normalize score to White-labeled player's perspective for the score bar."""
         if "score_cp" in info_dict and self.game_state.player == 1:
             info_dict["score_cp"] = -info_dict["score_cp"]
         # Preserve last known PV if new info doesn't have one
@@ -382,7 +435,7 @@ class GameApp:
                 self.handle_events()
                 self.update()
                 self.draw()
-                self.clock.tick(FPS)
+                self.clock.tick(_cfg.FPS)
         finally:
             self._shutdown_uci_engines()
             pygame.quit()
@@ -467,16 +520,30 @@ class GameApp:
 
     def handle_board_click(self, row, col):
         player = self.game_state.player
-        clicked_piece = self.game_state.board[player][row][col]
+
+        # Get the clicked piece; board layout differs per game
+        try:
+            clicked_piece = self.game_state.board[player][row][col]
+        except (TypeError, IndexError):
+            # Non-chess games (e.g. Gomoku) use board[row][col]
+            clicked_piece = _cfg.EMPTY
 
         if self.selected_piece is None:
-            if clicked_piece != EMPTY:
+            # For placement games (Gomoku), check if any legal move targets (row,col)
+            placement_move = None
+            for m in self.game_state.legal_actions:
+                if m[1] == (row, col):
+                    placement_move = m
+                    break
+            if placement_move is not None and clicked_piece == _cfg.EMPTY:
+                self.execute_move(placement_move)
+            elif clicked_piece != _cfg.EMPTY:
                 self._select_piece(row, col)
         else:
             target_move = self._find_legal_move(row, col)
             if target_move is not None:
                 self.execute_move(target_move)
-            elif clicked_piece != EMPTY and (row, col) != self.selected_piece:
+            elif clicked_piece != _cfg.EMPTY and (row, col) != self.selected_piece:
                 self._select_piece(row, col)
             else:
                 self.selected_piece = None
@@ -519,22 +586,22 @@ class GameApp:
         mover = self.game_state.player
         prefix = "W" if mover == 0 else "B"
         step = self.game_state.step
-        move_str = f"{step}. {prefix}: {format_move(move)}"
+        move_str = f"{step}. {prefix}: {self._format_move(move)}"
 
         new_state = self.game_state.next_state(move)
         self.game_state = new_state
 
         self.move_history.append(move_str)
         self.last_move = move
-        self.uci_moves.append(UCIEngine.move_to_uci(move))
+        self.uci_moves.append(UBGIEngine.move_to_uci(move))
         # Determine score source
         score_cp = self.search_info.get("score_cp")
         if self.analyze["enabled"]:
             source = "analyze"
         elif mover == 0 and self.white["engine"] is not None:
-            source = "white"
+            source = "p0"
         elif mover == 1 and self.black["engine"] is not None:
-            source = "black"
+            source = "p1"
         else:
             source = "human"
         self.score_history.append((mover, score_cp, source))
@@ -545,7 +612,7 @@ class GameApp:
 
         result, winner = self.game_state.check_game_over()
         if result == "win":
-            self.game_result = "white_wins" if winner == 0 else "black_wins"
+            self.game_result = "p0_wins" if winner == 0 else "p1_wins"
             return
         if result == "draw":
             self.game_result = "draw"
@@ -620,7 +687,7 @@ class GameApp:
             self.ai_result = {"move": None, "depth": 0, "ready": True}
             return
 
-        move = UCIEngine.uci_to_move(bestmove_str)
+        move = UBGIEngine.uci_to_move(bestmove_str)
         depth = self.search_info.get("depth", 0)
         self.ai_result = {"move": move, "depth": depth, "ready": True}
 
@@ -641,7 +708,7 @@ class GameApp:
                 self._last_ai_time = time.time()
             else:
                 loser = self.game_state.player
-                self.game_result = "black_wins" if loser == 0 else "white_wins"
+                self.game_result = "p1_wins" if loser == 0 else "p0_wins"
             return
 
         # AI vs AI auto-trigger
@@ -652,7 +719,7 @@ class GameApp:
             and not self._paused
         ):
             elapsed = time.time() - self._last_ai_time
-            if elapsed >= AI_VS_AI_DELAY:
+            if elapsed >= _cfg.AI_VS_AI_DELAY:
                 self._trigger_ai_if_needed()
 
     # ------------------------------------------------------------------
@@ -660,7 +727,7 @@ class GameApp:
     # ------------------------------------------------------------------
 
     def draw(self):
-        self.screen.fill(COLOR_BG)
+        self.screen.fill(_cfg.COLOR_BG)
 
         pv = (
             self.search_info.get("pv")
@@ -686,12 +753,15 @@ class GameApp:
             paused=self._paused,
             analyze_enabled=self.analyze["enabled"],
             gaming=self._is_gaming(),
+            player_labels=self._player_labels,
+            player_colors=self._player_colors,
         )
 
         self.side_panel.draw_bottom(
             score_cp=self.search_info.get("score_cp"),
             score_history=self.score_history,
             move_history=self.move_history,
+            player_colors=self._player_colors,
         )
 
         pygame.display.flip()
@@ -707,7 +777,7 @@ class GameApp:
         for attr in ("white_uci_engine", "black_uci_engine"):
             self._quit_engine(attr)
 
-        self.game_state = MiniChessState.initial()
+        self.game_state = self._state_class.initial()
         self.selected_piece = None
         self.legal_moves_for_selected = []
         self.last_move = None
@@ -731,10 +801,10 @@ class GameApp:
         import tkinter as tk
         from tkinter import ttk
 
-        self._available_engines = discover_uci_engines(BUILD_DIR)
+        self._available_engines = discover_engines(_cfg.BUILD_DIR)
         engine_names = ["Human"] + [name for name, _path in self._available_engines]
         engine_paths = [None] + [path for _name, path in self._available_engines]
-        algo_list = self._engine_algorithms or [DEFAULT_ALGORITHM]
+        algo_list = self._engine_algorithms or [_cfg.DEFAULT_ALGORITHM]
 
         def _engine_index(exe_path):
             if exe_path is None:
@@ -927,10 +997,10 @@ class GameApp:
         import tkinter as tk
         from tkinter import ttk
 
-        self._available_engines = discover_uci_engines(BUILD_DIR)
+        self._available_engines = discover_engines(_cfg.BUILD_DIR)
         engine_names = ["Human"] + [name for name, _path in self._available_engines]
         engine_paths = [None] + [path for _name, path in self._available_engines]
-        algo_list = self._engine_algorithms or [DEFAULT_ALGORITHM]
+        algo_list = self._engine_algorithms or [_cfg.DEFAULT_ALGORITHM]
 
         def _engine_index(exe_path):
             if exe_path is None:
@@ -1216,7 +1286,14 @@ class GameApp:
 
 
 def main():
-    app = GameApp()
+    parser = argparse.ArgumentParser(description="UBGI GUI")
+    parser.add_argument(
+        "--game", default="minichess",
+        help="Game type: minichess, gomoku (default: minichess)",
+    )
+    args = parser.parse_args()
+
+    app = GameApp(game_name=args.game)
     app.run()
 
 
