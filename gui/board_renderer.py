@@ -55,6 +55,7 @@ class BoardRenderer:
         # _glyphs[player][piece_type] = (main_surface, shadow_surface, rect)
         self._glyphs = {0: {}, 1: {}}
         self._pre_render_glyphs()
+        self._num_font = pygame.font.SysFont("Arial", 14, bold=True)
 
     # -----------------------------------------------------------------
     # Pre-rendering helpers
@@ -273,7 +274,7 @@ class BoardRenderer:
             pygame.SRCALPHA,
         )
 
-        num_font = pygame.font.SysFont("Arial", 14, bold=True)
+        num_font = self._num_font
 
         max_arrows = min(len(pv_moves), 6)
         for i in range(max_arrows):

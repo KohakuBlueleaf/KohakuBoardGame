@@ -501,6 +501,7 @@ class GameApp:
             return
 
         if self.analyze["enabled"] and not self._is_gaming():
+            self._stop_analysis()
             self.search_info = {}
             self._start_analysis()
         elif self._is_gaming():
@@ -559,9 +560,10 @@ class GameApp:
             )
 
     def _on_uci_info(self, info_dict):
-        """Normalize score to white's perspective for the score bar."""
         if "score_cp" in info_dict and self.game_state.player == 1:
             info_dict["score_cp"] = -info_dict["score_cp"]
+        if "pv" not in info_dict and "pv" in self.search_info:
+            info_dict["pv"] = self.search_info["pv"]
         self.search_info = info_dict
 
     def _on_uci_bestmove(self, bestmove_str):
@@ -590,7 +592,7 @@ class GameApp:
                 self._last_ai_time = time.time()
             else:
                 loser = self.game_state.player
-                self.game_result = "white_wins" if loser == 0 else "black_wins"
+                self.game_result = "black_wins" if loser == 0 else "white_wins"
             return
 
         # AI vs AI auto-trigger
