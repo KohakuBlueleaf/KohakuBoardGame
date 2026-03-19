@@ -1,19 +1,19 @@
 # MiniChess
 
-A 6x5 chess variant engine with UCI protocol, NNUE evaluation, and multiple search algorithms.
+A 6x5 chess variant engine with UBGI protocol, NNUE evaluation, and multiple search algorithms. Also supports Gomoku (9x9, 5-in-a-row).
 
 ## Build
 
 ```bash
-make all        # builds uci engine + selfplay, benchmark, datagen, nnue_bench
-make uci        # UCI engine only
+make all        # builds minichess ubgi engine + selfplay, benchmark, datagen, nnue_bench
+make ubgi       # UBGI engine only
 ```
 
 Requires `g++` with C++20 support. Builds with `-O3 -march=native` for SIMD.
 
 Without NNUE:
 ```bash
-make CXXFLAGS="-std=c++2a -O3 -DNO_NNUE" uci
+make CXXFLAGS="-std=c++2a -O3 -DNO_NNUE" ubgi
 ```
 
 ## Board
@@ -30,13 +30,13 @@ make CXXFLAGS="-std=c++2a -O3 -DNO_NNUE" uci
 
 6x5 board. King capture wins. Pawns promote on back rank. Draw after 100 steps with equal material.
 
-## UCI Engine
+## Engine
 
 ```bash
-./build/minichess-uci
+./build/minichess-ubgi
 ```
 
-Supports `go depth/movetime/infinite`, `stop`, `setoption`, algorithm switching.
+Supports `go depth/movetime/infinite`, `stop`, `setoption`, algorithm switching via UBGI protocol.
 
 ### Runtime Parameters
 
@@ -60,7 +60,7 @@ UseLMR (LMRFullDepth, LMRDepthLimit)
 
 **Global**: `Hash` (TT size in bits, 2^N entries).
 
-Parameters are advertised dynamically via UCI protocol based on the current algorithm.
+Parameters are advertised dynamically via UBGI protocol based on the current algorithm.
 
 ## GUI
 
@@ -80,14 +80,14 @@ python gui/main.py
 
 ```bash
 # Human vs AI
-python cli/cli.py --white human --black build/minichess-uci.exe --time 2000
+python cli/cli.py --white human --black build/minichess-ubgi.exe --time 2000
 
 # AI vs AI tournament
-python cli/cli.py --white build/minichess-uci.exe --black build/minichess-uci.exe \
+python cli/cli.py --white build/minichess-ubgi.exe --black build/minichess-ubgi.exe \
     --white-algo pvs --black-algo alphabeta --games 100 --time 2000
 
 # Fixed depth
-python cli/cli.py --white build/minichess-uci.exe --black build/minichess-uci.exe --depth 8
+python cli/cli.py --white build/minichess-ubgi.exe --black build/minichess-ubgi.exe --depth 8
 ```
 
 ## Evaluation
@@ -142,11 +142,12 @@ src/
       killer_moves.hpp      # killer move heuristic
       move_ordering.hpp     # MVV-LVA + killer ordering
       quiescence.hpp        # quiescence search
-  uci/
-    uci.hpp/cpp             # UCI protocol, dynamic option advertisement
+  ubgi/
+    ubgi.hpp/cpp            # UBGI protocol, dynamic option advertisement
+  games/
+    minichess/              # MiniChess state, move gen (bitboard), eval
+    gomoku/                 # Gomoku state, threat-based eval
   nnue/                     # NNUE: model, scalar/SIMD/quantized kernels
-  state/
-    state.hpp/cpp           # board, move gen (bitboard), eval dispatch
 gui/                        # Pygame GUI
 cli/                        # CLI tournament runner
 scripts/                    # training pipeline
@@ -155,14 +156,14 @@ scripts/                    # training pipeline
 ## Architecture
 
 ```
-UCI setoption ──> ParamMap (map<string,string>)
-                      |
-          ┌───────────┼───────────┐
-          v           v           v
-    PVS::search   AB::search   MM::search
-          |           |           |
-    PVSParams     ABParams     MMParams
-    ::from_map()  ::from_map() ::from_map()
+UBGI setoption ──> ParamMap (map<string,string>)
+                       |
+           ┌───────────┼───────────┐
+           v           v           v
+     PVS::search   AB::search   MM::search
+           |           |           |
+     PVSParams     ABParams     MMParams
+     ::from_map()  ::from_map() ::from_map()
 ```
 
-Each algorithm owns its typed params struct, default values, and UCI option definitions. The registry maps names to search functions and defaults. The engine dynamically advertises options based on the selected algorithm.
+Each algorithm owns its typed params struct, default values, and UBGI option definitions. The registry maps names to search functions and defaults. The engine dynamically advertises options based on the selected algorithm.
