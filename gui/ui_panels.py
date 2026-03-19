@@ -134,17 +134,25 @@ class SidePanel:
         cx = PANEL_X + self._PAD_LEFT
         cy = PANEL_Y + self._PAD_TOP
 
-        # Derive display label from mode + analyze state
-        if analyze_enabled:
-            title_label = "Analyze"
-        else:
-            mode_labels = {
-                "human_vs_human": "Human vs Human",
-                "human_vs_ai": "Human vs AI",
-                "ai_vs_ai": "AI vs AI",
-            }
+        # Title: mode + gaming state indicator
+        mode_labels = {
+            "human_vs_human": "Human vs Human",
+            "human_vs_ai": "Human vs AI",
+            "ai_vs_ai": "AI vs AI",
+        }
+        if gaming:
             title_label = mode_labels.get(mode, mode)
-        surf = self.font_title.render(title_label, True, COLOR_TEXT)
+            title_color = (100, 220, 100)  # green = game in progress
+        elif analyze_enabled:
+            title_label = "Analyze"
+            title_color = (100, 200, 220)  # cyan
+        elif game_result is not None and game_result != "stopped":
+            title_label = mode_labels.get(mode, mode)
+            title_color = COLOR_TEXT_DIM  # dimmed = game over
+        else:
+            title_label = "Free Play"
+            title_color = COLOR_TEXT
+        surf = self.font_title.render(title_label, True, title_color)
         self.surface.blit(surf, (cx, cy))
         cy += surf.get_height() + self._SECTION_GAP
 
