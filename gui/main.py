@@ -28,6 +28,14 @@ def _get_game_module(game_name):
             from games.gomoku_engine import GomokuState, format_move, PLAYER_LABELS, PLAYER_COLORS
             from games.gomoku_renderer import GomokuRenderer
         return GomokuState, format_move, GomokuRenderer, PLAYER_LABELS, PLAYER_COLORS
+    if game_name in ("MiniShogi", "minishogi"):
+        try:
+            from gui.games.minishogi_engine import MiniShogiState, format_move, PLAYER_LABELS, PLAYER_COLORS
+            from gui.games.minishogi_renderer import MiniShogiRenderer
+        except ImportError:
+            from games.minishogi_engine import MiniShogiState, format_move, PLAYER_LABELS, PLAYER_COLORS
+            from games.minishogi_renderer import MiniShogiRenderer
+        return MiniShogiState, format_move, MiniShogiRenderer, PLAYER_LABELS, PLAYER_COLORS
     try:
         from gui.games.minichess_engine import MiniChessState, format_move, PLAYER_LABELS, PLAYER_COLORS
         from gui.games.minichess_renderer import MiniChessRenderer
@@ -46,6 +54,13 @@ def _configure_board_size(game_name):
         _cfg.MAX_STEP = _cfg.BOARD_H * _cfg.BOARD_W
         _cfg.SCORE_PLOT_MAX_CP = 10000  # gomoku threats score large
         _cfg.SCORE_DISPLAY_DIV = 2000  # normalize to ±5 range for display
+    elif game_name in ("MiniShogi", "minishogi"):
+        _cfg.BOARD_H = 5
+        _cfg.BOARD_W = 5
+        _cfg.SQUARE_SIZE = 70  # larger squares for kanji
+        _cfg.MAX_STEP = 200
+        _cfg.SCORE_PLOT_MAX_CP = 2000
+        _cfg.SCORE_DISPLAY_DIV = 100
     else:
         _cfg.BOARD_H = 6
         _cfg.BOARD_W = 5
@@ -422,6 +437,7 @@ class GameApp:
         self.search_info = {}
         self.selected_piece = None
         self.legal_moves_for_selected = []
+        self._sync_hand_highlight(None)
         if self.analyze["enabled"]:
             self._start_analysis()
 
@@ -453,8 +469,7 @@ class GameApp:
                 if event.button == 1:  # Left click
                     self._handle_left_click(event.pos)
                 elif event.button == 3:  # Right click -- deselect
-                    self.selected_piece = None
-                    self.legal_moves_for_selected = []
+                    self._deselect_piece()
 
             elif event.type == pygame.MOUSEWHEEL:
                 self.side_panel.set_scroll(-event.y)
@@ -469,6 +484,14 @@ class GameApp:
             if self._is_human_turn():
                 self.handle_board_click(board_pos[0], board_pos[1])
             return
+
+        # Check hand piece click (MiniShogi drop support)
+        gr = self.board_renderer.game_renderer
+        if gr is not None and hasattr(gr, 'screen_to_hand') and self._is_human_turn():
+            hand_sel = gr.screen_to_hand(x, y, self.game_state)
+            if hand_sel is not None:
+                self._select_hand_piece(hand_sel)
+                return
 
         action = self.side_panel.handle_click(x, y)
         if action == "new_game":
@@ -489,8 +512,7 @@ class GameApp:
             self.open_settings()
         elif key == pygame.K_ESCAPE:
             if self.selected_piece is not None:
-                self.selected_piece = None
-                self.legal_moves_for_selected = []
+                self._deselect_piece()
             else:
                 self._running = False
         elif key == pygame.K_SPACE:
@@ -546,20 +568,65 @@ class GameApp:
             elif clicked_piece != _cfg.EMPTY and (row, col) != self.selected_piece:
                 self._select_piece(row, col)
             else:
-                self.selected_piece = None
-                self.legal_moves_for_selected = []
+                self._deselect_piece()
 
     def _select_piece(self, row, col):
         self.selected_piece = (row, col)
         self.legal_moves_for_selected = [
             m for m in self.game_state.legal_actions if m[0] == (row, col)
         ]
+        self._sync_hand_highlight(None)
+
+    def _select_hand_piece(self, hand_key):
+        """Select a hand piece for dropping.
+
+        Args:
+            hand_key: (BOARD_SIZE, piece_type) tuple from the renderer.
+        """
+        self.selected_piece = hand_key
+        self.legal_moves_for_selected = [
+            m for m in self.game_state.legal_actions if m[0] == hand_key
+        ]
+        self._sync_hand_highlight(hand_key)
+
+    def _deselect_piece(self):
+        """Clear selection and hand highlight."""
+        self.selected_piece = None
+        self.legal_moves_for_selected = []
+        self._sync_hand_highlight(None)
+
+    def _sync_hand_highlight(self, hand_key):
+        """Update the renderer's hand highlight if it supports it."""
+        gr = self.board_renderer.game_renderer
+        if gr is not None and hasattr(gr, 'set_selected_hand'):
+            gr.set_selected_hand(hand_key)
 
     def _find_legal_move(self, dest_row, dest_col):
+        """Find a legal move to (dest_row, dest_col) from the current selection.
+
+        For games with promotion (e.g. MiniShogi), if both a promotion and
+        non-promotion move exist for the same destination, prefer promotion.
+        The promotion move has to_r >= BOARD_H while the normal move does not.
+        """
+        bh = _cfg.BOARD_H
+        matches = []
         for move in self.legal_moves_for_selected:
-            if move[1] == (dest_row, dest_col):
-                return move
-        return None
+            (_, _), (tr, tc) = move
+            # Match destination: actual row is tr if tr < bh, else tr - bh (promotion)
+            actual_tr = tr - bh if tr >= bh else tr
+            if actual_tr == dest_row and tc == dest_col:
+                matches.append(move)
+
+        if not matches:
+            return None
+        if len(matches) == 1:
+            return matches[0]
+
+        # Multiple matches: prefer the promotion move (to_r >= bh)
+        for m in matches:
+            if m[1][0] >= bh:
+                return m
+        return matches[0]
 
     # ------------------------------------------------------------------
     # Move execution
@@ -609,6 +676,7 @@ class GameApp:
         self.side_panel._scroll_offset = max(0, len(self.move_history))
         self.selected_piece = None
         self.legal_moves_for_selected = []
+        self._sync_hand_highlight(None)
 
         result, winner = self.game_state.check_game_over()
         if result == "win":

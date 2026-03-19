@@ -113,15 +113,21 @@ class BoardRenderer:
         if last_move is None:
             return
         (fr, fc), (tr, tc) = last_move
-        self._draw_overlay(fr, fc, cfg.COLOR_LAST_MOVE)
-        self._draw_overlay(tr, tc, cfg.COLOR_LAST_MOVE)
+        # Skip out-of-bounds squares (drop source or promotion encoding)
+        if 0 <= fr < cfg.BOARD_H and 0 <= fc < cfg.BOARD_W:
+            self._draw_overlay(fr, fc, cfg.COLOR_LAST_MOVE)
+        actual_tr = tr - cfg.BOARD_H if tr >= cfg.BOARD_H else tr
+        if 0 <= actual_tr < cfg.BOARD_H and 0 <= tc < cfg.BOARD_W:
+            self._draw_overlay(actual_tr, tc, cfg.COLOR_LAST_MOVE)
 
     def _draw_selected(self, selected):
         """Highlight the currently selected piece square with a yellow tint."""
         if selected is None:
             return
         row, col = selected
-        self._draw_overlay(row, col, cfg.COLOR_HIGHLIGHT)
+        # Skip if out of bounds (e.g. hand piece selection in MiniShogi)
+        if 0 <= row < cfg.BOARD_H and 0 <= col < cfg.BOARD_W:
+            self._draw_overlay(row, col, cfg.COLOR_HIGHLIGHT)
 
     def _draw_legal_moves(self, state, selected, legal_moves):
         """Draw green indicators on each legal destination square.
@@ -137,18 +143,27 @@ class BoardRenderer:
         opponent = 1 - state.current_player
         radius = 12
         ring_width = 3
+        drawn = set()  # avoid drawing duplicate indicators for promotion variants
 
         for move in legal_moves:
             (fr, fc), (tr, tc) = move
             if (fr, fc) != src:
                 continue
 
-            cx, cy = self.board_to_screen(tr, tc)
+            # Decode actual destination (promotion moves encode to_r += BOARD_H)
+            actual_tr = tr - cfg.BOARD_H if tr >= cfg.BOARD_H else tr
+            if actual_tr < 0 or actual_tr >= cfg.BOARD_H or tc < 0 or tc >= cfg.BOARD_W:
+                continue
+            if (actual_tr, tc) in drawn:
+                continue
+            drawn.add((actual_tr, tc))
+
+            cx, cy = self.board_to_screen(actual_tr, tc)
             cx += cfg.SQUARE_SIZE // 2
             cy += cfg.SQUARE_SIZE // 2
 
             # Check whether the destination has an opponent piece
-            opponent_piece = self._get_piece(state, opponent, tr, tc)
+            opponent_piece = self._get_piece(state, opponent, actual_tr, tc)
             has_opponent = opponent_piece is not None
 
             # Use a per-pixel alpha surface for the indicator
@@ -167,7 +182,7 @@ class BoardRenderer:
             else:
                 pygame.draw.circle(overlay, cfg.COLOR_LEGAL, (local_cx, local_cy), radius)
 
-            sq_x, sq_y = self.board_to_screen(tr, tc)
+            sq_x, sq_y = self.board_to_screen(actual_tr, tc)
             self.surface.blit(overlay, (sq_x, sq_y))
 
 
