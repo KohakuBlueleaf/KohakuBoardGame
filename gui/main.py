@@ -661,7 +661,6 @@ class GameApp:
         self._paused = False
         self._undo_stack = []
         self._stop_analysis()
-        self.analyze["enabled"] = False
 
         # Mark game as explicitly started
         self._game_started = True
@@ -717,7 +716,6 @@ class GameApp:
         w_depth_var = tk.IntVar(value=self.white["depth"])
         b_depth_var = tk.IntVar(value=self.black["depth"])
 
-        analyze_enabled_var = tk.BooleanVar(value=self.analyze["enabled"])
         analyze_engine_var = tk.StringVar(
             value=engine_names[_engine_index(self.analyze["engine"])]
         )
@@ -828,16 +826,8 @@ class GameApp:
         analyze_frame = ttk.LabelFrame(dialog, text="Analyze")
         analyze_frame.grid(row=2, column=0, columnspan=2, sticky="ew", **pad)
 
-        analyze_check = ttk.Checkbutton(
-            analyze_frame,
-            text="Enable background analysis",
-            variable=analyze_enabled_var,
-            command=lambda: _update_analyze_widgets(),
-        )
-        analyze_check.grid(row=0, column=0, columnspan=5, sticky="w", padx=4, pady=2)
-
         ttk.Label(analyze_frame, text="Engine:").grid(
-            row=1, column=0, sticky="w", padx=4, pady=2
+            row=0, column=0, sticky="w", padx=4, pady=2
         )
         # Analyze engine choices: only actual engines (no Human)
         analyze_engine_names = [name for name, _path in self._available_engines]
@@ -854,11 +844,11 @@ class GameApp:
         if self.analyze["engine"] is None:
             analyze_engine_var.set("(auto)")
         analyze_engine_combo.grid(
-            row=1, column=1, columnspan=3, sticky="ew", padx=4, pady=2
+            row=0, column=1, columnspan=3, sticky="ew", padx=4, pady=2
         )
 
         ttk.Label(analyze_frame, text="Algorithm:").grid(
-            row=2, column=0, sticky="w", padx=4, pady=2
+            row=1, column=0, sticky="w", padx=4, pady=2
         )
         analyze_algo_combo = ttk.Combobox(
             analyze_frame,
@@ -867,7 +857,7 @@ class GameApp:
             state="readonly",
             width=10,
         )
-        analyze_algo_combo.grid(row=2, column=1, sticky="w", padx=4, pady=2)
+        analyze_algo_combo.grid(row=1, column=1, sticky="w", padx=4, pady=2)
 
         a_params_btn = ttk.Button(
             analyze_frame,
@@ -877,19 +867,7 @@ class GameApp:
             ),
             width=8,
         )
-        a_params_btn.grid(row=2, column=2, sticky="w", padx=4, pady=2)
-
-        analyze_widgets = [analyze_engine_combo, analyze_algo_combo, a_params_btn]
-
-        def _update_analyze_widgets():
-            enabled = analyze_enabled_var.get()
-            for w in analyze_widgets:
-                if isinstance(w, ttk.Combobox):
-                    w.configure(state="readonly" if enabled else "disabled")
-                else:
-                    w.configure(state="normal" if enabled else "disabled")
-
-        _update_analyze_widgets()
+        a_params_btn.grid(row=1, column=2, sticky="w", padx=4, pady=2)
 
         # ---- Time limit ----
         ttk.Label(dialog, text="Time limit (s):").grid(
@@ -993,8 +971,6 @@ class GameApp:
         new_w_depth = max(0, min(20, w_depth_var.get()))
         new_b_depth = max(0, min(20, b_depth_var.get()))
         new_analyze_algo = analyze_algo_var.get()
-        new_analyze_enabled = analyze_enabled_var.get()
-
         w_name = white_engine_var.get()
         b_name = black_engine_var.get()
         w_idx = engine_names.index(w_name) if w_name in engine_names else 0
@@ -1025,7 +1001,6 @@ class GameApp:
             new_analyze_engine != self.analyze["engine"]
             or new_analyze_algo != self.analyze["algo"]
             or analyze_params != self.analyze["params"]
-            or new_analyze_enabled != self.analyze["enabled"]
         )
 
         if w_changed:
@@ -1046,7 +1021,6 @@ class GameApp:
         self.black["params"] = black_params
         self.black["depth"] = new_b_depth
 
-        self.analyze["enabled"] = new_analyze_enabled
         self.analyze["engine"] = new_analyze_engine
         self.analyze["algo"] = new_analyze_algo
         self.analyze["params"] = analyze_params
