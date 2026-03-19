@@ -100,25 +100,6 @@ def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
 
     Returns (bestmove_uci_str, last_info_dict) or (None, None).
     """
-    # Build all commands
-    commands = ["uci"]
-    commands.append(f"setoption name Algorithm value {algo}")
-    for p in (params or []):
-        if "=" in p:
-            k, v = p.split("=", 1)
-            commands.append(f"setoption name {k} value {v}")
-    if uci_moves:
-        commands.append("position startpos moves " + " ".join(uci_moves))
-    else:
-        commands.append("position startpos")
-    if depth > 0:
-        commands.append(f"go depth {depth}")
-    else:
-        commands.append(f"go movetime {time_limit}")
-
-    stdin_data = "\n".join(commands) + "\n"
-    timeout_sec = (time_limit / 1000.0) + 1.5 if depth == 0 else 300.0
-
     kwargs = {
         "args": [os.path.abspath(engine_path)],
         "stdin": subprocess.PIPE,
@@ -133,22 +114,62 @@ def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
     except OSError:
         return None, None
 
-    # Write commands
-    try:
-        proc.stdin.write(stdin_data.encode())
+    def send(cmd):
+        proc.stdin.write((cmd + "\n").encode())
         proc.stdin.flush()
-    except Exception:
-        proc.kill()
-        return None, None
 
-    # Wait, then kill and read whatever was produced
-    time.sleep(timeout_sec)
-    proc.kill()
-    stdout = proc.stdout.read()
+    # Setup phase — blocking communicate for handshake
+    setup_cmds = ["uci"]
+    setup_cmds.append(f"setoption name Algorithm value {algo}")
+    for p in (params or []):
+        if "=" in p:
+            k, v = p.split("=", 1)
+            setup_cmds.append(f"setoption name {k} value {v}")
+    if uci_moves:
+        setup_cmds.append("position startpos moves " + " ".join(uci_moves))
+    else:
+        setup_cmds.append("position startpos")
+    setup_cmds.append("isready")
 
-    # Parse output — find last info and bestmove
+    for cmd in setup_cmds:
+        send(cmd)
+
+    # Wait for readyok (engine is ready to search)
+    while True:
+        raw = proc.stdout.readline()
+        if not raw:
+            break
+        if raw.decode("utf-8", errors="replace").strip() == "readyok":
+            break
+
+    # Now send go — timer starts HERE
     bestmove = None
     last_info = None
+
+    if depth > 0:
+        send(f"go depth {depth}")
+        # Wait for engine to finish (no time limit for depth search)
+        while True:
+            raw = proc.stdout.readline()
+            if not raw:
+                break
+            line = raw.decode("utf-8", errors="replace").strip()
+            if line.startswith("info ") and "depth" in line:
+                last_info = UCIEngine.parse_info(line)
+            elif line.startswith("bestmove"):
+                parts = line.split()
+                bestmove = parts[1] if len(parts) >= 2 else None
+                break
+        proc.kill()
+        return bestmove, last_info
+    else:
+        send(f"go movetime {time_limit}")
+        # Wait exactly the time limit, then kill and read
+        time.sleep(time_limit / 1000.0)
+        proc.kill()
+        stdout = proc.stdout.read()
+
+    # Parse killed output — find last info and bestmove
     for line in stdout.decode("utf-8", errors="replace").splitlines():
         line = line.strip()
         if line.startswith("info ") and "depth" in line:
