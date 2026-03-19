@@ -439,10 +439,8 @@ void loop(){
             cmd_display();
         }else if(cmd == "quit"){
             g_ctx.stop = true;
-            g_search_gen++;
-            // Give the thread a moment to notice, then exit
             if(g_search_thread.joinable()){
-                g_search_thread.detach();
+                g_search_thread.join();  // wait for search to finish + send bestmove
             }
             break;
         }

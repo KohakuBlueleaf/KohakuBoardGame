@@ -96,12 +96,28 @@ def format_search_info(info):
 
 
 def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
-    """Spawn engine, send commands, read until bestmove, kill it.
+    """Spawn engine, send commands, kill after timeout, parse output.
 
-    Uses a timer thread to kill the process on timeout.
     Returns (bestmove_uci_str, last_info_dict) or (None, None).
     """
-    import threading
+    # Build all commands
+    commands = ["uci"]
+    commands.append(f"setoption name Algorithm value {algo}")
+    for p in (params or []):
+        if "=" in p:
+            k, v = p.split("=", 1)
+            commands.append(f"setoption name {k} value {v}")
+    if uci_moves:
+        commands.append("position startpos moves " + " ".join(uci_moves))
+    else:
+        commands.append("position startpos")
+    if depth > 0:
+        commands.append(f"go depth {depth}")
+    else:
+        commands.append(f"go movetime {time_limit}")
+
+    stdin_data = "\n".join(commands) + "\n"
+    timeout_sec = (time_limit / 1000.0) + 1.5 if depth == 0 else 300.0
 
     kwargs = {
         "args": [os.path.abspath(engine_path)],
@@ -117,61 +133,33 @@ def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
     except OSError:
         return None, None
 
-    def send(cmd):
-        try:
-            proc.stdin.write((cmd + "\n").encode())
-            proc.stdin.flush()
-        except Exception:
-            pass
+    # Write commands
+    try:
+        proc.stdin.write(stdin_data.encode())
+        proc.stdin.flush()
+    except Exception:
+        proc.kill()
+        return None, None
 
-    # Send all commands
-    send("uci")
-    send(f"setoption name Algorithm value {algo}")
-    for p in (params or []):
-        if "=" in p:
-            k, v = p.split("=", 1)
-            send(f"setoption name {k} value {v}")
-    if uci_moves:
-        send("position startpos moves " + " ".join(uci_moves))
-    else:
-        send("position startpos")
-    if depth > 0:
-        send(f"go depth {depth}")
-    else:
-        send(f"go movetime {time_limit}")
+    # Wait, then kill and read whatever was produced
+    time.sleep(timeout_sec)
+    proc.kill()
+    stdout = proc.stdout.read()
 
-    # Timer to kill process if it takes too long
-    timeout_sec = (time_limit / 1000.0) + 5.0 if depth == 0 else 300.0
-    timer = threading.Timer(timeout_sec, lambda: proc.kill())
-    timer.start()
-
-    # Read stdout line by line until bestmove
+    # Parse output — find last info and bestmove
     bestmove = None
     last_info = None
-    try:
-        while True:
-            raw = proc.stdout.readline()
-            if not raw:
-                break
-            line = raw.decode("utf-8", errors="replace").strip()
-            if line.startswith("info "):
-                last_info = UCIEngine.parse_info(line)
-            elif line.startswith("bestmove"):
-                parts = line.split()
-                bestmove = parts[1] if len(parts) >= 2 else None
-                break
-    except Exception:
-        pass
-    finally:
-        timer.cancel()
-        try:
-            proc.kill()
-        except Exception:
-            pass
-        try:
-            proc.wait(timeout=1)
-        except Exception:
-            pass
+    for line in stdout.decode("utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if line.startswith("info ") and "depth" in line:
+            last_info = UCIEngine.parse_info(line)
+        elif line.startswith("bestmove"):
+            parts = line.split()
+            bestmove = parts[1] if len(parts) >= 2 else None
+
+    # If no bestmove but we have info with currmove, use that
+    if bestmove is None and last_info and last_info.get("currmove"):
+        bestmove = last_info["currmove"]
 
     return bestmove, last_info
 
