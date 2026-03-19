@@ -89,10 +89,9 @@ class GameApp:
         self.white_uci_engine = None
         self.black_uci_engine = None
 
-        # Analyze mode: state = "idle" | "running" | "stopping"
+        # Analyze mode
         self._analyze_engine = None
-        self._analyze_state = "idle"
-        self._analyze_pending = None  # queued (uci_moves, gen) to start after stop completes
+        self._analyze_active = False  # True when we expect info lines
         self._undo_stack = []
 
         # AI vs AI pacing
@@ -266,45 +265,25 @@ class GameApp:
         engine = self._get_or_create_analyze_engine()
         if engine is None:
             return
-
-        moves_snapshot = list(self.uci_moves)
-
-        if self._analyze_state == "running":
-            # Queue the new search — it will launch when stop completes
-            self._analyze_pending = moves_snapshot
-            self._analyze_state = "stopping"
-            engine.stop()  # non-blocking; _on_analyze_done will fire
-            return
-
-        if self._analyze_state == "stopping":
-            # Already stopping — just update the pending request
-            self._analyze_pending = moves_snapshot
-            return
-
-        # State is idle — launch immediately
-        self._launch_analysis(engine, moves_snapshot)
-
-    def _launch_analysis(self, engine, moves_snapshot):
-        if moves_snapshot:
-            engine.set_position(moves=moves_snapshot)
+        # Just send position + go. The engine's generation counter
+        # handles superseding any previous search. The persistent
+        # reader thread dispatches to the latest callbacks.
+        if self.uci_moves:
+            engine.set_position(moves=list(self.uci_moves))
         else:
             engine.set_position()
+        self.search_info = {}
         engine.go(
             infinite=True,
             info_callback=self._on_analyze_info,
             done_callback=self._on_analyze_done,
         )
-        self._analyze_state = "running"
+        self._analyze_active = True
 
     def _stop_analysis(self):
-        self._analyze_pending = None
-        if self._analyze_state == "running" and self._analyze_engine is not None:
-            self._analyze_state = "stopping"
-            self._analyze_engine.stop()  # non-blocking
-        elif self._analyze_state == "stopping":
-            pass  # already stopping
-        else:
-            self._analyze_state = "idle"
+        if self._analyze_active and self._analyze_engine is not None:
+            self._analyze_engine.stop()
+        self._analyze_active = False
 
     def _on_analyze_info(self, info_dict):
         """Normalize score to white's perspective for the score bar."""
@@ -316,18 +295,9 @@ class GameApp:
         self.search_info = info_dict
 
     def _on_analyze_done(self, bestmove_str):
-        if self._analyze_state == "stopping" and self._analyze_pending is not None:
-            # Previous search stopped — launch the queued one
-            moves = self._analyze_pending
-            self._analyze_pending = None
-            engine = self._analyze_engine
-            if engine is not None and self.analyze["enabled"]:
-                self.search_info = {}
-                self._launch_analysis(engine, moves)
-            else:
-                self._analyze_state = "idle"
-        else:
-            self._analyze_state = "idle"
+        # Engine stopped (either by our stop or by completing depth limit).
+        # Don't clear _analyze_active here — a new go may already be in flight.
+        pass
 
     # ------------------------------------------------------------------
     # Pause / Undo
@@ -555,9 +525,7 @@ class GameApp:
             return
 
         if self.analyze["enabled"] and not self._is_gaming():
-            self._stop_analysis()
-            self.search_info = {}
-            self._start_analysis()
+            self._start_analysis()  # sends position+go, engine supersedes old search
         elif self._is_gaming():
             self._trigger_ai_if_needed()
 
@@ -684,7 +652,7 @@ class GameApp:
             mode=self.mode,
             time_limit=self.time_limit,
             search_info=self.search_info,
-            paused=self._paused or (self.analyze["enabled"] and not self._analyze_state == "running"),
+            paused=self._paused or (self.analyze["enabled"] and not self._analyze_active),
             analyze_enabled=self.analyze["enabled"],
             gaming=self._is_gaming(),
         )
