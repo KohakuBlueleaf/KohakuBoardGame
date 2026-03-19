@@ -297,7 +297,7 @@ def run_game(
 
 
 def run_tournament(
-    engine1_path, engine2_path, time_limit, algo1, algo2, num_games, verbose, depth=0
+    engine1_path, engine2_path, time_limit, algo1, algo2, num_games, verbose, depth=0, params=None
 ):
     """Run a tournament of N games, alternating colors."""
     engine1_wins = 0
@@ -309,13 +309,17 @@ def run_tournament(
 
     engines = {}
 
-    def get_or_create_engine(path, algo):
+    def get_or_create_engine(path, algo, params=None):
         if path == "human":
             return None
         key = (path, algo)
         if key not in engines:
             eng = UCIEngine(path)
             eng.set_option("Algorithm", algo)
+            for p in (params or []):
+                if "=" in p:
+                    k, v = p.split("=", 1)
+                    eng.set_option(k, v)
             engines[key] = eng
         return engines[key]
 
@@ -330,8 +334,8 @@ def run_tournament(
                 b_path, b_algo = engine1_path, algo1
                 engine1_is_white = False
 
-            w_engine = get_or_create_engine(w_path, w_algo)
-            b_engine = get_or_create_engine(b_path, b_algo)
+            w_engine = get_or_create_engine(w_path, w_algo, params)
+            b_engine = get_or_create_engine(b_path, b_algo, params)
 
             w_label = "Human" if w_path == "human" else w_algo
             b_label = "Human" if b_path == "human" else b_algo
@@ -453,6 +457,10 @@ def main():
     parser.add_argument(
         "--depth", type=int, default=0, help="Fixed search depth (0 = use time limit)."
     )
+    parser.add_argument(
+        "--param", action="append", default=[],
+        help="Set engine param: --param UseNNUE=false. Can repeat.",
+    )
 
     args = parser.parse_args()
 
@@ -486,6 +494,7 @@ def main():
             args.games,
             verbose,
             depth=args.depth,
+            params=args.param,
         )
         return
 
@@ -496,10 +505,18 @@ def main():
         if args.white != "human":
             white_engine = UCIEngine(args.white)
             white_engine.set_option("Algorithm", args.white_algo)
+            for p in args.param:
+                if "=" in p:
+                    k, v = p.split("=", 1)
+                    white_engine.set_option(k, v)
 
         if args.black != "human":
             black_engine = UCIEngine(args.black)
             black_engine.set_option("Algorithm", args.black_algo)
+            for p in args.param:
+                if "=" in p:
+                    k, v = p.split("=", 1)
+                    black_engine.set_option(k, v)
 
         result = run_game(
             white_engine,
