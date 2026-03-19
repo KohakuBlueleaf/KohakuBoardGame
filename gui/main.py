@@ -237,10 +237,11 @@ class GameApp:
             return
         if not self.analyze["enabled"]:
             return
-        # Engine handles stop+go seamlessly (generation-based)
         engine = self._get_or_create_analyze_engine()
         if engine is None:
             return
+        # Just send position + go. Engine handles superseding the old search.
+        # Client's persistent reader thread dispatches to current callbacks.
         if self.uci_moves:
             engine.set_position(moves=list(self.uci_moves))
         else:

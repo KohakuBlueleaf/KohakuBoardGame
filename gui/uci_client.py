@@ -26,6 +26,8 @@ class UCIEngine:
         self._process = None
         self._reader_thread = None
         self._searching = False
+        self._info_callback = None
+        self._done_callback = None
         self.options = []  # Parsed option dicts from the UCI handshake
 
         # Launch the subprocess
@@ -90,17 +92,11 @@ class UCIEngine:
         info_callback=None,
         done_callback=None,
     ):
-        """Start search. Returns immediately (search runs in background thread).
+        """Start search. Returns immediately.
 
-        Args:
-            depth: Search to this depth (optional).
-            movetime: Search for this many milliseconds (optional).
-            infinite: If True, search until 'stop' is sent.
-            info_callback: Called for each 'info' line with a parsed dict:
-                {'depth': int, 'seldepth': int, 'score_cp': int, 'nodes': int,
-                 'time': int, 'nps': int, 'pv': [str, ...]}
-            done_callback: Called when 'bestmove' is received with the
-                bestmove string (e.g. 'a2a3').
+        Uses a single persistent reader thread. Calling go() again
+        (even while searching) just updates callbacks and sends the
+        new command — the engine handles stop+go via generation counter.
         """
         parts = ["go"]
         if depth is not None:
@@ -110,16 +106,19 @@ class UCIEngine:
         if infinite:
             parts.append("infinite")
 
+        # Update callbacks atomically
+        self._info_callback = info_callback
+        self._done_callback = done_callback
         self._searching = True
         self._send(" ".join(parts))
 
-        # Start reader thread to parse output
-        self._reader_thread = threading.Thread(
-            target=self._read_loop,
-            args=(info_callback, done_callback),
-            daemon=True,
-        )
-        self._reader_thread.start()
+        # Start persistent reader if not already running
+        if self._reader_thread is None or not self._reader_thread.is_alive():
+            self._reader_thread = threading.Thread(
+                target=self._persistent_read_loop,
+                daemon=True,
+            )
+            self._reader_thread.start()
 
     def stop(self):
         """Send 'stop' to abort current search."""
@@ -218,34 +217,40 @@ class UCIEngine:
                     self.options.append(opt)
         return False
 
-    def _read_loop(self, info_callback, done_callback):
-        """Background thread: read engine stdout, parse info/bestmove lines."""
+    def _persistent_read_loop(self):
+        """Single persistent reader thread for the engine's lifetime.
+
+        Dispatches info/bestmove to the current callbacks set by go().
+        Survives across multiple go/stop cycles.
+        """
         try:
-            while self._searching and self.is_alive():
+            while self.is_alive():
                 line = self._readline()
                 if line is None:
                     break
 
                 if line.startswith("info "):
-                    if info_callback is not None:
+                    cb = self._info_callback
+                    if cb is not None:
                         info = self.parse_info(line)
                         if info:
-                            info_callback(info)
+                            try:
+                                cb(info)
+                            except Exception:
+                                pass
 
                 elif line.startswith("bestmove"):
                     self._searching = False
                     parts = line.split()
                     bestmove = parts[1] if len(parts) >= 2 else None
-                    if done_callback is not None:
-                        done_callback(bestmove)
-                    break
+                    cb = self._done_callback
+                    if cb is not None:
+                        try:
+                            cb(bestmove)
+                        except Exception:
+                            pass
         except Exception:
             self._searching = False
-            if done_callback is not None:
-                try:
-                    done_callback(None)
-                except Exception:
-                    pass
 
     # ------------------------------------------------------------------
     # Static helpers
