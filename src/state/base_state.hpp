@@ -1,0 +1,37 @@
+#pragma once
+#include <vector>
+#include <string>
+#include <utility>
+#include <cstddef>
+
+// Keep existing type aliases for now
+typedef std::pair<size_t, size_t> Point;
+typedef std::pair<Point, Point> Move;
+
+enum GameState { UNKNOWN = 0, WIN, DRAW, NONE };
+
+// Score bounds
+constexpr int P_MAX = 100000;
+constexpr int M_MAX = -100000;
+
+class BaseState {
+public:
+    int player = 0;
+    GameState game_state = UNKNOWN;
+    std::vector<Move> legal_actions;
+
+    virtual ~BaseState() = default;
+
+    // Core
+    virtual BaseState* next_state(const Move& m) = 0;
+    virtual void get_legal_actions() = 0;
+    virtual int evaluate(bool use_nnue = true, bool use_kp = true, bool use_mobility = true) = 0;
+
+    // Game description
+    virtual int board_h() const = 0;
+    virtual int board_w() const = 0;
+    virtual const char* game_name() const = 0;
+
+    // Display
+    virtual std::string encode_output() const = 0;
+};

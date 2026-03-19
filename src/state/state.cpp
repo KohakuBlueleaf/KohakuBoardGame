@@ -145,7 +145,7 @@ int State::evaluate(bool use_nnue, bool use_kp_eval, bool use_mobility){
  * @param move 
  * @return State* 
  */
-State* State::next_state(Move move){
+State* State::next_state(const Move& move){
     Board next = this->board;
     Point from = move.first, to = move.second;
 
@@ -552,7 +552,7 @@ const char piece_table[2][7][5] = {
  * 
  * @return std::string 
  */
-std::string State::encode_output(){
+std::string State::encode_output() const{
     std::stringstream ss;
     int now_piece;
     for(int i=0; i<BOARD_H; i+=1){

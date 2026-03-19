@@ -1,4 +1,8 @@
-"""UCI protocol client for communicating with MiniChess engine."""
+"""UBGI protocol client for communicating with MiniChess engine.
+
+UBGI (Universal Board Game Interface) is backward compatible with UCI.
+The handshake sends 'ubgi' and accepts both 'ubgiok' and 'uciok'.
+"""
 
 import subprocess
 import threading
@@ -6,17 +10,17 @@ import os
 import sys
 
 
-class UCIEngine:
-    """Manages a UCI engine subprocess."""
+class UBGIEngine:
+    """Manages a UBGI/UCI engine subprocess."""
 
     def __init__(self, exe_path):
         """Launch engine process with stdin/stdout pipes.
 
-        Sends 'uci' and waits for 'uciok', then sends 'isready' and
-        waits for 'readyok'.
+        Sends 'ubgi' and waits for 'ubgiok' or 'uciok', then sends
+        'isready' and waits for 'readyok'.
 
         Args:
-            exe_path: Path to the UCI-compatible engine executable.
+            exe_path: Path to a UBGI or UCI compatible engine executable.
 
         Raises:
             RuntimeError: If the engine fails to start or doesn't respond.
@@ -29,7 +33,12 @@ class UCIEngine:
         self._info_callback = None
         self._done_callback = None
         self._ready_callback = None  # fired on "readyok"
-        self.options = []  # Parsed option dicts from the UCI handshake
+        self.options = []  # Parsed option dicts from the UBGI/UCI handshake
+
+        # Game description (populated from engine options during handshake)
+        self.game_name = "Unknown"
+        self.board_width = 5
+        self.board_height = 6
 
         # Launch the subprocess
         kwargs = {
@@ -47,11 +56,26 @@ class UCIEngine:
         except OSError as exc:
             raise RuntimeError(f"Failed to start engine: {exc}") from exc
 
-        # UCI handshake -- parse option lines until uciok
-        self._send("uci")
+        # UBGI handshake -- parse option lines until ubgiok/uciok
+        self._send("ubgi")
         if not self._wait_for_uciok(timeout=5.0):
             self.quit()
-            raise RuntimeError("Engine did not respond with 'uciok'")
+            raise RuntimeError("Engine did not respond with 'ubgiok' or 'uciok'")
+
+        # Extract game description from options if present
+        for opt in self.options:
+            if opt["name"] == "GameName" and opt.get("default"):
+                self.game_name = opt["default"]
+            elif opt["name"] == "BoardWidth" and opt.get("default"):
+                try:
+                    self.board_width = int(opt["default"])
+                except ValueError:
+                    pass
+            elif opt["name"] == "BoardHeight" and opt.get("default"):
+                try:
+                    self.board_height = int(opt["default"])
+                except ValueError:
+                    pass
 
         self._send("isready")
         if not self._wait_for("readyok", timeout=5.0):
@@ -225,10 +249,10 @@ class UCIEngine:
         return False
 
     def _wait_for_uciok(self, timeout=5.0):
-        """Read lines until 'uciok', parsing 'option' lines along the way.
+        """Read lines until 'uciok' or 'ubgiok', parsing 'option' lines along the way.
 
         Populates self.options with parsed option dicts.
-        Returns True if 'uciok' was found, False on timeout.
+        Returns True if 'uciok' or 'ubgiok' was found, False on timeout.
         """
         import time
 
@@ -238,10 +262,10 @@ class UCIEngine:
             if line is None:
                 return False
             stripped = line.strip()
-            if stripped == "uciok":
+            if stripped == "uciok" or stripped == "ubgiok":
                 return True
             if stripped.startswith("option "):
-                opt = UCIEngine.parse_option_line(stripped)
+                opt = UBGIEngine.parse_option_line(stripped)
                 if opt is not None:
                     self.options.append(opt)
         return False
@@ -561,6 +585,9 @@ class UCIEngine:
             return None
 
         return ((fr, fc), (tr, tc))
+
+
+UCIEngine = UBGIEngine  # backward compatibility
 
 
 def discover_uci_engines(build_dir):

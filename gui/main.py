@@ -41,6 +41,11 @@ class GameApp:
         # Algorithm list read from engine's combo option
         self._engine_algorithms = []
 
+        # Game description from UBGI handshake (defaults for MiniChess)
+        self._game_name = "Unknown"
+        self._board_width = 5
+        self._board_height = 6
+
         # Per-side state
         self.white = {
             "engine": None,  # path or None for human
@@ -145,6 +150,11 @@ class GameApp:
         except RuntimeError:
             return
 
+        # Extract game description from UBGI handshake
+        self._game_name = probe.game_name
+        self._board_width = probe.board_width
+        self._board_height = probe.board_height
+
         # Extract algorithm list
         for opt in initial_options:
             if opt["name"] == "Algorithm" and opt["type"] == "combo":
@@ -170,7 +180,7 @@ class GameApp:
                 try:
                     probe.set_option("Algorithm", algo)
                     # Re-handshake to get new options
-                    probe._send("uci")
+                    probe._send("ubgi")
                     probe.options = []
                     probe._wait_for_uciok(timeout=3.0)
                     algo_opts = [o for o in probe.options if o["name"] != "Algorithm"]

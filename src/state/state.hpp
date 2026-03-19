@@ -6,11 +6,10 @@
 #include <vector>
 #include <utility>
 
+#include "base_state.hpp"
 #include "../config.hpp"
 
 
-typedef std::pair<size_t, size_t> Point;
-typedef std::pair<Point, Point> Move;
 class Board{
   public:
     char board[2][BOARD_H][BOARD_W] = {{
@@ -32,39 +31,30 @@ class Board{
     }};
 };
 
-enum GameState {
-  UNKNOWN = 0,
-  WIN,
-  DRAW,
-  NONE
-};
 
-
-const int M_MAX = -100000;
-const int P_MAX = 100000;
-
-
-class State{
+class State : public BaseState {
   public:
     //You may want to add more property for a state
-    GameState game_state = UNKNOWN;
     Board board;
-    int player = 0;
     int score = 0;
-    std::vector<Move> legal_actions;
-    
+
     State(){};
-    State(int player): player(player){};
+    State(int player){ this->player = player; };
     State(Board board): board(board){};
-    State(Board board, int player): board(board), player(player){};
-    
-    int evaluate(bool use_nnue = true, bool use_kp_eval = true, bool use_mobility = true);
-    State* next_state(Move move);
-    void get_legal_actions();
+    State(Board board, int player): board(board){ this->player = player; };
+
+    int evaluate(bool use_nnue = true, bool use_kp_eval = true, bool use_mobility = true) override;
+    State* next_state(const Move& move) override;
+    void get_legal_actions() override;
     void get_legal_actions_naive();
     void get_legal_actions_bitboard();
-    std::string encode_output();
+    std::string encode_output() const override;
     std::string encode_state();
+
+    // Game description
+    int board_h() const override { return BOARD_H; }
+    int board_w() const override { return BOARD_W; }
+    const char* game_name() const override { return "MiniChess"; }
 };
 
 #endif

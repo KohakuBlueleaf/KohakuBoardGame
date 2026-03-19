@@ -1,9 +1,12 @@
 #pragma once
-#include "state/state.hpp"
+#include "state/base_state.hpp"
 #include "search_params.hpp"
 #include <vector>
 #include <cstdint>
 #include <functional>
+
+// Forward declaration so policy headers can use State* without full include
+class State;
 
 struct RootUpdate {
     Move best_move;

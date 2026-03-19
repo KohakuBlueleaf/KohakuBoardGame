@@ -1,4 +1,4 @@
-"""MiniChess CLI - Run AI vs AI or Human vs AI matches via UCI protocol."""
+"""MiniChess CLI - Run AI vs AI or Human vs AI matches via UBGI protocol (backward compatible with UCI)."""
 
 import argparse
 import sys
@@ -96,7 +96,7 @@ def format_search_info(info):
 
 
 def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
-    """Spawn engine, send commands, kill after timeout, parse output.
+    """Spawn engine, send UBGI/UCI commands, kill after timeout, parse output.
 
     Returns (bestmove_uci_str, last_info_dict) or (None, None).
     """
@@ -118,8 +118,8 @@ def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
         proc.stdin.write((cmd + "\n").encode())
         proc.stdin.flush()
 
-    # Setup phase — blocking communicate for handshake
-    setup_cmds = ["uci"]
+    # Setup phase — blocking communicate for handshake (UBGI, backward compatible with UCI)
+    setup_cmds = ["ubgi"]
     setup_cmds.append(f"setoption name Algorithm value {algo}")
     for p in (params or []):
         if "=" in p:
@@ -134,12 +134,13 @@ def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
     for cmd in setup_cmds:
         send(cmd)
 
-    # Wait for readyok (engine is ready to search)
+    # Wait for readyok or ubgiok (engine is ready to search)
     while True:
         raw = proc.stdout.readline()
         if not raw:
             break
-        if raw.decode("utf-8", errors="replace").strip() == "readyok":
+        line_str = raw.decode("utf-8", errors="replace").strip()
+        if line_str in ("readyok", "ubgiok", "uciok"):
             break
 
     # Now send go — timer starts HERE
@@ -251,7 +252,7 @@ def get_human_move(state):
 
 
 def _quit_engine(engine):
-    """Quit a UCI engine, ignoring errors."""
+    """Quit a UBGI/UCI engine, ignoring errors."""
     if engine is not None:
         try:
             engine.quit()
@@ -463,7 +464,7 @@ def run_tournament(
 def main():
     """Parse arguments and run MiniChess CLI."""
     parser = argparse.ArgumentParser(
-        description="MiniChess CLI - Run AI vs AI or Human vs AI matches via UCI protocol.",
+        description="MiniChess CLI - Run AI vs AI or Human vs AI matches via UBGI protocol (backward compatible with UCI).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Examples:
   %(prog)s --white build/minichess-uci.exe --black build/minichess-uci.exe --time 2000 --games 10
@@ -473,10 +474,10 @@ def main():
     )
 
     parser.add_argument(
-        "--white", required=True, help='Path to UCI engine for White, or "human".'
+        "--white", required=True, help='Path to UBGI/UCI engine for White, or "human".'
     )
     parser.add_argument(
-        "--black", required=True, help='Path to UCI engine for Black, or "human".'
+        "--black", required=True, help='Path to UBGI/UCI engine for Black, or "human".'
     )
     parser.add_argument(
         "--time", type=int, default=2000, help="Time per move in ms (default: 2000)."

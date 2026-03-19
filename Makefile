@@ -22,14 +22,14 @@ $(BUILD_DIR):
 
 ifeq ($(OS), Windows_NT)
 uci:
-	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/minichess-uci.exe $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_DIR)/*.cpp src/uci/uci.cpp
+	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/minichess-ubgi.exe $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_DIR)/*.cpp src/ubgi/ubgi.cpp
 $(TARGET_OTHER): %: $(SOURCES_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/$@.exe $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_DIR)/*.cpp $<
 $(TARGET_UNITTEST): %: $(UNITTEST_DIR)/%_test.cpp
 	$(CXX) $(CXXFLAGS) -o $(UNITTEST_DIR)/build/$@_test.exe $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_DIR)/*.cpp $<
 else
 uci:
-	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/minichess-uci $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_DIR)/*.cpp src/uci/uci.cpp
+	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/minichess-ubgi $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_DIR)/*.cpp src/ubgi/ubgi.cpp
 $(TARGET_OTHER): %: $(SOURCES_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/$@ $(STATE_SOURCE) $(NNUE_SOURCE) $(POLICY_DIR)/*.cpp $<
 $(TARGET_UNITTEST): %: $(UNITTEST_DIR)/%_test.cpp
