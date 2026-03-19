@@ -265,6 +265,9 @@ class GameApp:
         """Normalize score to white's perspective for the score bar."""
         if "score_cp" in info_dict and self.game_state.player == 1:
             info_dict["score_cp"] = -info_dict["score_cp"]
+        # Preserve last known PV if new info doesn't have one
+        if "pv" not in info_dict and "pv" in self.search_info:
+            info_dict["pv"] = self.search_info["pv"]
         self.search_info = info_dict
 
     def _on_analyze_done(self, bestmove_str):

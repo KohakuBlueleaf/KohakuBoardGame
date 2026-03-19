@@ -302,7 +302,13 @@ SearchResult PVS::search(State *state, int depth, SearchContext& ctx){
     result.depth     = depth;
     result.seldepth  = ctx.seldepth;
     result.nodes     = ctx.nodes;
-    result.pv        = extract_pv(state, depth);
+    result.pv = extract_pv(state, depth + 10);  // try beyond nominal depth
+    // Always ensure best_move is the first PV move
+    if(result.pv.empty() && best_move != Move()){
+        result.pv = {best_move};
+    }else if(!result.pv.empty() && result.pv[0] != best_move && best_move != Move()){
+        result.pv[0] = best_move;
+    }
 
     return result;
 }
@@ -312,33 +318,40 @@ SearchResult PVS::search(State *state, int depth, SearchContext& ctx){
  * Extract principal variation by walking the TT from the
  * current position. Returns up to `depth` moves.
  *============================================================*/
-std::vector<Move> PVS::extract_pv(State *state, int depth){
+std::vector<Move> PVS::extract_pv(State *state, int max_len){
     std::vector<Move> pv;
     State* cur = new State(state->board, state->player);
     cur->get_legal_actions();
 
-    for(int i = 0; i < depth; i++){
+    // Use a set to detect TT cycles (avoid infinite loops)
+    std::vector<uint64_t> seen;
+
+    for(int i = 0; i < max_len; i++){
         if(cur->game_state == WIN || cur->game_state == DRAW){
             break;
         }
         uint64_t hash = compute_hash(cur);
+
+        // Cycle detection
+        bool cycle = false;
+        for(auto h : seen){
+            if(h == hash){ cycle = true; break; }
+        }
+        if(cycle){ break; }
+        seen.push_back(hash);
+
         TTEntry* tte = tt_probe(hash);
         if(!tte || tte->flag == TT_NONE){
             break;
         }
         Move mv = tte->get_move();
 
-        /* Validate that the TT move is actually legal */
+        // Validate legality
         bool legal = false;
         for(auto& m : cur->legal_actions){
-            if(m == mv){
-                legal = true;
-                break;
-            }
+            if(m == mv){ legal = true; break; }
         }
-        if(!legal){
-            break;
-        }
+        if(!legal){ break; }
 
         pv.push_back(mv);
         State* next = cur->next_state(mv);

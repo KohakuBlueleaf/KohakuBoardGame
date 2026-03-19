@@ -129,13 +129,18 @@ static void do_search(
     int max_depth,
     int64_t movetime_ms,
     [[maybe_unused]] bool infinite,
-    uint32_t my_gen
+    uint32_t my_gen,
+    SearchContext ctx
 ){
     State state(g_board, g_player);
     state.get_legal_actions();
 
-    // Check if we've been superseded before even starting
-    auto alive = [&](){ return my_gen == g_search_gen.load() && !g_ctx.stop; };
+    // Check if we've been superseded or stopped
+    auto alive = [&](){
+        if(my_gen != g_search_gen.load()){ return false; }
+        if(g_ctx.stop){ ctx.stop = true; }  // propagate global stop to local ctx
+        return !ctx.stop;
+    };
 
     if(state.legal_actions.empty()){
         if(alive()){ send("bestmove 0000"); }
@@ -158,7 +163,7 @@ static void do_search(
         if(!alive()){ break; }
 
         auto depth_start = std::chrono::high_resolution_clock::now();
-        SearchResult result = g_algo->search(&state, depth, g_ctx);
+        SearchResult result = g_algo->search(&state, depth, ctx);
 
         if(!alive() && depth > 1){ break; }
 
@@ -229,12 +234,12 @@ static void cmd_go(std::istringstream& iss){
         max_depth = 6;
     }
 
-    g_ctx.reset();
+    SearchContext ctx;
+    ctx.params = g_params;
     g_ctx.stop = false;
-    g_ctx.params = g_params;
     g_searching = true;
     uint32_t gen = g_search_gen.load();
-    g_search_thread = std::thread(do_search, max_depth, movetime_ms, infinite, gen);
+    g_search_thread = std::thread(do_search, max_depth, movetime_ms, infinite, gen, ctx);
 }
 
 
