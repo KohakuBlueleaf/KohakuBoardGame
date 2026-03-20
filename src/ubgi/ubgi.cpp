@@ -162,7 +162,9 @@ void set_position(
     if(iss >> moves_token && moves_token == "moves"){
         std::string move_str;
         while(iss >> move_str){
-            if(move_str.size() < 2){ continue; }
+            if(move_str.size() < 2){
+                continue;
+            }
             Move mv = str_to_move(move_str);
             State current(board, player);
             current.get_legal_actions();
@@ -207,18 +209,26 @@ static void do_search(
     state.get_legal_actions();
 
     auto alive = [&](){
-        if(my_gen != g_search_gen.load()){ return false; }
-        if(g_ctx.stop){ ctx.stop = true; }
+        if(my_gen != g_search_gen.load()){
+            return false;
+        }
+        if(g_ctx.stop){
+            ctx.stop = true;
+        }
         return !ctx.stop;
     };
 
     if(state.legal_actions.empty()){
-        if(alive()){ send("bestmove 0000"); }
+        if(alive()){
+            send("bestmove 0000");
+        }
         g_searching = false;
         return;
     }
     if(state.game_state == WIN){
-        if(alive()){ send("bestmove " + move_to_str(state.legal_actions[0])); }
+        if(alive()){
+            send("bestmove " + move_to_str(state.legal_actions[0]));
+        }
         g_searching = false;
         return;
     }
@@ -232,7 +242,9 @@ static void do_search(
 
     /* === Root move partial-result callback === */
     ctx.on_root_update = [&](const RootUpdate& upd){
-        if(my_gen != g_search_gen.load()){ return; }
+        if(my_gen != g_search_gen.load()){
+            return;
+        }
         best_move = upd.best_move;
         g_best_move = upd.best_move;
 
@@ -258,12 +270,16 @@ static void do_search(
     };
 
     for(int depth = 1; depth <= depth_limit; depth++){
-        if(!alive()){ break; }
+        if(!alive()){
+            break;
+        }
 
         auto depth_start = std::chrono::high_resolution_clock::now();
         SearchResult result = g_algo->search(&state, depth, ctx);
 
-        if(!alive() && depth > 1){ break; }
+        if(!alive() && depth > 1){
+            break;
+        }
 
         auto now = std::chrono::high_resolution_clock::now();
         int64_t depth_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -292,14 +308,24 @@ static void do_search(
             info << " pv " << format_pv(result.pv);
         }
 
-        if(alive()){ send(info.str()); }
+        if(alive()){
+            send(info.str());
+        }
 
-        if(!alive()){ break; }
-        if(movetime_ms > 0 && total_ms * 2 >= movetime_ms){ break; }
-        if(result.score >= P_MAX - 100 || result.score <= M_MAX + 100){ break; }
+        if(!alive()){
+            break;
+        }
+        if(movetime_ms > 0 && total_ms * 2 >= movetime_ms){
+            break;
+        }
+        if(result.score >= P_MAX - 100 || result.score <= M_MAX + 100){
+            break;
+        }
     }
 
-    if(alive()){ send("bestmove " + move_to_str(best_move)); }
+    if(alive()){
+        send("bestmove " + move_to_str(best_move));
+    }
     g_searching = false;
 }
 

@@ -28,7 +28,7 @@ int PVS::eval_ctx(
     const PVSParams& p,
     int ply,
     bool can_null
-) {
+){
     ctx.nodes++;
     if(ctx.stop){
         delete state;
@@ -141,7 +141,7 @@ int PVS::eval_ctx(
             if(p.use_lmr
                && move_index >= p.lmr_full_depth
                && depth >= p.lmr_depth_limit
-            ) {
+            ){
                 int to_r = move.second.first;
                 int to_c = move.second.second;
                 bool is_capture = state->piece_at(1 - state->player, to_r, to_c) != 0;
@@ -346,9 +346,14 @@ std::vector<Move> PVS::extract_pv(State *state, int max_len){
         /* Cycle detection */
         bool cycle = false;
         for(auto h : seen){
-            if(h == hash){ cycle = true; break; }
+            if(h == hash){
+                cycle = true;
+                break;
+            }
         }
-        if(cycle){ break; }
+        if(cycle){
+            break;
+        }
         seen.push_back(hash);
 
         TTEntry* tte = tt_probe(hash);
@@ -360,9 +365,14 @@ std::vector<Move> PVS::extract_pv(State *state, int max_len){
         /* Validate legality */
         bool legal = false;
         for(auto& m : cur->legal_actions){
-            if(m == mv){ legal = true; break; }
+            if(m == mv){
+                legal = true;
+                break;
+            }
         }
-        if(!legal){ break; }
+        if(!legal){
+            break;
+        }
 
         pv.push_back(mv);
         State* next = cur->next_state(mv);
