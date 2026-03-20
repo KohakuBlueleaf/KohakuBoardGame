@@ -8,6 +8,7 @@
 #   -w NUM_WORKERS  Parallel processes (default: 64)
 #   -d DEPTH        Search depth (default: 6)
 #   -e EPSILON      Jitter probability (default: 0.15)
+#   -m MODEL        NNUE model file (optional, enables NNUE eval)
 #   -o OUTPUT_DIR   Output directory (default: data)
 
 set -e
@@ -19,9 +20,10 @@ NUM_WORKERS=64
 DEPTH=6
 EPSILON=0.15
 OUTPUT_DIR="data"
+NNUE_MODEL=""
 
 # Parse args
-while getopts "g:n:w:d:e:o:h" opt; do
+while getopts "g:n:w:d:e:o:m:h" opt; do
   case $opt in
     g) GAME=$OPTARG ;;
     n) TOTAL_GAMES=$OPTARG ;;
@@ -29,7 +31,8 @@ while getopts "g:n:w:d:e:o:h" opt; do
     d) DEPTH=$OPTARG ;;
     e) EPSILON=$OPTARG ;;
     o) OUTPUT_DIR=$OPTARG ;;
-    h) echo "Usage: $0 [-g game] [-n games] [-w workers] [-d depth] [-e epsilon] [-o output_dir]"
+    m) NNUE_MODEL=$OPTARG ;;
+    h) echo "Usage: $0 [-g game] [-n games] [-w workers] [-d depth] [-e epsilon] [-m model] [-o output_dir]"
        echo "  Games: minichess (6x5), minishogi (5x5), gomoku (9x9)"
        exit 0 ;;
     *) exit 1 ;;
@@ -76,6 +79,9 @@ echo "  Games:      ${TOTAL_GAMES} total (${GAMES_PER_WORKER} per worker)"
 echo "  Workers:    ${NUM_WORKERS}"
 echo "  Depth:      ${DEPTH}"
 echo "  Epsilon:    ${EPSILON}"
+if [ -n "$NNUE_MODEL" ]; then
+echo "  NNUE:       ${NNUE_MODEL}"
+fi
 echo "  Record:     ${RECORD_SIZE} bytes"
 echo "  Output dir: ${OUTPUT_DIR}"
 echo ""
@@ -92,8 +98,12 @@ mkdir -p "$OUTPUT_DIR"
 echo "Launching ${NUM_WORKERS} workers..."
 PIDS=()
 for i in $(seq 0 $((NUM_WORKERS - 1))); do
+  NNUE_FLAG=""
+  if [ -n "$NNUE_MODEL" ]; then
+    NNUE_FLAG="-m $NNUE_MODEL"
+  fi
   $BIN -n $GAMES_PER_WORKER -d $DEPTH -e $EPSILON \
-       -s $i -o "${OUTPUT_DIR}/train_${i}.bin" 2>/dev/null &
+       $NNUE_FLAG -s $i -o "${OUTPUT_DIR}/train_${i}.bin" 2>/dev/null &
   PIDS+=($!)
 done
 
