@@ -230,7 +230,7 @@ struct QuantModel {
     }
 };
 
-static int evaluate_quant(const nnue::Model& m, const QuantModel& qm,
+static int evaluate_quant(const nnue::Model& /*m*/, const QuantModel& qm,
                            const State& state, int player){
     int white_features[nnue::MAX_ACTIVE];
     int black_features[nnue::MAX_ACTIVE];
