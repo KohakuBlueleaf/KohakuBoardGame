@@ -11,5 +11,5 @@
 #ifndef NO_NNUE
 #define USE_NNUE
 #endif
-#define NNUE_FILE "models/nnue_v1.bin"
+#define NNUE_FILE "models/nnue.bin"
 #define USE_NNUE_SIMD

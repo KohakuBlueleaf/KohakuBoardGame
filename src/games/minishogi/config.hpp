@@ -32,7 +32,7 @@
 
 /* Default NNUE model path */
 #undef NNUE_FILE
-#define NNUE_FILE "models/minishogi-nnue_v1.bin"
+#define NNUE_FILE "models/nnue.bin"
 
 /* Drop moves use sentinel row = BOARD_H in the from-point */
 #define DROP_ROW BOARD_H
