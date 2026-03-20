@@ -4,7 +4,7 @@
 #
 # Usage: bash scripts/gen_data.sh [options]
 #   -g GAME         Game type: minichess, minishogi, gomoku (default: minichess)
-#   -p NUM_POS      Target positions (default: 1000000)
+#   -n NUM_GAMES    Target games (default: 30000)
 #   -w NUM_WORKERS  Parallel processes (default: 64)
 #   -d DEPTH        Search depth (default: 6)
 #   -e EPSILON      Jitter probability (default: 0.15)
@@ -14,22 +14,22 @@ set -e
 
 # Defaults
 GAME="minichess"
-TOTAL_POS=1000000
+TOTAL_GAMES=30000
 NUM_WORKERS=64
 DEPTH=6
 EPSILON=0.15
 OUTPUT_DIR="data"
 
 # Parse args
-while getopts "g:p:w:d:e:o:h" opt; do
+while getopts "g:n:w:d:e:o:h" opt; do
   case $opt in
     g) GAME=$OPTARG ;;
-    p) TOTAL_POS=$OPTARG ;;
+    n) TOTAL_GAMES=$OPTARG ;;
     w) NUM_WORKERS=$OPTARG ;;
     d) DEPTH=$OPTARG ;;
     e) EPSILON=$OPTARG ;;
     o) OUTPUT_DIR=$OPTARG ;;
-    h) echo "Usage: $0 [-g game] [-p positions] [-w workers] [-d depth] [-e epsilon] [-o output_dir]"
+    h) echo "Usage: $0 [-g game] [-n games] [-w workers] [-d depth] [-e epsilon] [-o output_dir]"
        echo "  Games: minichess (6x5), minishogi (5x5), gomoku (9x9)"
        exit 0 ;;
     *) exit 1 ;;
@@ -60,19 +60,18 @@ esac
 RECORD_SIZE=$((BOARD_CELLS + 8))
 HEADER_SIZE=12
 
-TOTAL_GAMES=$(( (TOTAL_POS + POS_PER_GAME - 1) / POS_PER_GAME ))
 GAMES_PER_WORKER=$(( (TOTAL_GAMES + NUM_WORKERS - 1) / NUM_WORKERS ))
 
-BIN=./build/datagen_${GAME}
+BIN=./build/${GAME}-datagen
 
-# Fall back to generic datagen if game-specific binary doesn't exist
-if [ ! -f "$BIN" ]; then
+# Fall back to legacy name if game-specific binary doesn't exist
+if [ ! -f "$BIN" ] && [ ! -f "${BIN}.exe" ]; then
   BIN=./build/datagen
 fi
 
 echo "=== ${GAME} Data Generation ==="
 echo "  Game:       ${GAME}"
-echo "  Target:     ~${TOTAL_POS} positions"
+echo "  Target:     ${TOTAL_GAMES} games"
 echo "  Games:      ${TOTAL_GAMES} total (${GAMES_PER_WORKER} per worker)"
 echo "  Workers:    ${NUM_WORKERS}"
 echo "  Depth:      ${DEPTH}"
@@ -82,9 +81,9 @@ echo "  Output dir: ${OUTPUT_DIR}"
 echo ""
 
 # Build if needed
-if [ ! -f "$BIN" ]; then
+if [ ! -f "$BIN" ] && [ ! -f "${BIN}.exe" ]; then
   echo "Building datagen for ${GAME}..."
-  make datagen GAME=${GAME}
+  make ${GAME}-datagen
 fi
 
 mkdir -p "$OUTPUT_DIR"
@@ -112,7 +111,7 @@ while true; do
     fi
   done
 
-  # Count positions from file sizes
+  # Estimate completed games from file sizes
   TOTAL_BYTES=0
   FILE_COUNT=0
   for f in "${OUTPUT_DIR}"/train_*.bin; do
@@ -126,21 +125,22 @@ while true; do
   else
     POS_EST=0
   fi
-  PCT=$(( POS_EST * 100 / TOTAL_POS ))
+  GAMES_EST=$(( POS_EST / (POS_PER_GAME > 0 ? POS_PER_GAME : 1) ))
+  PCT=$(( GAMES_EST * 100 / (TOTAL_GAMES > 0 ? TOTAL_GAMES : 1) ))
 
-  # Calc pos/sec and ETA
+  # Calc games/sec and ETA
   NOW=$(date +%s)
   ELAPSED=$((NOW - START_TIME))
-  if [ $ELAPSED -gt 0 ] && [ $POS_EST -gt 0 ]; then
-    POS_SEC=$((POS_EST / ELAPSED))
-    REMAINING=$(( (TOTAL_POS - POS_EST) / (POS_SEC > 0 ? POS_SEC : 1) ))
+  if [ $ELAPSED -gt 0 ] && [ $GAMES_EST -gt 0 ]; then
+    GAMES_SEC=$((GAMES_EST / ELAPSED))
+    REMAINING=$(( (TOTAL_GAMES - GAMES_EST) / (GAMES_SEC > 0 ? GAMES_SEC : 1) ))
     ETA_MIN=$((REMAINING / 60))
     ETA_SEC=$((REMAINING % 60))
-    printf "\r  [%d/%d workers done] %d/%d pos (%d%%) | %d pos/s | ETA %dm%02ds   " \
-      $DONE $NUM_WORKERS $POS_EST $TOTAL_POS $PCT $POS_SEC $ETA_MIN $ETA_SEC
+    printf "\r  [%d/%d workers done] ~%d/%d games (%d%%) %d pos | %d g/s | ETA %dm%02ds   " \
+      $DONE $NUM_WORKERS $GAMES_EST $TOTAL_GAMES $PCT $POS_EST $GAMES_SEC $ETA_MIN $ETA_SEC
   else
-    printf "\r  [%d/%d workers done] %d/%d pos (%d%%) | starting...   " \
-      $DONE $NUM_WORKERS $POS_EST $TOTAL_POS $PCT
+    printf "\r  [%d/%d workers done] ~%d/%d games (%d%%) | starting...   " \
+      $DONE $NUM_WORKERS $GAMES_EST $TOTAL_GAMES $PCT
   fi
 
   # Exit when all workers done
@@ -164,12 +164,15 @@ done
 END_TIME=$(date +%s)
 WALL_TIME=$((END_TIME - START_TIME))
 
+TOTAL_GAMES_EST=$(( TOTAL_RECORDS / (POS_PER_GAME > 0 ? POS_PER_GAME : 1) ))
+
 echo "=== Done ==="
 echo "  Game:       ${GAME}"
 echo "  Files:      ${NUM_WORKERS} x .bin"
+echo "  Games:      ~${TOTAL_GAMES_EST}"
 echo "  Positions:  ${TOTAL_RECORDS}"
 echo "  Total size: $(( TOTAL_SIZE / 1024 / 1024 )) MB"
 echo "  Wall time:  $((WALL_TIME / 60))m$((WALL_TIME % 60))s"
-echo "  Throughput: $(( TOTAL_RECORDS / (WALL_TIME > 0 ? WALL_TIME : 1) )) pos/s"
+echo "  Throughput: $(( TOTAL_GAMES_EST / (WALL_TIME > 0 ? WALL_TIME : 1) )) games/s"
 echo ""
 echo "To inspect: python3 scripts/read_data.py --game ${GAME} ${OUTPUT_DIR}/train_*.bin"
