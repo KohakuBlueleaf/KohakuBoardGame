@@ -17,58 +17,95 @@
  * ================================================================ */
 
 /* === Material values === */
+/* === Material values (centipawn-ish scale) ===
+ *
+ * Shogi piece values (adjusted for 5x5 minishogi):
+ *   - Pawn is baseline
+ *   - Silver ~ 4 pawns (good forward moves, can retreat diagonally)
+ *   - Gold ~ 5 pawns (strong defensive/attacking, no diagonal backward)
+ *   - Bishop ~ 7 pawns (strong diagonal but weak on small board)
+ *   - Rook ~ 9 pawns (dominant on 5x5, controls whole rank/file)
+ *   - Promoted bishop (Horse) ~ 12 (bishop + king moves = monster)
+ *   - Promoted rook (Dragon) ~ 13 (rook + king moves = monster)
+ *   - Promoted pawn/silver = gold equivalent ~ 5
+ */
 static const int material_value[NUM_PIECE_TYPES] = {
     /* EMPTY */ 0,
-    /* PAWN  */ 1, /* SILVER */ 4, /* GOLD  */ 5,
-    /* BISHOP*/ 6, /* ROOK   */ 7, /* KING  */ 0,
-    /* P_PAWN*/ 5, /* P_SILVER*/ 5, /* P_BISHOP */ 8, /* P_ROOK */ 9,
+    /* PAWN  */ 10, /* SILVER */ 40, /* GOLD   */ 50,
+    /* BISHOP*/ 70, /* ROOK   */ 90, /* KING   */ 0,
+    /* P_PAWN*/ 50, /* P_SILVER*/ 50, /* P_BISHOP */ 120, /* P_ROOK */ 130,
 };
 
-/* === Piece-Square Tables (sente perspective, row 0 = top/opponent side) === */
+/* Hand pieces are more valuable than board pieces (drop flexibility) */
+static const int hand_value[NUM_HAND_TYPES + 1] = {
+    /* 0 */ 0,
+    /* PAWN  */ 12, /* SILVER */ 45, /* GOLD */ 55,
+    /* BISHOP*/ 80, /* ROOK   */ 100,
+};
+
+/* === Piece-Square Tables (sente perspective, row 0 = top/opponent side) ===
+ * Scale: roughly ±15 centipawns. Forward = aggressive = bonus. */
 static const int pst_pawn[BOARD_H][BOARD_W] = {
+    /* row 0: promotion zone — pawn should promote here */
     {15, 15, 15, 15, 15},
-    {10, 10, 10, 10, 10},
-    { 4,  4,  6,  4,  4},
+    {10, 12, 14, 12, 10},
+    { 4,  6,  8,  6,  4},
     { 2,  2,  2,  2,  2},
     { 0,  0,  0,  0,  0},
 };
 static const int pst_silver[BOARD_H][BOARD_W] = {
-    { 4,  4,  6,  4,  4},
+    { 6,  8, 10,  8,  6},
+    { 4,  6,  8,  6,  4},
     { 2,  4,  6,  4,  2},
-    { 0,  2,  4,  2,  0},
     { 0,  2,  2,  2,  0},
-    { 0,  0,  0,  0,  0},
+    {-2, -2,  0, -2, -2},
 };
 static const int pst_gold[BOARD_H][BOARD_W] = {
-    { 4,  6,  6,  6,  4},
+    { 6,  8, 10,  8,  6},
+    { 4,  6,  8,  6,  4},
     { 2,  4,  6,  4,  2},
-    { 0,  2,  4,  2,  0},
     { 0,  2,  2,  2,  0},
-    { 0,  0,  0,  0,  0},
+    {-2, -2,  0, -2, -2},
 };
 static const int pst_bishop[BOARD_H][BOARD_W] = {
-    { 0,  0,  2,  0,  0},
-    { 0,  4,  4,  4,  0},
-    { 2,  4,  6,  4,  2},
-    { 0,  4,  4,  4,  0},
-    { 0,  0,  2,  0,  0},
+    { 2,  2,  4,  2,  2},
+    { 2,  6,  6,  6,  2},
+    { 4,  6,  8,  6,  4},
+    { 2,  6,  6,  6,  2},
+    { 0,  2,  4,  2,  0},
 };
 static const int pst_rook[BOARD_H][BOARD_W] = {
-    { 4,  4,  4,  4,  4},
+    { 6,  6,  8,  6,  6},
+    { 4,  4,  6,  4,  4},
     { 2,  2,  4,  2,  2},
-    { 0,  0,  2,  0,  0},
     { 0,  0,  2,  0,  0},
     { 0,  0,  0,  0,  0},
 };
 static const int pst_king[BOARD_H][BOARD_W] = {
-    {-8, -8, -8, -8, -8},
-    {-4, -4, -4, -4, -4},
-    {-2, -2, -2, -2, -2},
-    { 2,  2,  0,  2,  2},
-    { 4,  4,  2,  4,  4},
+    {-15,-15,-15,-15,-15},
+    {-10,-10,-10,-10,-10},
+    { -4, -4, -4, -4, -4},
+    {  4,  4,  0,  4,  4},
+    {  6,  8,  4,  8,  6},
+};
+/* Promoted bishop (horse): wants to be aggressive, near enemy */
+static const int pst_horse[BOARD_H][BOARD_W] = {
+    {10, 10, 12, 10, 10},
+    { 8,  8, 10,  8,  8},
+    { 4,  6,  8,  6,  4},
+    { 2,  2,  4,  2,  2},
+    { 0,  0,  0,  0,  0},
+};
+/* Promoted rook (dragon): wants to be aggressive, near enemy */
+static const int pst_dragon[BOARD_H][BOARD_W] = {
+    {10, 10, 12, 10, 10},
+    { 8,  8, 10,  8,  8},
+    { 4,  6,  8,  6,  4},
+    { 2,  2,  4,  2,  2},
+    { 0,  0,  0,  0,  0},
 };
 
-/* Pointers for indexing by piece type (unpromoted only; promoted use gold PST) */
+/* Pointers for indexing by piece type */
 static const int (*pst_table[NUM_PIECE_TYPES])[BOARD_W] = {
     /* EMPTY    */ nullptr,
     /* PAWN     */ pst_pawn,
@@ -77,11 +114,34 @@ static const int (*pst_table[NUM_PIECE_TYPES])[BOARD_W] = {
     /* BISHOP   */ pst_bishop,
     /* ROOK     */ pst_rook,
     /* KING     */ pst_king,
-    /* P_PAWN   */ pst_gold,
-    /* P_SILVER */ pst_gold,
-    /* P_BISHOP */ pst_bishop,
-    /* P_ROOK   */ pst_rook,
+    /* P_PAWN   */ pst_gold,     /* tokin moves like gold */
+    /* P_SILVER */ pst_gold,     /* narigin moves like gold */
+    /* P_BISHOP */ pst_horse,    /* horse = aggressive */
+    /* P_ROOK   */ pst_dragon,   /* dragon = aggressive */
 };
+
+/* King tropism: bonus for pieces near enemy king */
+static const int tropism_w[NUM_PIECE_TYPES] = {
+    0,  /* EMPTY */
+    0,  /* PAWN — too weak for tropism */
+    3,  /* SILVER */
+    4,  /* GOLD */
+    3,  /* BISHOP */
+    5,  /* ROOK */
+    0,  /* KING */
+    4,  /* P_PAWN (tokin) */
+    4,  /* P_SILVER */
+    5,  /* P_BISHOP (horse) */
+    6,  /* P_ROOK (dragon) */
+};
+
+static int king_tropism(int piece_type, int pr, int pc, int ekr, int ekc){
+    int dist = std::max(std::abs(pr - ekr), std::abs(pc - ekc));
+    if(dist <= 2){
+        return tropism_w[piece_type] * (3 - dist);
+    }
+    return 0;
+}
 
 
 /* === Direction tables === */
@@ -724,37 +784,49 @@ int State::evaluate(bool use_nnue, bool use_kp_eval, bool use_mobility){
     #endif
     (void)use_nnue;
 
-    auto& self_board = this->board.board[this->player];
-    auto& oppn_board = this->board.board[1 - this->player];
+    int p = this->player;
+    int opp = 1 - p;
+    auto& self_board = this->board.board[p];
+    auto& oppn_board = this->board.board[opp];
     int self_score = 0, oppn_score = 0;
 
+    /* Find king positions for tropism */
+    int self_kr = 0, self_kc = 0, oppn_kr = 0, oppn_kc = 0;
+    for(int r = 0; r < BOARD_H; r++){
+        for(int c = 0; c < BOARD_W; c++){
+            if(self_board[r][c] == KING){ self_kr = r; self_kc = c; }
+            if(oppn_board[r][c] == KING){ oppn_kr = r; oppn_kc = c; }
+        }
+    }
+
     if(use_kp_eval){
-        /* === KP eval: material + PST === */
+        /* === KP eval: material + PST + king tropism === */
         for(int r = 0; r < BOARD_H; r++){
             for(int c = 0; c < BOARD_W; c++){
                 int piece;
                 if((piece = self_board[r][c])){
-                    self_score += material_value[piece] * 10;
-                    /* PST: flip row for sente perspective */
-                    int pr = (this->player == 0) ? r : (BOARD_H - 1 - r);
+                    self_score += material_value[piece];
+                    int pr = (p == 0) ? r : (BOARD_H - 1 - r);
                     if(pst_table[piece]){
                         self_score += pst_table[piece][pr][c];
                     }
+                    self_score += king_tropism(piece, r, c, oppn_kr, oppn_kc);
                 }
                 if((piece = oppn_board[r][c])){
-                    oppn_score += material_value[piece] * 10;
-                    int pr = (this->player == 0) ? (BOARD_H - 1 - r) : r;
+                    oppn_score += material_value[piece];
+                    int pr = (p == 0) ? (BOARD_H - 1 - r) : r;
                     if(pst_table[piece]){
                         oppn_score += pst_table[piece][pr][c];
                     }
+                    oppn_score += king_tropism(piece, r, c, self_kr, self_kc);
                 }
             }
         }
 
-        /* Hand pieces contribute material value */
+        /* Hand pieces use hand_value (premium for drop flexibility) */
         for(int pt = 1; pt <= NUM_HAND_TYPES; pt++){
-            self_score += board.hand[this->player][pt] * material_value[pt] * 10;
-            oppn_score += board.hand[1 - this->player][pt] * material_value[pt] * 10;
+            self_score += board.hand[p][pt] * hand_value[pt];
+            oppn_score += board.hand[opp][pt] * hand_value[pt];
         }
     }else{
         /* === Simple material-only eval === */
@@ -769,10 +841,9 @@ int State::evaluate(bool use_nnue, bool use_kp_eval, bool use_mobility){
                 }
             }
         }
-        /* Hand pieces */
         for(int pt = 1; pt <= NUM_HAND_TYPES; pt++){
-            self_score += board.hand[this->player][pt] * material_value[pt];
-            oppn_score += board.hand[1 - this->player][pt] * material_value[pt];
+            self_score += board.hand[p][pt] * hand_value[pt];
+            oppn_score += board.hand[opp][pt] * hand_value[pt];
         }
     }
 
@@ -781,7 +852,7 @@ int State::evaluate(bool use_nnue, bool use_kp_eval, bool use_mobility){
     /* === Mobility bonus === */
     if(use_mobility){
         int self_mobility = (int)this->legal_actions.size();
-        State oppn_state(this->board, 1 - this->player);
+        State oppn_state(this->board, 1 - p);
         oppn_state.get_legal_actions();
         int oppn_mobility = (int)oppn_state.legal_actions.size();
         bonus += 2 * (self_mobility - oppn_mobility);
