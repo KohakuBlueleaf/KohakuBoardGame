@@ -102,10 +102,9 @@ class MiniShogiRenderer:
         self._piece_h = int(cfg.SQUARE_SIZE * 0.88)
 
         # Hand piece layout metrics
-        self._hand_small_w = int(self._piece_w * 0.55)
-        self._hand_small_h = int(self._piece_h * 0.55)
-        self._hand_spacing = self._hand_small_h + 2
-        self._hand_x = cfg.BOARD_X + cfg.BOARD_PIXEL_W + 4
+        self._hand_small_w = int(self._piece_w * 0.5)
+        self._hand_small_h = int(self._piece_h * 0.5)
+        self._hand_spacing_x = self._hand_small_w + 12  # horizontal spacing
 
         # Hand piece hit-test rects: (player, piece_type) -> pygame.Rect
         self._hand_rects = {}
@@ -251,93 +250,95 @@ class MiniShogiRenderer:
     # ------------------------------------------------------------------ #
 
     def _draw_hand_pieces(self, state):
-        """Draw captured pieces (hand) in sidebar areas.
+        """Draw captured pieces in horizontal rows above/below the board.
 
-        Gote's hand at top-right, Sente's hand at bottom-right.
-        Also updates _hand_rects for click detection.
+        Gote's hand: row above board.  Sente's hand: row below board.
+        Each piece is a small pentagon with count in bottom-right.
         """
         if not hasattr(state, 'hand'):
             return
 
         self._hand_rects.clear()
-        hand_x = self._hand_x
         sw = self._hand_small_w
         sh = self._hand_small_h
-        spacing = self._hand_spacing
+        spacing_x = self._hand_spacing_x
+        hand_h = getattr(cfg, "HAND_ROW_H", 36)
 
         for player in (0, 1):
             if player == 1:
-                # Gote's hand: top area
-                base_y = cfg.BOARD_Y
+                # Gote's hand: above board
+                base_y = getattr(cfg, "HAND_TOP_Y", cfg.BOARD_Y - hand_h)
             else:
-                # Sente's hand: bottom area
-                base_y = cfg.BOARD_Y + cfg.BOARD_PIXEL_H - len(_HAND_PIECES) * spacing
+                # Sente's hand: below board
+                base_y = getattr(cfg, "HAND_BOTTOM_Y", cfg.BOARD_Y + cfg.BOARD_PIXEL_H)
 
-            y_offset = 0
-            for pt in _HAND_PIECES:
+            # Center the row horizontally within the board width
+            total_w = len(_HAND_PIECES) * spacing_x
+            start_x = cfg.BOARD_X + (cfg.BOARD_PIXEL_W - total_w) // 2
+            cy = base_y + hand_h // 2
+
+            for idx, pt in enumerate(_HAND_PIECES):
                 count = state.hand[player][pt]
-                draw_x = hand_x
-                draw_y = base_y + y_offset
+                draw_x = start_x + idx * spacing_x
+                draw_y = int(cy - sh / 2)
 
-                # Always register the rect position (even if count == 0)
                 self._hand_rects[(player, pt)] = pygame.Rect(
                     draw_x, draw_y, sw + 4, sh + 4
                 )
 
-                if count <= 0:
-                    y_offset += spacing
-                    continue
-
-                # Highlight if this hand piece is selected
+                # Highlight if selected
                 if (self._selected_hand is not None
                         and self._selected_hand == (BOARD_SIZE, pt)
                         and player == state.current_player):
-                    highlight = pygame.Surface((sw + 8, sh + 8), pygame.SRCALPHA)
-                    highlight.fill(_HAND_HIGHLIGHT)
-                    self.surface.blit(highlight, (draw_x - 2, draw_y - 2))
+                    hl = pygame.Surface((sw + 8, sh + 8), pygame.SRCALPHA)
+                    hl.fill(_HAND_HIGHLIGHT)
+                    self.surface.blit(hl, (draw_x - 2, draw_y - 2))
 
-                # Draw a small piece shape
+                # Draw piece shape (dimmed if count == 0)
                 small_surf = pygame.Surface((sw + 4, sh + 4), pygame.SRCALPHA)
                 scx = (sw + 4) / 2
-                scy = (sh + 4) / 2
+                scy_local = (sh + 4) / 2
                 pointing_up = (player == 0)
-                pts = _pentagon_points(scx, scy, sw, sh, pointing_up)
+                pts = _pentagon_points(scx, scy_local, sw, sh, pointing_up)
 
-                bg = _SENTE_BG if player == 0 else _GOTE_BG
+                if count > 0:
+                    bg = _SENTE_BG if player == 0 else _GOTE_BG
+                else:
+                    bg = (120, 110, 100)  # dimmed for empty hand slot
                 pygame.draw.polygon(small_surf, bg, pts)
                 pygame.draw.polygon(small_surf, _PIECE_OUTLINE, pts, 1)
 
                 # Piece character
-                if self._use_kanji:
-                    char = PIECE_SYMBOLS.get(player, {}).get(pt, "?")
-                else:
-                    char = PIECE_NAMES.get(pt, "?")
-
+                char = (PIECE_SYMBOLS.get(player, {}).get(pt, "?")
+                        if self._use_kanji else PIECE_NAMES.get(pt, "?"))
                 try:
-                    text_surf, text_rect = self._hand_font.render(
-                        char, fgcolor=_NORMAL_TEXT
-                    )
-                    tx = scx - text_rect.width / 2
-                    ty = scy - text_rect.height / 2
-                    small_surf.blit(text_surf, (tx, ty))
+                    fg = _NORMAL_TEXT if count > 0 else (100, 90, 80)
+                    text_surf, text_rect = self._hand_font.render(char, fgcolor=fg)
+                    small_surf.blit(text_surf,
+                                    (scx - text_rect.width / 2,
+                                     scy_local - text_rect.height / 2))
                 except Exception:
                     pass
 
                 self.surface.blit(small_surf, (draw_x, draw_y))
 
-                # Draw count next to piece
-                if count > 1:
+                # Count badge in bottom-right
+                if count > 0:
                     try:
+                        cnt_text = str(count)
                         cnt_surf, cnt_rect = self._hand_font.render(
-                            f"x{count}", fgcolor=cfg.COLOR_TEXT
+                            cnt_text, fgcolor=cfg.COLOR_TEXT
                         )
-                        cnt_x = draw_x + sw + 6
-                        cnt_y = draw_y + (sh - cnt_rect.height) // 2
-                        self.surface.blit(cnt_surf, (cnt_x, cnt_y))
+                        # Small background circle for readability
+                        badge_r = max(cnt_rect.width, cnt_rect.height) // 2 + 2
+                        bx = draw_x + sw + 2
+                        by = draw_y + sh - 2
+                        pygame.draw.circle(self.surface, (40, 40, 44), (bx, by), badge_r)
+                        self.surface.blit(cnt_surf,
+                                          (bx - cnt_rect.width // 2,
+                                           by - cnt_rect.height // 2))
                     except Exception:
                         pass
-
-                y_offset += spacing
 
     def screen_to_hand(self, x, y, state):
         """Check if screen coordinates (x, y) hit a hand piece.

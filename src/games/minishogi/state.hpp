@@ -7,15 +7,15 @@
 class Board {
 public:
     char board[2][BOARD_H][BOARD_W] = {{
-        /* Player 0 (Sente) */
+        /* Player 0 (Sente) — SFEN: KGSBR, pawn on 5d */
         {0, 0, 0, 0, 0},
         {0, 0, 0, 0, 0},
         {0, 0, 0, 0, 0},
         {PAWN, 0, 0, 0, 0},
-        {ROOK, BISHOP, SILVER, GOLD, KING},
-    }, {
-        /* Player 1 (Gote) */
         {KING, GOLD, SILVER, BISHOP, ROOK},
+    }, {
+        /* Player 1 (Gote) — SFEN: rbsgk, pawn on 1b */
+        {ROOK, BISHOP, SILVER, GOLD, KING},
         {0, 0, 0, 0, PAWN},
         {0, 0, 0, 0, 0},
         {0, 0, 0, 0, 0},

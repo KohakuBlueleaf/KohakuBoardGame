@@ -128,23 +128,23 @@ def _make_initial_board():
     """Return the starting position as board[2][BOARD_SIZE][BOARD_SIZE]."""
     board = [[[EMPTY] * BOARD_SIZE for _ in range(BOARD_SIZE)] for _ in range(2)]
 
-    # Gote (player 1) -- top of board
-    # Row 0: k g s b r
-    board[1][0][0] = KING
-    board[1][0][1] = GOLD
+    # Gote (player 1) -- top of board (SFEN: rbsgk)
+    # Row 0: r b s g k
+    board[1][0][0] = ROOK
+    board[1][0][1] = BISHOP
     board[1][0][2] = SILVER
-    board[1][0][3] = BISHOP
-    board[1][0][4] = ROOK
+    board[1][0][3] = GOLD
+    board[1][0][4] = KING
     # Row 1: pawn at col 4
     board[1][1][4] = PAWN
 
-    # Sente (player 0) -- bottom of board
-    # Row 4: R B S G K
-    board[0][4][0] = ROOK
-    board[0][4][1] = BISHOP
+    # Sente (player 0) -- bottom of board (SFEN: KGSBR)
+    # Row 4: K G S B R
+    board[0][4][0] = KING
+    board[0][4][1] = GOLD
     board[0][4][2] = SILVER
-    board[0][4][3] = GOLD
-    board[0][4][4] = KING
+    board[0][4][3] = BISHOP
+    board[0][4][4] = ROOK
     # Row 3: pawn at col 0
     board[0][3][0] = PAWN
 
