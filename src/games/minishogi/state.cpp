@@ -635,15 +635,16 @@ State* State::next_state(const Move& move){
  * NNUE feature extraction — HalfKP with hand pieces
  *
  * Feature layout (must match Python training pipeline):
- *   Board features:
- *     king_sq * KP_FEAT + color * (NUM_PT_NO_KING * NUM_SQ) + (pt-1) * NUM_SQ + sq
- *   where KP_FEAT = 2 * NUM_PT_NO_KING * NUM_SQ
- *   King is skipped (pt == KING).
- *   For perspective 1 (gote): rows are mirrored, colors are flipped.
+ *   Board features [0, HALFKP_SIZE):
+ *     king_sq * KP_FEAT + color * (NPT * NSQ) + (pt-1) * NSQ + sq
+ *   Hand features [HALFKP_SIZE, HALFKP_SIZE + 2*NUM_HAND_TYPES):
+ *     HALFKP_SIZE + color * NUM_HAND_TYPES + (pt-1)
+ *     Added count times for each hand piece with count > 0.
  * ================================================================ */
 int State::extract_nnue_features(int perspective, int* features) const{
     constexpr int NUM_SQ = BOARD_H * BOARD_W;
     constexpr int KP_FEAT = 2 * NUM_PT_NO_KING * NUM_SQ;
+    constexpr int HALFKP = NUM_SQ * KP_FEAT;
     int count = 0;
 
     /* Find king square for this perspective */
@@ -679,6 +680,18 @@ int State::extract_nnue_features(int perspective, int* features) const{
                         + (pt - 1) * NUM_SQ + sq
                     );
                 }
+            }
+        }
+    }
+
+    /* Hand piece features — added count times per piece type */
+    for(int color = 0; color < 2; color++){
+        int feat_color = (perspective == 0) ? color : (1 - color);
+        for(int pt = 1; pt <= NUM_HAND_TYPES; pt++){
+            int cnt = board.hand[color][pt];
+            int feat_idx = HALFKP + feat_color * NUM_HAND_TYPES + (pt - 1);
+            for(int i = 0; i < cnt && count < 32; i++){
+                features[count++] = feat_idx;
             }
         }
     }

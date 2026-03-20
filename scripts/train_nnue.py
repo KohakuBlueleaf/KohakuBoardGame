@@ -105,16 +105,16 @@ def get_game_config(game_name: str) -> dict:
     )
     cfg["halfkp_size"] = cfg["num_squares"] * cfg["num_piece_features"]
     cfg["policy_size"] = cfg["num_squares"] * cfg["num_squares"]  # from-to
-    # For MiniShogi hand features: additional feature dimensions for pieces in hand
-    if cfg["has_hand"]:
-        # Hand features: num_hand_types * max_count_per_type * num_colors
-        # For now, hand pieces are encoded on the board by the C++ engine
-        # (stored in the board array). This is a hook for future expansion
-        # where hand features might be separate input dimensions.
-        cfg["hand_feature_size"] = 0  # placeholder -- encoded within board
+    # Hand features appended after HalfKP/PS board features
+    if cfg["has_hand"] and cfg["num_hand_types"] > 0:
+        # One feature per (color, hand_piece_type), activated count times
+        cfg["hand_feature_size"] = cfg["num_colors"] * cfg["num_hand_types"]
     else:
         cfg["hand_feature_size"] = 0
-    cfg["max_active"] = max(20, cfg["num_squares"])
+    # Total feature space = board features + hand features
+    cfg["halfkp_size_with_hand"] = cfg["halfkp_size"] + cfg["hand_feature_size"]
+    cfg["ps_size_with_hand"] = cfg["ps_size"] + cfg["hand_feature_size"]
+    cfg["max_active"] = max(20, cfg["num_squares"] + cfg.get("num_hand_types", 0) * 2)
     return cfg
 
 
@@ -499,13 +499,14 @@ def board_to_halfkp_indices(
     num_pt_no_king = gcfg["num_pt_no_king"]
     king_id = gcfg["king_id"]
     num_piece_features = gcfg["num_piece_features"]
-    halfkp_size = gcfg["halfkp_size"]
+    halfkp_size = gcfg["halfkp_size"]  # board-only feature space
+    total_feature_size = gcfg["halfkp_size_with_hand"]  # board + hand
     max_active = gcfg["max_active"]
 
     N = len(boards)
 
-    # Use int32 for indices when halfkp_size > 32767
-    idx_dtype = np.int32 if halfkp_size > 32767 else np.int16
+    # Use int32 for indices when feature space > 32767
+    idx_dtype = np.int32 if total_feature_size > 32767 else np.int16
 
     if king_id is not None:
         # Standard HalfKP: find king squares
@@ -522,8 +523,8 @@ def board_to_halfkp_indices(
         w_king_sq = np.zeros(N, dtype=np.int32)
         b_king_mir = np.zeros(N, dtype=np.int32)
 
-    white_idx = np.full((N, max_active), halfkp_size, dtype=idx_dtype)
-    black_idx = np.full((N, max_active), halfkp_size, dtype=idx_dtype)
+    white_idx = np.full((N, max_active), total_feature_size, dtype=idx_dtype)
+    black_idx = np.full((N, max_active), total_feature_size, dtype=idx_dtype)
     w_cnt = np.zeros(N, dtype=np.int32)
     b_cnt = np.zeros(N, dtype=np.int32)
 
@@ -572,38 +573,45 @@ def board_to_halfkp_indices(
                     black_idx[vi, pos_b[valid_b]] = b_feat[valid_b].astype(idx_dtype)
                 b_cnt[indices] = pos_b + 1
 
+    # Append hand features if available
+    if gcfg["has_hand"] and "_hands" in gcfg:
+        hands = gcfg["_hands"]  # (N, 2, num_hand_types)
+        num_ht = gcfg["num_hand_types"]
+        base = halfkp_size  # hand features start after board features
+
+        for color in range(2):
+            for pt in range(num_ht):
+                counts = hands[:, color, pt]
+                has = counts > 0
+                if not np.any(has):
+                    continue
+                indices = np.where(has)[0]
+                cnts = counts[indices].astype(np.int32)
+
+                # White perspective: color as-is
+                w_feat_idx = base + color * num_ht + pt
+                for i in range(len(indices)):
+                    idx = indices[i]
+                    c = cnts[i]
+                    for _ in range(c):
+                        pw = w_cnt[idx]
+                        if pw < max_active:
+                            white_idx[idx, pw] = w_feat_idx
+                        w_cnt[idx] = pw + 1
+
+                # Black perspective: flip color
+                b_feat_idx = base + (1 - color) * num_ht + pt
+                for i in range(len(indices)):
+                    idx = indices[i]
+                    c = cnts[i]
+                    for _ in range(c):
+                        pb = b_cnt[idx]
+                        if pb < max_active:
+                            black_idx[idx, pb] = b_feat_idx
+                        b_cnt[idx] = pb + 1
+
     stm = players.astype(bool)
     return white_idx, black_idx, stm
-
-
-# ---------------------------------------------------------------------------
-# Hand feature extraction hook (MiniShogi)
-# ---------------------------------------------------------------------------
-def extract_hand_features(
-    boards: np.ndarray,
-    players: np.ndarray,
-    gcfg: dict,
-) -> Optional[np.ndarray]:
-    """Extract hand piece features for games that have them (e.g. MiniShogi).
-
-    Currently the C++ engine encodes hand pieces within the board array,
-    so they are already captured by the standard feature extraction.
-    This function is a hook for future expansion where hand pieces might
-    need separate feature planes or additional input dimensions.
-
-    Returns None if the game has no hand pieces, or if hand features are
-    already embedded in the board representation.
-    """
-    if not gcfg["has_hand"]:
-        return None
-
-    # Placeholder: hand pieces are currently embedded in the board array
-    # by the C++ datagen. When a separate hand encoding is added to the
-    # data format, this function should extract and return those features.
-    #
-    # Expected future format:
-    #   hand_feats: (N, num_colors * num_hand_types * max_hand_count) float32
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -675,13 +683,16 @@ class HalfKPSparseDataset(Dataset):
         wi = self.white_indices[idx]
         valid_w = wi[wi != halfkp_size]
         if len(valid_w) > 0:
-            w[valid_w.astype(np.int64)] = 1.0
+            # Use scatter_add to handle duplicate indices (hand pieces with count > 1)
+            w.scatter_add_(0, torch.from_numpy(valid_w.astype(np.int64)),
+                          torch.ones(len(valid_w)))
 
         b = torch.zeros(halfkp_size)
         bi = self.black_indices[idx]
         valid_b = bi[bi != halfkp_size]
         if len(valid_b) > 0:
-            b[valid_b.astype(np.int64)] = 1.0
+            b.scatter_add_(0, torch.from_numpy(valid_b.astype(np.int64)),
+                          torch.ones(len(valid_b)))
 
         items = (w, b, self.stm[idx], self.scores[idx], self.results[idx])
         if self.best_moves is not None:
@@ -974,10 +985,7 @@ def train(args: argparse.Namespace) -> None:
             "Policy loss will be skipped (value-only training)."
         )
 
-    # ---- Extract hand features (hook) -------------------------------------
-    hand_feats = extract_hand_features(boards, players, gcfg)
-    if hand_feats is not None:
-        print(f"  Hand features shape: {hand_feats.shape}")
+    # Hand features are now integrated into board_to_halfkp_indices()
 
     # ---- Train/val split --------------------------------------------------
     N = len(scores)
@@ -1016,10 +1024,10 @@ def train(args: argparse.Namespace) -> None:
             bm_val,
         )
     elif feature_type == "halfkp":
-        feature_size = halfkp_size
+        feature_size = gcfg["halfkp_size_with_hand"]
         wi, bi, stm = board_to_halfkp_indices(boards, players, gcfg)
         print(f"  Feature extraction: {time.time() - t0:.2f}s")
-        active = (wi != halfkp_size).sum(axis=1).mean()
+        active = (wi != feature_size).sum(axis=1).mean()
         print(f"  Active features per position: {active:.1f}")
         train_ds = HalfKPSparseDataset(
             wi[train_idx],
@@ -1027,7 +1035,7 @@ def train(args: argparse.Namespace) -> None:
             stm[train_idx],
             scores[train_idx],
             results[train_idx],
-            halfkp_size,
+            feature_size,
             bm_train,
         )
         val_ds = HalfKPSparseDataset(
@@ -1036,7 +1044,7 @@ def train(args: argparse.Namespace) -> None:
             stm[val_idx],
             scores[val_idx],
             results[val_idx],
-            halfkp_size,
+            feature_size,
             bm_val,
         )
     else:
