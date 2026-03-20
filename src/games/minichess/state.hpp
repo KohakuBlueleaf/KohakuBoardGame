@@ -33,10 +33,14 @@ public:
     Board board;
     int score = 0;
 
-    State(){};
-    State(int player){ this->player = player; };
-    State(Board board): board(board){};
-    State(Board board, int player): board(board){ this->player = player; };
+    State(){}
+    State(int player){
+        this->player = player;
+    }
+    State(Board board): board(board){}
+    State(Board board, int player): board(board){
+        this->player = player;
+    }
 
     int evaluate(bool use_nnue = true, bool use_kp_eval = true, bool use_mobility = true) override;
     State* next_state(const Move& move) override;
@@ -56,6 +60,10 @@ public:
 
     std::string encode_board() const override;
     void decode_board(const std::string& s, int side_to_move) override;
+
+    /* === NNUE feature extraction === */
+    int nnue_feature_count() const override;
+    int extract_nnue_features(int perspective, int* features) const override;
 
     /* === Game description === */
     int board_h() const override { return BOARD_H; }

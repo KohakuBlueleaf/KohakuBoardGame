@@ -4,18 +4,27 @@
 
 #ifdef USE_NNUE
 
+#include "base_state.hpp"
 #include "state.hpp"
 
 namespace nnue {
 
-// Constants
-constexpr int NUM_SQUARES = BOARD_H * BOARD_W;      // 30
-constexpr int NUM_PIECE_TYPES = 6;
-constexpr int NUM_PT_NO_KING = 5;
+// Constants derived from game config macros
+constexpr int NUM_SQUARES = BOARD_H * BOARD_W;
 constexpr int NUM_COLORS = 2;
-constexpr int PS_SIZE = NUM_COLORS * NUM_PIECE_TYPES * NUM_SQUARES;  // 360
-constexpr int NUM_PIECE_FEATURES = NUM_COLORS * NUM_PT_NO_KING * NUM_SQUARES; // 300
-constexpr int HALFKP_SIZE = NUM_SQUARES * NUM_PIECE_FEATURES;  // 9000
+#ifdef NNUE_NUM_PIECE_TYPES
+constexpr int NUM_PIECE_TYPES = NNUE_NUM_PIECE_TYPES;
+#else
+constexpr int NUM_PIECE_TYPES = 6;
+#endif
+#ifdef NNUE_NUM_PT_NO_KING
+constexpr int NUM_PT_NO_KING = NNUE_NUM_PT_NO_KING;
+#else
+constexpr int NUM_PT_NO_KING = 5;
+#endif
+constexpr int PS_SIZE = NUM_COLORS * NUM_PIECE_TYPES * NUM_SQUARES;
+constexpr int NUM_PIECE_FEATURES = NUM_COLORS * NUM_PT_NO_KING * NUM_SQUARES;
+constexpr int HALFKP_SIZE = NUM_SQUARES * NUM_PIECE_FEATURES;
 constexpr int MAX_ACTIVE = 20;
 
 struct Model {
@@ -41,7 +50,7 @@ struct Model {
 
     bool load(const char* path);
     bool load_from_memory(const unsigned char* data, size_t size);
-    int evaluate(const Board& board, int player) const;
+    int evaluate(const BaseState& state, int player) const;
     int extract_features_ps(const Board& board, int perspective, int* features) const;
     int extract_features_halfkp(const Board& board, int perspective, int* features) const;
 

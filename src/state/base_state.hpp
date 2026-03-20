@@ -45,6 +45,10 @@ public:
     /* === Display string for a cell at (row, col) === */
     virtual std::string cell_display(int /*row*/, int /*col*/) const { return " . "; }
 
+    /* NNUE feature extraction -- override per game */
+    virtual int nnue_feature_count() const { return 0; }
+    virtual int extract_nnue_features(int /*perspective*/, int* /*features*/) const { return 0; }
+
     /* === Board serialization for UBGI 'position board' command === */
     virtual std::string encode_board() const = 0;
     virtual void decode_board(const std::string& s, int side_to_move) = 0;

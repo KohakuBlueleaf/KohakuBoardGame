@@ -114,20 +114,24 @@ State::State(){
  * Promotion helpers
  * ================================================================ */
 
-bool State::is_promotion_zone(int row, int player) const {
+bool State::is_promotion_zone(int row, int player) const{
     /* Player 0 (sente): row 0 is promotion zone (enemy's last rank) */
     /* Player 1 (gote):  row 4 is promotion zone (enemy's last rank) */
-    if(player == 0) return (row == 0);
+    if(player == 0){
+        return (row == 0);
+    }
     return (row == BOARD_H - 1);
 }
 
-bool State::must_promote(int piece, int row, int player) const {
+bool State::must_promote(int piece, int row, int player) const{
     /* Pawn on last rank must promote (no forward moves otherwise) */
-    if(piece == PAWN && is_promotion_zone(row, player)) return true;
+    if(piece == PAWN && is_promotion_zone(row, player)){
+        return true;
+    }
     return false;
 }
 
-int State::demote(int piece) const {
+int State::demote(int piece) const{
     /* Return the unpromoted base type for captured promoted pieces */
     switch(piece){
         case P_PAWN:   return PAWN;
@@ -138,7 +142,7 @@ int State::demote(int piece) const {
     }
 }
 
-int State::unpromoted_type(int piece) const {
+int State::unpromoted_type(int piece) const{
     /* Map any piece to its hand index (1-5). King=6 never goes to hand. */
     switch(piece){
         case PAWN:   case P_PAWN:   return PAWN;
@@ -188,9 +192,13 @@ static bool try_add_move(
     GameState& game_state
 ){
     /* Out of bounds */
-    if(to_r < 0 || to_r >= BOARD_H || to_c < 0 || to_c >= BOARD_W) return false;
+    if(to_r < 0 || to_r >= BOARD_H || to_c < 0 || to_c >= BOARD_W){
+        return false;
+    }
     /* Own piece blocks */
-    if(self_board[to_r][to_c]) return false;
+    if(self_board[to_r][to_c]){
+        return false;
+    }
 
     /* Check for king capture */
     int captured = oppn_board[to_r][to_c];
@@ -208,8 +216,12 @@ static bool try_add_move(
         bool forced = false;
         if(piece == PAWN){
             /* Pawn on last rank must promote */
-            if(player == 0 && to_r == 0) forced = true;
-            if(player == 1 && to_r == BOARD_H - 1) forced = true;
+            if(player == 0 && to_r == 0){
+                forced = true;
+            }
+            if(player == 1 && to_r == BOARD_H - 1){
+                forced = true;
+            }
         }
         if(forced){
             /* Only promoted move */
@@ -239,7 +251,9 @@ void State::gen_board_moves(){
     for(int r = 0; r < BOARD_H; r++){
         for(int c = 0; c < BOARD_W; c++){
             int piece = self_board[r][c];
-            if(!piece) continue;
+            if(!piece){
+                continue;
+            }
 
             bool from_promo = is_promotion_zone(r, p);
 
@@ -295,8 +309,12 @@ void State::gen_board_moves(){
                         for(int step = 1; step < BOARD_H; step++){
                             int tr = r + dir8_dr[d] * step;
                             int tc = c + dir8_dc[d] * step;
-                            if(tr < 0 || tr >= BOARD_H || tc < 0 || tc >= BOARD_W) break;
-                            if(self_board[tr][tc]) break;
+                            if(tr < 0 || tr >= BOARD_H || tc < 0 || tc >= BOARD_W){
+                                break;
+                            }
+                            if(self_board[tr][tc]){
+                                break;
+                            }
 
                             bool to_promo = is_promotion_zone(tr, p);
                             bool king_cap = (oppn_board[tr][tc] == KING);
@@ -316,7 +334,9 @@ void State::gen_board_moves(){
                                 legal_actions.push_back(Move(Point(r, c), Point(tr, tc)));
                             }
 
-                            if(oppn_board[tr][tc]) break;  /* captured, stop sliding */
+                            if(oppn_board[tr][tc]){
+                                break;  /* captured, stop sliding */
+                            }
                         }
                     }
                     break;
@@ -328,8 +348,12 @@ void State::gen_board_moves(){
                         for(int step = 1; step < BOARD_H; step++){
                             int tr = r + dir8_dr[d] * step;
                             int tc = c + dir8_dc[d] * step;
-                            if(tr < 0 || tr >= BOARD_H || tc < 0 || tc >= BOARD_W) break;
-                            if(self_board[tr][tc]) break;
+                            if(tr < 0 || tr >= BOARD_H || tc < 0 || tc >= BOARD_W){
+                                break;
+                            }
+                            if(self_board[tr][tc]){
+                                break;
+                            }
 
                             bool to_promo = is_promotion_zone(tr, p);
                             bool king_cap = (oppn_board[tr][tc] == KING);
@@ -348,7 +372,9 @@ void State::gen_board_moves(){
                                 legal_actions.push_back(Move(Point(r, c), Point(tr, tc)));
                             }
 
-                            if(oppn_board[tr][tc]) break;
+                            if(oppn_board[tr][tc]){
+                                break;
+                            }
                         }
                     }
                     break;
@@ -375,8 +401,12 @@ void State::gen_board_moves(){
                         for(int step = 1; step < BOARD_H; step++){
                             int tr = r + dir8_dr[d] * step;
                             int tc = c + dir8_dc[d] * step;
-                            if(tr < 0 || tr >= BOARD_H || tc < 0 || tc >= BOARD_W) break;
-                            if(self_board[tr][tc]) break;
+                            if(tr < 0 || tr >= BOARD_H || tc < 0 || tc >= BOARD_W){
+                                break;
+                            }
+                            if(self_board[tr][tc]){
+                                break;
+                            }
 
                             if(oppn_board[tr][tc] == KING){
                                 game_state = WIN;
@@ -384,7 +414,9 @@ void State::gen_board_moves(){
                                 return;
                             }
                             legal_actions.push_back(Move(Point(r, c), Point(tr, tc)));
-                            if(oppn_board[tr][tc]) break;
+                            if(oppn_board[tr][tc]){
+                                break;
+                            }
                         }
                     }
                     /* 1-step orthogonal (king-like addition) */
@@ -406,8 +438,12 @@ void State::gen_board_moves(){
                         for(int step = 1; step < BOARD_H; step++){
                             int tr = r + dir8_dr[d] * step;
                             int tc = c + dir8_dc[d] * step;
-                            if(tr < 0 || tr >= BOARD_H || tc < 0 || tc >= BOARD_W) break;
-                            if(self_board[tr][tc]) break;
+                            if(tr < 0 || tr >= BOARD_H || tc < 0 || tc >= BOARD_W){
+                                break;
+                            }
+                            if(self_board[tr][tc]){
+                                break;
+                            }
 
                             if(oppn_board[tr][tc] == KING){
                                 game_state = WIN;
@@ -415,7 +451,9 @@ void State::gen_board_moves(){
                                 return;
                             }
                             legal_actions.push_back(Move(Point(r, c), Point(tr, tc)));
-                            if(oppn_board[tr][tc]) break;
+                            if(oppn_board[tr][tc]){
+                                break;
+                            }
                         }
                     }
                     /* 1-step diagonal (king-like addition) */
@@ -458,20 +496,30 @@ void State::gen_drop_moves(){
 
     /* For each piece type in hand */
     for(int pt = 1; pt <= NUM_HAND_TYPES; pt++){
-        if(board.hand[p][pt] <= 0) continue;
+        if(board.hand[p][pt] <= 0){
+            continue;
+        }
 
         for(int r = 0; r < BOARD_H; r++){
             for(int c = 0; c < BOARD_W; c++){
                 /* Must be empty — no piece for either player */
-                if(self_board[r][c] || oppn_board[r][c]) continue;
+                if(self_board[r][c] || oppn_board[r][c]){
+                    continue;
+                }
 
                 /* Pawn restrictions */
                 if(pt == PAWN){
                     /* Can't drop pawn on last rank (no forward moves) */
-                    if(p == 0 && r == 0) continue;
-                    if(p == 1 && r == BOARD_H - 1) continue;
+                    if(p == 0 && r == 0){
+                        continue;
+                    }
+                    if(p == 1 && r == BOARD_H - 1){
+                        continue;
+                    }
                     /* Can't drop pawn on column that already has own unpromoted pawn */
-                    if(has_pawn_on_col[c]) continue;
+                    if(has_pawn_on_col[c]){
+                        continue;
+                    }
                 }
 
                 /* Drop move: from = (DROP_ROW, piece_type), to = (row, col) */
@@ -498,7 +546,9 @@ void State::get_legal_actions(){
     }
 
     gen_board_moves();
-    if(game_state == WIN) return;  /* king capture found */
+    if(game_state == WIN){
+        return;  /* king capture found */
+    }
 
     gen_drop_moves();
 
@@ -593,7 +643,7 @@ int State::evaluate(bool use_nnue, bool use_kp_eval, bool use_mobility){
     /* === NNUE evaluation === */
     #ifdef USE_NNUE
     if(use_nnue && nnue::g_model.loaded()){
-        return nnue::g_model.evaluate(this->board, this->player);
+        return nnue::g_model.evaluate(*this, this->player);
     }
     #endif
     (void)use_nnue;
@@ -669,7 +719,7 @@ int State::evaluate(bool use_nnue, bool use_kp_eval, bool use_mobility){
  * create_null_state
  * ================================================================ */
 
-BaseState* State::create_null_state() const {
+BaseState* State::create_null_state() const{
     State* s = new State(this->board, 1 - this->player);
     s->step = this->step;
     s->get_legal_actions();
@@ -711,8 +761,10 @@ static void init_zobrist(){
     zobrist_ready = true;
 }
 
-uint64_t State::hash() const {
-    if(!zobrist_ready) init_zobrist();
+uint64_t State::hash() const{
+    if(!zobrist_ready){
+        init_zobrist();
+    }
     uint64_t h = 0;
 
     /* Board pieces */
@@ -738,7 +790,9 @@ uint64_t State::hash() const {
     }
 
     /* Side to move */
-    if(this->player) h ^= zobrist_side;
+    if(this->player){
+        h ^= zobrist_side;
+    }
     return h;
 }
 
@@ -747,7 +801,7 @@ uint64_t State::hash() const {
  * encode_output — pretty-print for terminal
  * ================================================================ */
 
-std::string State::encode_output() const {
+std::string State::encode_output() const{
     std::stringstream ss;
 
     /* Gote hand */
@@ -757,7 +811,9 @@ std::string State::encode_output() const {
         if(cnt > 0){
             const char* names[] = {"", "P", "S", "G", "B", "R"};
             ss << names[pt];
-            if(cnt > 1) ss << cnt;
+            if(cnt > 1){
+                ss << cnt;
+            }
             ss << " ";
         }
     }
@@ -800,7 +856,9 @@ std::string State::encode_output() const {
         if(cnt > 0){
             const char* names[] = {"", "P", "S", "G", "B", "R"};
             ss << names[pt];
-            if(cnt > 1) ss << cnt;
+            if(cnt > 1){
+                ss << cnt;
+            }
             ss << " ";
         }
     }
@@ -815,7 +873,7 @@ std::string State::encode_output() const {
  * cell_display — single cell string for UBGI 'd' command
  * ================================================================ */
 
-std::string State::cell_display(int row, int col) const {
+std::string State::cell_display(int row, int col) const{
     int w = (int)board.board[0][row][col];
     int b = (int)board.board[1][row][col];
     if(w){
@@ -852,9 +910,13 @@ static char piece_to_sfen_char(int piece, int player){
             case P_ROOK:   base = ROOK;   break;
         }
     }
-    if(base < 1 || base > 6) return '?';
+    if(base < 1 || base > 6){
+        return '?';
+    }
     char ch = base_chars[base];
-    if(player == 1) ch = (char)(ch + ('a' - 'A')); /* lowercase for gote */
+    if(player == 1){
+        ch = (char)(ch + ('a' - 'A')); /* lowercase for gote */
+    }
     return ch;
 }
 
@@ -862,12 +924,14 @@ static bool is_promoted_piece(int piece){
     return (piece == P_PAWN || piece == P_SILVER || piece == P_BISHOP || piece == P_ROOK);
 }
 
-std::string State::encode_board() const {
+std::string State::encode_board() const{
     std::string s;
 
     /* Board section */
     for(int r = 0; r < BOARD_H; r++){
-        if(r > 0) s += '/';
+        if(r > 0){
+            s += '/';
+        }
         int empty_count = 0;
         for(int c = 0; c < BOARD_W; c++){
             int w = board.board[0][r][c];
@@ -904,7 +968,9 @@ std::string State::encode_board() const {
     for(int pt = 1; pt <= NUM_HAND_TYPES; pt++){
         int cnt = board.hand[0][pt];
         if(cnt > 0){
-            if(cnt > 1) s += (char)('0' + cnt);
+            if(cnt > 1){
+                s += (char)('0' + cnt);
+            }
             s += hand_chars_upper[pt];
             has_hand = true;
         }
@@ -913,12 +979,16 @@ std::string State::encode_board() const {
     for(int pt = 1; pt <= NUM_HAND_TYPES; pt++){
         int cnt = board.hand[1][pt];
         if(cnt > 0){
-            if(cnt > 1) s += (char)('0' + cnt);
+            if(cnt > 1){
+                s += (char)('0' + cnt);
+            }
             s += hand_chars_lower[pt];
             has_hand = true;
         }
     }
-    if(!has_hand) s += '-';
+    if(!has_hand){
+        s += '-';
+    }
 
     return s;
 }

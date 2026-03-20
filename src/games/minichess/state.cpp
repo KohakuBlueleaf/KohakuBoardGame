@@ -11,6 +11,125 @@
 
 
 /*============================================================
+ * NNUE feature extraction (PS and HalfKP)
+ *
+ * Moved here from nnue.cpp so the NNUE system does not need
+ * to know about MiniChess-specific board layout.
+ *============================================================*/
+
+int State::nnue_feature_count() const{
+#ifdef USE_NNUE
+    if(nnue::g_model.version == 1){
+        return nnue::PS_SIZE;
+    }
+    return nnue::HALFKP_SIZE;
+#else
+    return 0;
+#endif
+}
+
+int State::extract_nnue_features(int perspective, int* features) const{
+#ifdef USE_NNUE
+    if(nnue::g_model.version == 1){
+        /* PS feature extraction */
+        int count = 0;
+        for(int color_plane = 0; color_plane < 2; ++color_plane){
+            for(int r = 0; r < BOARD_H; ++r){
+                for(int c = 0; c < BOARD_W; ++c){
+                    int pt = board.board[color_plane][r][c];
+                    if(pt == 0){
+                        continue;
+                    }
+                    int pt_idx = pt - 1;
+
+                    if(perspective == 0){
+                        int sq = r * BOARD_W + c;
+                        features[count++] = (
+                            color_plane * nnue::NUM_PIECE_TYPES * nnue::NUM_SQUARES
+                            + pt_idx * nnue::NUM_SQUARES + sq
+                        );
+                    }else{
+                        int mir_r = BOARD_H - 1 - r;
+                        int sq = mir_r * BOARD_W + c;
+                        features[count++] = (
+                            (1 - color_plane) * nnue::NUM_PIECE_TYPES * nnue::NUM_SQUARES
+                            + pt_idx * nnue::NUM_SQUARES + sq
+                        );
+                    }
+                }
+            }
+        }
+        return count;
+    }
+
+    /* HalfKP feature extraction */
+    int count = 0;
+
+    if(perspective == 0){
+        /* White perspective -- find white king square */
+        int king_sq = -1;
+        for(int r = 0; r < BOARD_H; ++r){
+            for(int c = 0; c < BOARD_W; ++c){
+                if(board.board[0][r][c] == 6){
+                    king_sq = r * BOARD_W + c;
+                }
+            }
+        }
+
+        for(int color_plane = 0; color_plane < 2; ++color_plane){
+            for(int r = 0; r < BOARD_H; ++r){
+                for(int c = 0; c < BOARD_W; ++c){
+                    int pt = board.board[color_plane][r][c];
+                    if(pt == 0 || pt == 6){
+                        continue;
+                    }
+                    int sq = r * BOARD_W + c;
+                    features[count++] = (
+                        king_sq * nnue::NUM_PIECE_FEATURES
+                        + color_plane * (nnue::NUM_PT_NO_KING * nnue::NUM_SQUARES)
+                        + (pt - 1) * nnue::NUM_SQUARES + sq
+                    );
+                }
+            }
+        }
+    }else{
+        /* Black perspective -- find black king, mirror */
+        int king_sq_mir = -1;
+        for(int r = 0; r < BOARD_H; ++r){
+            for(int c = 0; c < BOARD_W; ++c){
+                if(board.board[1][r][c] == 6){
+                    king_sq_mir = (BOARD_H - 1 - r) * BOARD_W + c;
+                }
+            }
+        }
+
+        for(int color_plane = 0; color_plane < 2; ++color_plane){
+            for(int r = 0; r < BOARD_H; ++r){
+                for(int c = 0; c < BOARD_W; ++c){
+                    int pt = board.board[color_plane][r][c];
+                    if(pt == 0 || pt == 6){
+                        continue;
+                    }
+                    int mir_sq = (BOARD_H - 1 - r) * BOARD_W + c;
+                    features[count++] = (
+                        king_sq_mir * nnue::NUM_PIECE_FEATURES
+                        + (1 - color_plane) * (nnue::NUM_PT_NO_KING * nnue::NUM_SQUARES)
+                        + (pt - 1) * nnue::NUM_SQUARES + mir_sq
+                    );
+                }
+            }
+        }
+    }
+    return count;
+#else
+    (void)perspective;
+    (void)features;
+    return 0;
+#endif
+}
+
+
+/*============================================================
  * KP (King-Piece) Evaluation tables
  *
  * Always compiled. Toggled at runtime via use_kp_eval param.
@@ -68,7 +187,7 @@ int State::evaluate(bool use_nnue, bool use_kp_eval, bool use_mobility){
     /* === NNUE evaluation === */
     #ifdef USE_NNUE
     if(use_nnue && nnue::g_model.loaded()){
-        return nnue::g_model.evaluate(this->board, this->player);
+        return nnue::g_model.evaluate(*this, this->player);
     }
     #endif
     (void)use_nnue;
@@ -83,8 +202,12 @@ int State::evaluate(bool use_nnue, bool use_kp_eval, bool use_mobility){
         int oppn_kr = -1, oppn_kc = -1;
         for(int i = 0; i < BOARD_H; i++){
             for(int j = 0; j < BOARD_W; j++){
-                if(self_board[i][j] == 6){ self_kr = i; self_kc = j; }
-                if(oppn_board[i][j] == 6){ oppn_kr = i; oppn_kc = j; }
+                if(self_board[i][j] == 6){
+                    self_kr = i; self_kc = j;
+                }
+                if(oppn_board[i][j] == 6){
+                    oppn_kr = i; oppn_kc = j;
+                }
             }
         }
         for(int i = 0; i < BOARD_H; i++){
@@ -163,8 +286,9 @@ State* State::next_state(const Move& move){
 
     State* next_state = new State(next, 1-this->player);
 
-    if(this->game_state != WIN)
+    if(this->game_state != WIN){
         next_state->get_legal_actions();
+    }
     return next_state;
 }
 
@@ -208,8 +332,9 @@ void State::get_legal_actions_naive(){
                     case 1: //pawn
                         if(this->player && i<BOARD_H-1){
                             //black
-                            if(!oppn_board[i+1][j] && !self_board[i+1][j])
+                            if(!oppn_board[i+1][j] && !self_board[i+1][j]){
                                 all_actions.push_back(Move(Point(i, j), Point(i+1, j)));
+                            }
                             if(j<BOARD_W-1 && (oppn_piece=oppn_board[i+1][j+1])>0){
                                 all_actions.push_back(Move(Point(i, j), Point(i+1, j+1)));
                                 if(oppn_piece==6){
@@ -228,8 +353,9 @@ void State::get_legal_actions_naive(){
                             }
                         }else if(!this->player && i>0){
                             //white
-                            if(!oppn_board[i-1][j] && !self_board[i-1][j])
+                            if(!oppn_board[i-1][j] && !self_board[i-1][j]){
                                 all_actions.push_back(Move(Point(i, j), Point(i-1, j)));
+                            }
                             if(j<BOARD_W-1 && (oppn_piece=oppn_board[i-1][j+1])>0){
                                 all_actions.push_back(Move(Point(i, j), Point(i-1, j+1)));
                                 if(oppn_piece==6){
@@ -264,9 +390,13 @@ void State::get_legal_actions_naive(){
                             for(int k=0; k<std::max(BOARD_H, BOARD_W); k+=1){
                                 int p[2] = {move_list[k][0] + i, move_list[k][1] + j};
 
-                                if(p[0]>=BOARD_H || p[0]<0 || p[1]>=BOARD_W || p[1]<0) break;
+                                if(p[0]>=BOARD_H || p[0]<0 || p[1]>=BOARD_W || p[1]<0){
+                                    break;
+                                }
                                 now_piece = self_board[p[0]][p[1]];
-                                if(now_piece) break;
+                                if(now_piece){
+                                    break;
+                                }
 
                                 all_actions.push_back(Move(Point(i, j), Point(p[0], p[1])));
 
@@ -289,9 +419,13 @@ void State::get_legal_actions_naive(){
                             int x = move[0] + i;
                             int y = move[1] + j;
 
-                            if(x>=BOARD_H || x<0 || y>=BOARD_W || y<0) continue;
+                            if(x>=BOARD_H || x<0 || y>=BOARD_W || y<0){
+                                continue;
+                            }
                             now_piece = self_board[x][y];
-                            if(now_piece) continue;
+                            if(now_piece){
+                                continue;
+                            }
                             all_actions.push_back(Move(Point(i, j), Point(x, y)));
 
                             oppn_piece = oppn_board[x][y];
@@ -307,9 +441,13 @@ void State::get_legal_actions_naive(){
                         for(auto move: move_table_king){
                             int p[2] = {move[0] + i, move[1] + j};
 
-                            if(p[0]>=BOARD_H || p[0]<0 || p[1]>=BOARD_W || p[1]<0) continue;
+                            if(p[0]>=BOARD_H || p[0]<0 || p[1]>=BOARD_W || p[1]<0){
+                                continue;
+                            }
                             now_piece = self_board[p[0]][p[1]];
-                            if(now_piece) continue;
+                            if(now_piece){
+                                continue;
+                            }
 
                             all_actions.push_back(Move(Point(i, j), Point(p[0], p[1])));
 
@@ -366,16 +504,18 @@ static void bb_init(){
             bb_knight[sq] = 0;
             for(int d = 0; d < 8; d++){
                 int nr = r + kn_dr[d], nc = c + kn_dc[d];
-                if(nr >= 0 && nr < BOARD_H && nc >= 0 && nc < BOARD_W)
+                if(nr >= 0 && nr < BOARD_H && nc >= 0 && nc < BOARD_W){
                     bb_knight[sq] |= 1u << BB_SQ(nr, nc);
+                }
             }
 
             // King
             bb_king[sq] = 0;
             for(int d = 0; d < 8; d++){
                 int nr = r + ki_dr[d], nc = c + ki_dc[d];
-                if(nr >= 0 && nr < BOARD_H && nc >= 0 && nc < BOARD_W)
+                if(nr >= 0 && nr < BOARD_H && nc >= 0 && nc < BOARD_W){
                     bb_king[sq] |= 1u << BB_SQ(nr, nc);
+                }
             }
 
             // Pawn (player 0 = white, advances up = row-1)
@@ -383,8 +523,12 @@ static void bb_init(){
             bb_pawn_cap[0][sq] = 0;
             if(r > 0){
                 bb_pawn_push[0][sq] = 1u << BB_SQ(r-1, c);
-                if(c > 0)         bb_pawn_cap[0][sq] |= 1u << BB_SQ(r-1, c-1);
-                if(c < BOARD_W-1) bb_pawn_cap[0][sq] |= 1u << BB_SQ(r-1, c+1);
+                if(c > 0){
+                    bb_pawn_cap[0][sq] |= 1u << BB_SQ(r-1, c-1);
+                }
+                if(c < BOARD_W-1){
+                    bb_pawn_cap[0][sq] |= 1u << BB_SQ(r-1, c+1);
+                }
             }
 
             // Pawn (player 1 = black, advances down = row+1)
@@ -392,8 +536,12 @@ static void bb_init(){
             bb_pawn_cap[1][sq] = 0;
             if(r < BOARD_H-1){
                 bb_pawn_push[1][sq] = 1u << BB_SQ(r+1, c);
-                if(c > 0)         bb_pawn_cap[1][sq] |= 1u << BB_SQ(r+1, c-1);
-                if(c < BOARD_W-1) bb_pawn_cap[1][sq] |= 1u << BB_SQ(r+1, c+1);
+                if(c > 0){
+                    bb_pawn_cap[1][sq] |= 1u << BB_SQ(r+1, c-1);
+                }
+                if(c < BOARD_W-1){
+                    bb_pawn_cap[1][sq] |= 1u << BB_SQ(r+1, c+1);
+                }
             }
         }
     }
@@ -401,7 +549,9 @@ static void bb_init(){
 }
 
 void State::get_legal_actions_bitboard(){
-    if(!bb_ready) bb_init();
+    if(!bb_ready){
+        bb_init();
+    }
 
     this->game_state = NONE;
     this->legal_actions.clear();
@@ -502,7 +652,9 @@ void State::get_legal_actions_bitboard(){
                     while(cr >= 0 && cr < BOARD_H && cc >= 0 && cc < BOARD_W){
                         int to = BB_SQ(cr, cc);
                         uint32_t to_bit = 1u << to;
-                        if(self_occ & to_bit) break; // own piece blocks
+                        if(self_occ & to_bit){
+                            break; // own piece blocks
+                        }
 
                         if((oppn_occ & to_bit) && oppn_pt[to] == 6){
                             this->game_state = WIN;
@@ -512,7 +664,9 @@ void State::get_legal_actions_bitboard(){
                         }
 
                         targets |= to_bit;
-                        if(oppn_occ & to_bit) break; // captured, stop sliding
+                        if(oppn_occ & to_bit){
+                            break; // captured, stop sliding
+                        }
                         cr += bb_dr[d]; cc += bb_dc[d];
                     }
                 }
@@ -595,7 +749,7 @@ std::string State::encode_state(){
 }
 
 
-BaseState* State::create_null_state() const {
+BaseState* State::create_null_state() const{
     State* s = new State(this->board, 1 - this->player);
     s->get_legal_actions();
     return s;
@@ -606,10 +760,12 @@ BaseState* State::create_null_state() const {
 static const char* piece_chars = ".PRNBQK";
 static const char* piece_chars_lower = ".prnbqk";
 
-std::string State::encode_board() const {
+std::string State::encode_board() const{
     std::string s;
     for(int r = 0; r < BOARD_H; r++){
-        if(r > 0){ s += '/'; }
+        if(r > 0){
+            s += '/';
+        }
         for(int c = 0; c < BOARD_W; c++){
             int w = board.board[0][r][c];
             int b = board.board[1][r][c];
@@ -636,14 +792,22 @@ void State::decode_board(const std::string& s, int side_to_move){
             c = 0;
             continue;
         }
-        if(r >= BOARD_H || c >= BOARD_W){ break; }
+        if(r >= BOARD_H || c >= BOARD_W){
+            break;
+        }
         if(ch >= 'A' && ch <= 'Z'){
             for(int p = 1; p <= 6; p++){
-                if(piece_chars[p] == ch){ board.board[0][r][c] = p; break; }
+                if(piece_chars[p] == ch){
+                    board.board[0][r][c] = p;
+                    break;
+                }
             }
         }else if(ch >= 'a' && ch <= 'z'){
             for(int p = 1; p <= 6; p++){
-                if(piece_chars_lower[p] == ch){ board.board[1][r][c] = p; break; }
+                if(piece_chars_lower[p] == ch){
+                    board.board[1][r][c] = p;
+                    break;
+                }
             }
         }
         c++;
@@ -677,18 +841,24 @@ static void init_zobrist(){
     zobrist_ready = true;
 }
 
-uint64_t State::hash() const {
-    if(!zobrist_ready){ init_zobrist(); }
+uint64_t State::hash() const{
+    if(!zobrist_ready){
+        init_zobrist();
+    }
     uint64_t h = 0;
     for(int p = 0; p < 2; p++){
         for(int r = 0; r < BOARD_H; r++){
             for(int c = 0; c < BOARD_W; c++){
                 int piece = this->board.board[p][r][c];
-                if(piece){ h ^= zobrist_piece[p][piece][r][c]; }
+                if(piece){
+                    h ^= zobrist_piece[p][piece][r][c];
+                }
             }
         }
     }
-    if(this->player){ h ^= zobrist_side; }
+    if(this->player){
+        h ^= zobrist_side;
+    }
     return h;
 }
 
@@ -696,7 +866,7 @@ uint64_t State::hash() const {
 /*============================================================
  * Cell display for protocol (d command)
  *============================================================*/
-std::string State::cell_display(int row, int col) const {
+std::string State::cell_display(int row, int col) const{
     int w = static_cast<int>(board.board[0][row][col]);
     int b = static_cast<int>(board.board[1][row][col]);
     if(w){

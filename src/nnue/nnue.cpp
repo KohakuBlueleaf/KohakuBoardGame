@@ -22,7 +22,7 @@ namespace nnue {
 // -------------------------------------------------------------------------
 Model g_model;
 
-bool init(const char* path) {
+bool init(const char* path){
     return g_model.load(path);
 }
 
@@ -37,7 +37,7 @@ Model::Model()
     , out_weight(nullptr), out_bias(nullptr)
 {}
 
-Model::~Model() {
+Model::~Model(){
     delete[] ft_weight;  delete[] ft_bias;
     delete[] l1_weight;  delete[] l1_bias;
     delete[] l2_weight;  delete[] l2_bias;
@@ -47,7 +47,7 @@ Model::~Model() {
 // -------------------------------------------------------------------------
 // Allocate weight buffers
 // -------------------------------------------------------------------------
-static void alloc_weights(Model& m) {
+static void alloc_weights(Model& m){
     delete[] m.ft_weight;  delete[] m.ft_bias;
     delete[] m.l1_weight;  delete[] m.l1_bias;
     delete[] m.l2_weight;  delete[] m.l2_bias;
@@ -66,15 +66,15 @@ static void alloc_weights(Model& m) {
 // -------------------------------------------------------------------------
 // Load from file
 // -------------------------------------------------------------------------
-bool Model::load(const char* path) {
+bool Model::load(const char* path){
     FILE* f = std::fopen(path, "rb");
-    if (!f) {
+    if(!f){
         std::fprintf(stderr, "nnue: cannot open '%s'\n", path);
         return false;
     }
 
     char magic[4];
-    if (std::fread(magic, 1, 4, f) != 4 || std::memcmp(magic, "MCNN", 4) != 0) {
+    if(std::fread(magic, 1, 4, f) != 4 || std::memcmp(magic, "MCNN", 4) != 0){
         std::fprintf(stderr, "nnue: bad magic in '%s'\n", path);
         std::fclose(f);
         return false;
@@ -82,13 +82,15 @@ bool Model::load(const char* path) {
 
     auto read_i32 = [&](int& out) -> bool {
         int32_t v;
-        if (std::fread(&v, sizeof(v), 1, f) != 1) return false;
+        if(std::fread(&v, sizeof(v), 1, f) != 1){
+            return false;
+        }
         out = v;
         return true;
     };
 
-    if (!read_i32(version) || !read_i32(feature_size) ||
-        !read_i32(accum_size) || !read_i32(l1_size) || !read_i32(l2_size)) {
+    if(!read_i32(version) || !read_i32(feature_size)
+        || !read_i32(accum_size) || !read_i32(l1_size) || !read_i32(l2_size)){
         std::fclose(f);
         return false;
     }
@@ -110,21 +112,23 @@ bool Model::load(const char* path) {
     ok = ok && read_floats(out_bias,   1);
 
     std::fclose(f);
-    if (!ok) {
+    if(!ok){
         std::fprintf(stderr, "nnue: truncated weights in '%s'\n", path);
         return false;
     }
 
-    std::fprintf(stderr, "nnue: loaded %s (v%d, feat=%d, accum=%d)\n",
-                 path, version, feature_size, accum_size);
+    std::fprintf(
+        stderr, "nnue: loaded %s (v%d, feat=%d, accum=%d)\n",
+        path, version, feature_size, accum_size
+    );
     return true;
 }
 
 // -------------------------------------------------------------------------
 // Load from memory buffer (for embedded weights)
 // -------------------------------------------------------------------------
-bool Model::load_from_memory(const unsigned char* data, size_t size) {
-    if (size < 24 || std::memcmp(data, "MCNN", 4) != 0) {
+bool Model::load_from_memory(const unsigned char* data, size_t size){
+    if(size < 24 || std::memcmp(data, "MCNN", 4) != 0){
         std::fprintf(stderr, "nnue: invalid embedded data\n");
         return false;
     }
@@ -144,7 +148,7 @@ bool Model::load_from_memory(const unsigned char* data, size_t size) {
     alloc_weights(*this);
 
     const float* ptr = reinterpret_cast<const float*>(data + 24);
-    auto copy_floats = [&](float* dst, size_t n) {
+    auto copy_floats = [&](float* dst, size_t n){
         std::memcpy(dst, ptr, n * sizeof(float));
         ptr += n;
     };
@@ -164,26 +168,32 @@ bool Model::load_from_memory(const unsigned char* data, size_t size) {
 }
 
 // -------------------------------------------------------------------------
-// PS feature extraction
+// PS feature extraction (kept for nnue_bench compatibility)
 // -------------------------------------------------------------------------
-int Model::extract_features_ps(const Board& board, int perspective, int* features) const {
+int Model::extract_features_ps(const Board& board, int perspective, int* features) const{
     int count = 0;
-    for (int color_plane = 0; color_plane < 2; ++color_plane) {
-        for (int r = 0; r < BOARD_H; ++r) {
-            for (int c = 0; c < BOARD_W; ++c) {
+    for(int color_plane = 0; color_plane < 2; ++color_plane){
+        for(int r = 0; r < BOARD_H; ++r){
+            for(int c = 0; c < BOARD_W; ++c){
                 int pt = board.board[color_plane][r][c];
-                if (pt == 0) continue;
+                if(pt == 0){
+                    continue;
+                }
                 int pt_idx = pt - 1;
 
-                if (perspective == 0) {
+                if(perspective == 0){
                     int sq = r * BOARD_W + c;
-                    features[count++] = color_plane * NUM_PIECE_TYPES * NUM_SQUARES
-                                      + pt_idx * NUM_SQUARES + sq;
-                } else {
+                    features[count++] = (
+                        color_plane * NUM_PIECE_TYPES * NUM_SQUARES
+                        + pt_idx * NUM_SQUARES + sq
+                    );
+                }else{
                     int mir_r = BOARD_H - 1 - r;
                     int sq = mir_r * BOARD_W + c;
-                    features[count++] = (1 - color_plane) * NUM_PIECE_TYPES * NUM_SQUARES
-                                      + pt_idx * NUM_SQUARES + sq;
+                    features[count++] = (
+                        (1 - color_plane) * NUM_PIECE_TYPES * NUM_SQUARES
+                        + pt_idx * NUM_SQUARES + sq
+                    );
                 }
             }
         }
@@ -192,48 +202,62 @@ int Model::extract_features_ps(const Board& board, int perspective, int* feature
 }
 
 // -------------------------------------------------------------------------
-// HalfKP feature extraction
+// HalfKP feature extraction (kept for nnue_bench compatibility)
 // -------------------------------------------------------------------------
-int Model::extract_features_halfkp(const Board& board, int perspective, int* features) const {
+int Model::extract_features_halfkp(const Board& board, int perspective, int* features) const{
     int count = 0;
 
-    if (perspective == 0) {
-        // White perspective — find white king square
+    if(perspective == 0){
+        // White perspective -- find white king square
         int king_sq = -1;
-        for (int r = 0; r < BOARD_H; ++r)
-            for (int c = 0; c < BOARD_W; ++c)
-                if (board.board[0][r][c] == 6)
+        for(int r = 0; r < BOARD_H; ++r){
+            for(int c = 0; c < BOARD_W; ++c){
+                if(board.board[0][r][c] == 6){
                     king_sq = r * BOARD_W + c;
-
-        for (int color_plane = 0; color_plane < 2; ++color_plane) {
-            for (int r = 0; r < BOARD_H; ++r) {
-                for (int c = 0; c < BOARD_W; ++c) {
-                    int pt = board.board[color_plane][r][c];
-                    if (pt == 0 || pt == 6) continue;
-                    int sq = r * BOARD_W + c;
-                    features[count++] = king_sq * NUM_PIECE_FEATURES
-                                      + color_plane * (NUM_PT_NO_KING * NUM_SQUARES)
-                                      + (pt - 1) * NUM_SQUARES + sq;
                 }
             }
         }
-    } else {
-        // Black perspective — find black king, mirror
-        int king_sq_mir = -1;
-        for (int r = 0; r < BOARD_H; ++r)
-            for (int c = 0; c < BOARD_W; ++c)
-                if (board.board[1][r][c] == 6)
-                    king_sq_mir = (BOARD_H - 1 - r) * BOARD_W + c;
 
-        for (int color_plane = 0; color_plane < 2; ++color_plane) {
-            for (int r = 0; r < BOARD_H; ++r) {
-                for (int c = 0; c < BOARD_W; ++c) {
+        for(int color_plane = 0; color_plane < 2; ++color_plane){
+            for(int r = 0; r < BOARD_H; ++r){
+                for(int c = 0; c < BOARD_W; ++c){
                     int pt = board.board[color_plane][r][c];
-                    if (pt == 0 || pt == 6) continue;
+                    if(pt == 0 || pt == 6){
+                        continue;
+                    }
+                    int sq = r * BOARD_W + c;
+                    features[count++] = (
+                        king_sq * NUM_PIECE_FEATURES
+                        + color_plane * (NUM_PT_NO_KING * NUM_SQUARES)
+                        + (pt - 1) * NUM_SQUARES + sq
+                    );
+                }
+            }
+        }
+    }else{
+        // Black perspective -- find black king, mirror
+        int king_sq_mir = -1;
+        for(int r = 0; r < BOARD_H; ++r){
+            for(int c = 0; c < BOARD_W; ++c){
+                if(board.board[1][r][c] == 6){
+                    king_sq_mir = (BOARD_H - 1 - r) * BOARD_W + c;
+                }
+            }
+        }
+
+        for(int color_plane = 0; color_plane < 2; ++color_plane){
+            for(int r = 0; r < BOARD_H; ++r){
+                for(int c = 0; c < BOARD_W; ++c){
+                    int pt = board.board[color_plane][r][c];
+                    if(pt == 0 || pt == 6){
+                        continue;
+                    }
                     int mir_sq = (BOARD_H - 1 - r) * BOARD_W + c;
-                    features[count++] = king_sq_mir * NUM_PIECE_FEATURES
-                                      + (1 - color_plane) * (NUM_PT_NO_KING * NUM_SQUARES)
-                                      + (pt - 1) * NUM_SQUARES + mir_sq;
+                    features[count++] = (
+                        king_sq_mir * NUM_PIECE_FEATURES
+                        + (1 - color_plane) * (NUM_PT_NO_KING * NUM_SQUARES)
+                        + (pt - 1) * NUM_SQUARES + mir_sq
+                    );
                 }
             }
         }
@@ -242,20 +266,13 @@ int Model::extract_features_halfkp(const Board& board, int perspective, int* fea
 }
 
 // -------------------------------------------------------------------------
-// Forward pass
+// Forward pass -- uses State's extract_nnue_features() virtual method
 // -------------------------------------------------------------------------
-int Model::evaluate(const Board& board, int player) const {
+int Model::evaluate(const BaseState& state, int player) const{
     int white_features[MAX_ACTIVE];
     int black_features[MAX_ACTIVE];
-    int w_count, b_count;
-
-    if(version == 1){
-        w_count = extract_features_ps(board, 0, white_features);
-        b_count = extract_features_ps(board, 1, black_features);
-    }else{
-        w_count = extract_features_halfkp(board, 0, white_features);
-        b_count = extract_features_halfkp(board, 1, black_features);
-    }
+    int w_count = state.extract_nnue_features(0, white_features);
+    int b_count = state.extract_nnue_features(1, black_features);
 
     float w_accum[256], b_accum[256];
     #ifdef USE_NNUE_SIMD
