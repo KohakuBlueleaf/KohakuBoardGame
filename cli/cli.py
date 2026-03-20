@@ -337,7 +337,7 @@ def run_game(
         if has_state:
             check_fn = _game_ctx.get("check_game_over")
             result, winner = check_fn(state)
-            if result == "win":
+            if result in ("win", "checkmate"):
                 if game_name == "minichess":
                     winner_str = "White" if winner == 0 else "Black"
                     color = "white" if winner == 0 else "black"
@@ -351,7 +351,10 @@ def run_game(
                     winner_str = str(winner)
                     color = "white" if winner in (0, 1) else "black"
                 if verbose:
-                    print(f"  >> {winner_str} wins!")
+                    if result == "checkmate":
+                        print(f"  >> Checkmate! {winner_str} wins!")
+                    else:
+                        print(f"  >> {winner_str} wins!")
                 return color
             elif result == "draw":
                 if verbose:

@@ -311,13 +311,11 @@ class MiniChessState:
     # ------------------------------------------------------------------ #
 
     def check_game_over(self):
-        """Check if the game ended due to king capture or MAX_STEP.
+        """Check if the game ended due to king capture, checkmate, or MAX_STEP.
 
         Returns:
-            ("win", winner_player) -- if game_state is "win".  The *winner*
-                is self.player (the side that just generated the king-capture
-                move) when game_state == "win".  For MAX_STEP, the winner is
-                the side with more material.
+            ("checkmate", winner_player) -- in check with no escape.
+            ("win", winner_player) -- if king can be captured.
             ("draw", None) -- if material is equal after MAX_STEP.
             (None, None) -- game is not over.
         """
@@ -348,6 +346,17 @@ class MiniChessState:
                 return ("win", 0)
             else:
                 return ("draw", None)
+
+        # Checkmate: current player is in check and every move
+        # still leaves king capturable.
+        probe = MiniChessState(self.board, 1 - self.player, self.step)
+        probe.get_legal_actions()
+        if probe.game_state == "win":  # we are in check
+            for move in self.legal_actions:
+                child = self.next_state(move)
+                if child.game_state != "win":
+                    return (None, None)  # at least one escape
+            return ("checkmate", 1 - self.player)
 
         return (None, None)
 

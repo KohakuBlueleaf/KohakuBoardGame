@@ -527,6 +527,10 @@ class SidePanel:
             player_labels = {0: "White", 1: "Black"}
         p0 = player_labels.get(0, "White")
         p1 = player_labels.get(1, "Black")
+        if game_result in ("p0_checkmate",):
+            return f"Checkmate! {p0} wins!", (100, 220, 100)
+        if game_result in ("p1_checkmate",):
+            return f"Checkmate! {p1} wins!", (220, 80, 80)
         if game_result in ("white_wins", "p0_wins"):
             return f"{p0} wins!", (100, 220, 100)
         if game_result in ("black_wins", "p1_wins"):

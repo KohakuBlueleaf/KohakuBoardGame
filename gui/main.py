@@ -763,8 +763,10 @@ class GameApp:
         self._sync_hand_highlight(None)
 
         result, winner = self.game_state.check_game_over()
-        if result == "win":
-            self.game_result = "p0_wins" if winner == 0 else "p1_wins"
+        if result in ("win", "checkmate"):
+            self.game_result = ("p0_checkmate" if winner == 0 else "p1_checkmate") \
+                if result == "checkmate" \
+                else ("p0_wins" if winner == 0 else "p1_wins")
             return
         if result == "draw":
             self.game_result = "draw"
