@@ -5,19 +5,14 @@
 #ifdef USE_NNUE
 
 #include "base_state.hpp"
-#include "state.hpp"
 
 namespace nnue {
 
-/* All dimensions come from the per-game config.hpp macros.
- * Games must define: BOARD_H, BOARD_W, NUM_PIECE_TYPES, NUM_PT_NO_KING.
- */
-#define NNUE_NUM_SQUARES   (BOARD_H * BOARD_W)
-#define NNUE_NUM_COLORS    2
-#define NNUE_PS_SIZE       (NNUE_NUM_COLORS * NUM_PIECE_TYPES * NNUE_NUM_SQUARES)
-#define NNUE_PIECE_FEATURES (NNUE_NUM_COLORS * NUM_PT_NO_KING * NNUE_NUM_SQUARES)
-#define NNUE_HALFKP_SIZE   (NNUE_NUM_SQUARES * NNUE_PIECE_FEATURES)
-#define NNUE_MAX_ACTIVE    32
+/* NNUE is game-agnostic. It receives sparse feature indices from
+ * state.extract_nnue_features() and runs the forward pass.
+ * Feature semantics (HalfKP, PS, etc.) are defined per-game. */
+
+constexpr int MAX_ACTIVE = 32;
 
 struct Model {
     int version;
@@ -42,9 +37,10 @@ struct Model {
 
     bool load(const char* path);
     bool load_from_memory(const unsigned char* data, size_t size);
+
+    /* Forward pass: calls state.extract_nnue_features() for feature indices,
+     * then runs accumulator + hidden layers + output. */
     int evaluate(const BaseState& state, int player) const;
-    int extract_features_ps(const Board& board, int perspective, int* features) const;
-    int extract_features_halfkp(const Board& board, int perspective, int* features) const;
 
     bool loaded() const { return ft_weight != nullptr; }
 };

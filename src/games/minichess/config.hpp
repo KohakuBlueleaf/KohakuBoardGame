@@ -15,6 +15,7 @@
 /* === Piece type counts (used by NNUE) === */
 #define NUM_PIECE_TYPES 6
 #define NUM_PT_NO_KING  5
+#define KING_ID         6
 
 /* === MVV-LVA piece values for move ordering === */
 #define NUM_PIECE_VALS 7

@@ -27,7 +27,8 @@
 
 #define NUM_PIECE_TYPES 11  /* 0-10 */
 #define NUM_PT_NO_KING  10  /* all except king (gap at index 5) */
-#define NUM_HAND_TYPES 5    /* pawn, silver, gold, bishop, rook (indices 1-5) */
+#define KING_ID         6
+#define NUM_HAND_TYPES  5   /* pawn, silver, gold, bishop, rook (indices 1-5) */
 
 /* Default NNUE model path */
 #undef NNUE_FILE

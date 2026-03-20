@@ -14,3 +14,4 @@
 /* Piece type counts (used by NNUE if enabled) */
 #define NUM_PIECE_TYPES 2   /* 1=X, 2=O */
 #define NUM_PT_NO_KING  2   /* no king in gomoku */
+#define KING_ID         0   /* no king */

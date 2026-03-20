@@ -167,110 +167,15 @@ bool Model::load_from_memory(const unsigned char* data, size_t size){
     return true;
 }
 
-// -------------------------------------------------------------------------
-// PS feature extraction (kept for nnue_bench compatibility)
-// -------------------------------------------------------------------------
-int Model::extract_features_ps(const Board& board, int perspective, int* features) const{
-    int count = 0;
-    for(int color_plane = 0; color_plane < 2; ++color_plane){
-        for(int r = 0; r < BOARD_H; ++r){
-            for(int c = 0; c < BOARD_W; ++c){
-                int pt = board.board[color_plane][r][c];
-                if(pt == 0){
-                    continue;
-                }
-                int pt_idx = pt - 1;
-
-                if(perspective == 0){
-                    int sq = r * BOARD_W + c;
-                    features[count++] = (
-                        color_plane * NUM_PIECE_TYPES * NNUE_NUM_SQUARES
-                        + pt_idx * NNUE_NUM_SQUARES + sq
-                    );
-                }else{
-                    int mir_r = BOARD_H - 1 - r;
-                    int sq = mir_r * BOARD_W + c;
-                    features[count++] = (
-                        (1 - color_plane) * NUM_PIECE_TYPES * NNUE_NUM_SQUARES
-                        + pt_idx * NNUE_NUM_SQUARES + sq
-                    );
-                }
-            }
-        }
-    }
-    return count;
-}
 
 // -------------------------------------------------------------------------
-// HalfKP feature extraction (kept for nnue_bench compatibility)
-// -------------------------------------------------------------------------
-int Model::extract_features_halfkp(const Board& board, int perspective, int* features) const{
-    int count = 0;
-
-    if(perspective == 0){
-        // White perspective -- find white king square
-        int king_sq = -1;
-        for(int r = 0; r < BOARD_H; ++r){
-            for(int c = 0; c < BOARD_W; ++c){
-                if(board.board[0][r][c] == 6){
-                    king_sq = r * BOARD_W + c;
-                }
-            }
-        }
-
-        for(int color_plane = 0; color_plane < 2; ++color_plane){
-            for(int r = 0; r < BOARD_H; ++r){
-                for(int c = 0; c < BOARD_W; ++c){
-                    int pt = board.board[color_plane][r][c];
-                    if(pt == 0 || pt == 6){
-                        continue;
-                    }
-                    int sq = r * BOARD_W + c;
-                    features[count++] = (
-                        king_sq * NNUE_PIECE_FEATURES
-                        + color_plane * (NUM_PT_NO_KING * NNUE_NUM_SQUARES)
-                        + (pt - 1) * NNUE_NUM_SQUARES + sq
-                    );
-                }
-            }
-        }
-    }else{
-        // Black perspective -- find black king, mirror
-        int king_sq_mir = -1;
-        for(int r = 0; r < BOARD_H; ++r){
-            for(int c = 0; c < BOARD_W; ++c){
-                if(board.board[1][r][c] == 6){
-                    king_sq_mir = (BOARD_H - 1 - r) * BOARD_W + c;
-                }
-            }
-        }
-
-        for(int color_plane = 0; color_plane < 2; ++color_plane){
-            for(int r = 0; r < BOARD_H; ++r){
-                for(int c = 0; c < BOARD_W; ++c){
-                    int pt = board.board[color_plane][r][c];
-                    if(pt == 0 || pt == 6){
-                        continue;
-                    }
-                    int mir_sq = (BOARD_H - 1 - r) * BOARD_W + c;
-                    features[count++] = (
-                        king_sq_mir * NNUE_PIECE_FEATURES
-                        + (1 - color_plane) * (NUM_PT_NO_KING * NNUE_NUM_SQUARES)
-                        + (pt - 1) * NNUE_NUM_SQUARES + mir_sq
-                    );
-                }
-            }
-        }
-    }
-    return count;
-}
-
-// -------------------------------------------------------------------------
-// Forward pass -- uses State's extract_nnue_features() virtual method
+// Forward pass — game-agnostic.
+// Calls state.extract_nnue_features() to get sparse feature indices,
+// then runs accumulator + hidden layers + output.
 // -------------------------------------------------------------------------
 int Model::evaluate(const BaseState& state, int player) const{
-    int white_features[NNUE_MAX_ACTIVE];
-    int black_features[NNUE_MAX_ACTIVE];
+    int white_features[MAX_ACTIVE];
+    int black_features[MAX_ACTIVE];
     int w_count = state.extract_nnue_features(0, white_features);
     int b_count = state.extract_nnue_features(1, black_features);
 

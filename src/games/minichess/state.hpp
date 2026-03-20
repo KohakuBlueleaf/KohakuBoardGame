@@ -62,7 +62,6 @@ public:
     void decode_board(const std::string& s, int side_to_move) override;
 
     /* === NNUE feature extraction === */
-    int nnue_feature_count() const override;
     int extract_nnue_features(int perspective, int* features) const override;
 
     /* === Game description === */

@@ -632,6 +632,62 @@ State* State::next_state(const Move& move){
 
 
 /* ================================================================
+ * NNUE feature extraction — HalfKP with hand pieces
+ *
+ * Feature layout (must match Python training pipeline):
+ *   Board features:
+ *     king_sq * KP_FEAT + color * (NUM_PT_NO_KING * NUM_SQ) + (pt-1) * NUM_SQ + sq
+ *   where KP_FEAT = 2 * NUM_PT_NO_KING * NUM_SQ
+ *   King is skipped (pt == KING).
+ *   For perspective 1 (gote): rows are mirrored, colors are flipped.
+ * ================================================================ */
+int State::extract_nnue_features(int perspective, int* features) const{
+    constexpr int NUM_SQ = BOARD_H * BOARD_W;
+    constexpr int KP_FEAT = 2 * NUM_PT_NO_KING * NUM_SQ;
+    int count = 0;
+
+    /* Find king square for this perspective */
+    int king_sq = 0;
+    for(int r = 0; r < BOARD_H; r++){
+        for(int c = 0; c < BOARD_W; c++){
+            if(board.board[perspective][r][c] == KING){
+                king_sq = (perspective == 0)
+                    ? (r * BOARD_W + c)
+                    : ((BOARD_H - 1 - r) * BOARD_W + c);
+            }
+        }
+    }
+
+    /* Board piece features */
+    for(int color = 0; color < 2; color++){
+        for(int r = 0; r < BOARD_H; r++){
+            for(int c = 0; c < BOARD_W; c++){
+                int pt = board.board[color][r][c];
+                if(pt == 0 || pt == KING){ continue; }
+                int feat_color, sq;
+                if(perspective == 0){
+                    feat_color = color;
+                    sq = r * BOARD_W + c;
+                }else{
+                    feat_color = 1 - color;
+                    sq = (BOARD_H - 1 - r) * BOARD_W + c;
+                }
+                if(count < 32){
+                    features[count++] = (
+                        king_sq * KP_FEAT
+                        + feat_color * (NUM_PT_NO_KING * NUM_SQ)
+                        + (pt - 1) * NUM_SQ + sq
+                    );
+                }
+            }
+        }
+    }
+
+    return count;
+}
+
+
+/* ================================================================
  * evaluate — material + PST + mobility
  * ================================================================ */
 

@@ -51,6 +51,12 @@ public:
     int board_w() const override { return BOARD_W; }
     const char* game_name() const override { return "MiniShogi"; }
     BaseState* create_null_state() const override;
+    int hand_count(int player, int piece_type) const override {
+        if(piece_type < 1 || piece_type > NUM_HAND_TYPES) return 0;
+        return board.hand[player][piece_type];
+    }
+    int num_hand_types() const override { return NUM_HAND_TYPES; }
+    int extract_nnue_features(int perspective, int* features) const override;
 
 private:
     void gen_board_moves();

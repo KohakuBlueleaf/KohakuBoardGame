@@ -50,16 +50,16 @@ static Board make_board(const char w[6][5], const char b[6][5]){
 // calling the functions from compute.hpp.
 // ---------------------------------------------------------------------------
 static int evaluate_scalar(const nnue::Model& m, const Board& board, int player){
-    int white_features[NNUE_MAX_ACTIVE];
-    int black_features[NNUE_MAX_ACTIVE];
+    int white_features[nnue::MAX_ACTIVE];
+    int black_features[nnue::MAX_ACTIVE];
     int w_count, b_count;
 
     if(m.version == 1){
-        w_count = m.extract_features_ps(board, 0, white_features);
-        b_count = m.extract_features_ps(board, 1, black_features);
+        w_count = state.extract_nnue_features(0, white_features);
+        b_count = state.extract_nnue_features(1, black_features);
     }else{
-        w_count = m.extract_features_halfkp(board, 0, white_features);
-        b_count = m.extract_features_halfkp(board, 1, black_features);
+        w_count = state.extract_nnue_features(0, white_features);
+        b_count = state.extract_nnue_features(1, black_features);
     }
 
     float w_accum[256], b_accum[256];
@@ -99,16 +99,16 @@ static int evaluate_scalar(const nnue::Model& m, const Board& board, int player)
 #define HAS_SIMD_EVAL 1
 
 static int evaluate_simd(const nnue::Model& m, const Board& board, int player){
-    int white_features[NNUE_MAX_ACTIVE];
-    int black_features[NNUE_MAX_ACTIVE];
+    int white_features[nnue::MAX_ACTIVE];
+    int black_features[nnue::MAX_ACTIVE];
     int w_count, b_count;
 
     if(m.version == 1){
-        w_count = m.extract_features_ps(board, 0, white_features);
-        b_count = m.extract_features_ps(board, 1, black_features);
+        w_count = state.extract_nnue_features(0, white_features);
+        b_count = state.extract_nnue_features(1, black_features);
     }else{
-        w_count = m.extract_features_halfkp(board, 0, white_features);
-        b_count = m.extract_features_halfkp(board, 1, black_features);
+        w_count = state.extract_nnue_features(0, white_features);
+        b_count = state.extract_nnue_features(1, black_features);
     }
 
     float w_accum[256], b_accum[256];
@@ -245,16 +245,16 @@ struct QuantModel {
 
 static int evaluate_quant(const nnue::Model& m, const QuantModel& qm,
                            const Board& board, int player){
-    int white_features[NNUE_MAX_ACTIVE];
-    int black_features[NNUE_MAX_ACTIVE];
+    int white_features[nnue::MAX_ACTIVE];
+    int black_features[nnue::MAX_ACTIVE];
     int w_count, b_count;
 
     if(m.version == 1){
-        w_count = m.extract_features_ps(board, 0, white_features);
-        b_count = m.extract_features_ps(board, 1, black_features);
+        w_count = state.extract_nnue_features(0, white_features);
+        b_count = state.extract_nnue_features(1, black_features);
     }else{
-        w_count = m.extract_features_halfkp(board, 0, white_features);
-        b_count = m.extract_features_halfkp(board, 1, black_features);
+        w_count = state.extract_nnue_features(0, white_features);
+        b_count = state.extract_nnue_features(1, black_features);
     }
 
     // FT: int16 sparse accumulation
