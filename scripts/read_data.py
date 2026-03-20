@@ -1,87 +1,200 @@
 #!/usr/bin/env python3
 """
-read_data.py — Read and inspect MiniChess training data files.
+read_data.py -- Read and inspect training data files for MiniChess / MiniShogi / Gomoku.
 
 Usage:
-    python scripts/read_data.py [file1.bin] [file2.bin] ...
+    python scripts/read_data.py [options] [file1.bin] [file2.bin] ...
 
 If no files specified, reads data/train.bin by default.
+Game type is auto-detected from data file headers (v4+) or specified via --game.
+Defaults to minichess for backward compatibility.
 """
 
+import argparse
 import struct
 import sys
 import os
 import numpy as np
 
-# Must match the C++ structs exactly
-HEADER_FMT = "<4sii"  # magic(4) + version(i32) + count(i32) = 12 bytes
+# ---------------------------------------------------------------------------
+# Game configurations
+# ---------------------------------------------------------------------------
+GAME_CONFIGS = {
+    "minichess": {
+        "board_h": 6,
+        "board_w": 5,
+        "piece_names": [".", "P", "R", "N", "B", "Q", "K"],
+        "col_labels": "ABCDE",
+        "row_labels": ["6", "5", "4", "3", "2", "1"],
+    },
+    "minishogi": {
+        "board_h": 5,
+        "board_w": 5,
+        "piece_names": [
+            ".",
+            "P",
+            "S",
+            "G",
+            "B",
+            "R",
+            "K",
+            "+P",
+            "+S",
+            "+B",
+            "+R",
+        ],
+        "col_labels": "ABCDE",
+        "row_labels": ["5", "4", "3", "2", "1"],
+    },
+    "gomoku": {
+        "board_h": 9,
+        "board_w": 9,
+        "piece_names": [".", "X", "O"],
+        "col_labels": "ABCDEFGHI",
+        "row_labels": ["9", "8", "7", "6", "5", "4", "3", "2", "1"],
+    },
+}
+
+DEFAULT_GAME = "minichess"
+
+
+def get_game_config(game_name):
+    """Return a game config dict with derived values filled in."""
+    name = game_name.lower()
+    if name not in GAME_CONFIGS:
+        print(
+            f"Error: unknown game '{game_name}'. Available: {', '.join(GAME_CONFIGS.keys())}"
+        )
+        sys.exit(1)
+    cfg = dict(GAME_CONFIGS[name])
+    cfg["name"] = name
+    cfg["num_squares"] = cfg["board_h"] * cfg["board_w"]
+    cfg["board_cells"] = 2 * cfg["board_h"] * cfg["board_w"]
+    return cfg
+
+
+# ---------------------------------------------------------------------------
+# Header formats
+# ---------------------------------------------------------------------------
+# Legacy header: magic(4) + version(i32) + count(i32) = 12 bytes
+HEADER_FMT = "<4sii"
 HEADER_SIZE = struct.calcsize(HEADER_FMT)
 
-# v1: board(60) + player(i8) + score(i16) = 63 bytes
-RECORD_V1_FMT = "<60sbh"
-RECORD_V1_SIZE = struct.calcsize(RECORD_V1_FMT)
-
-# v2: board(60) + player(i8) + score(i16) + result(i8) + ply(u16) = 66 bytes
-RECORD_V2_FMT = "<60sbhbH"
-RECORD_V2_SIZE = struct.calcsize(RECORD_V2_FMT)
-
-# v3: adds best_move(u16) = 68 bytes
-RECORD_V3_FMT = "<60sbhbHH"  # board(60) + player(i8) + score(i16) + result(i8) + ply(u16) + best_move(u16)
-RECORD_V3_SIZE = struct.calcsize(RECORD_V3_FMT)
-
-BOARD_H = 6
-BOARD_W = 5
-
-PIECE_NAMES = [".", "P", "R", "N", "B", "Q", "K"]
-
-COL_LABELS = "ABCDE"
-ROW_LABELS = ["6", "5", "4", "3", "2", "1"]  # row 0 = "6", row 5 = "1"
+# Extended header (v4+): legacy + board_h(u16) + board_w(u16) + game_name(16s) = 32 bytes
+EXT_HEADER_FMT = "<4siiHH16s"
+EXT_HEADER_SIZE = struct.calcsize(EXT_HEADER_FMT)
 
 NO_MOVE = 0xFFFF
 
 
-def decode_best_move(best_move):
+# ---------------------------------------------------------------------------
+# Auto-detection
+# ---------------------------------------------------------------------------
+def detect_game_from_header(path):
+    """Try to auto-detect game from data file header. Returns game name or None."""
+    try:
+        with open(path, "rb") as f:
+            hdr_data = f.read(EXT_HEADER_SIZE)
+        if len(hdr_data) < HEADER_SIZE:
+            return None
+
+        magic, version, count = struct.unpack(HEADER_FMT, hdr_data[:HEADER_SIZE])
+        if magic.decode("ascii", errors="replace") not in ("MCDT", "BGDT"):
+            return None
+
+        if version >= 4 and len(hdr_data) >= EXT_HEADER_SIZE:
+            _, _, _, board_h, board_w, game_raw = struct.unpack(
+                EXT_HEADER_FMT, hdr_data[:EXT_HEADER_SIZE]
+            )
+            game_name = (
+                game_raw.rstrip(b"\x00").decode("ascii", errors="replace").lower()
+            )
+            if game_name in GAME_CONFIGS:
+                return game_name
+            # Try matching by dimensions
+            for name, cfg in GAME_CONFIGS.items():
+                if cfg["board_h"] == board_h and cfg["board_w"] == board_w:
+                    return name
+    except (IOError, ValueError):
+        pass
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Move decoding
+# ---------------------------------------------------------------------------
+def decode_best_move(best_move, gcfg):
     """Decode best_move into human-readable string. Returns None if no move."""
     if best_move is None or best_move == NO_MOVE:
         return None
-    from_sq = best_move // 30
-    to_sq = best_move % 30
-    from_row, from_col = from_sq // 5, from_sq % 5
-    to_row, to_col = to_sq // 5, to_sq % 5
-    return f"{COL_LABELS[from_col]}{ROW_LABELS[from_row]}->{COL_LABELS[to_col]}{ROW_LABELS[to_row]}"
+
+    num_squares = gcfg["num_squares"]
+    board_w = gcfg["board_w"]
+    col_labels = gcfg["col_labels"]
+    row_labels = gcfg["row_labels"]
+
+    from_sq = best_move // num_squares
+    to_sq = best_move % num_squares
+    from_row, from_col = from_sq // board_w, from_sq % board_w
+    to_row, to_col = to_sq // board_w, to_sq % board_w
+
+    if (
+        from_col < len(col_labels)
+        and to_col < len(col_labels)
+        and from_row < len(row_labels)
+        and to_row < len(row_labels)
+    ):
+        return (
+            f"{col_labels[from_col]}{row_labels[from_row]}"
+            f"->{col_labels[to_col]}{row_labels[to_row]}"
+        )
+    return f"{from_sq}->{to_sq}"
 
 
-def read_file(path):
+# ---------------------------------------------------------------------------
+# File reading
+# ---------------------------------------------------------------------------
+def read_file(path, gcfg):
     """Read a .bin data file. Returns (header_info, list_of_records)."""
+    board_h = gcfg["board_h"]
+    board_w = gcfg["board_w"]
+    board_cells = gcfg["board_cells"]
+
     with open(path, "rb") as f:
         # Read header
-        hdr_data = f.read(HEADER_SIZE)
+        hdr_data = f.read(EXT_HEADER_SIZE)
         if len(hdr_data) < HEADER_SIZE:
             print(f"Error: file too small for header: {path}")
             return None, []
 
-        magic, version, count = struct.unpack(HEADER_FMT, hdr_data)
-        magic = magic.decode("ascii", errors="replace")
+        magic, version, count = struct.unpack(HEADER_FMT, hdr_data[:HEADER_SIZE])
+        magic_str = magic.decode("ascii", errors="replace")
 
-        if magic != "MCDT":
-            print(f"Error: bad magic '{magic}' (expected 'MCDT'): {path}")
+        if magic_str not in ("MCDT", "BGDT"):
+            print(f"Error: bad magic '{magic_str}' (expected 'MCDT' or 'BGDT'): {path}")
             return None, []
 
-        header_info = {"magic": magic, "version": version, "count": count}
+        header_info = {"magic": magic_str, "version": version, "count": count}
 
-        # Select record format based on version
+        # Determine where records start
+        if version >= 4 and len(hdr_data) >= EXT_HEADER_SIZE:
+            f.seek(EXT_HEADER_SIZE)
+        else:
+            f.seek(HEADER_SIZE)
+
+        # Build record format string
+        board_fmt = f"{board_cells}s"
         if version == 1:
-            rec_fmt = RECORD_V1_FMT
-            rec_size = RECORD_V1_SIZE
+            rec_fmt = f"<{board_fmt}bh"
         elif version == 2:
-            rec_fmt = RECORD_V2_FMT
-            rec_size = RECORD_V2_SIZE
+            rec_fmt = f"<{board_fmt}bhbH"
         elif version >= 3:
-            rec_fmt = RECORD_V3_FMT
-            rec_size = RECORD_V3_SIZE
+            rec_fmt = f"<{board_fmt}bhbHH"
         else:
             print(f"Error: unknown version {version}: {path}")
             return None, []
+
+        rec_size = struct.calcsize(rec_fmt)
 
         # Read all records
         records = []
@@ -96,9 +209,9 @@ def read_file(path):
             player = fields[1]
             score = fields[2]
 
-            # Reshape board bytes into [2][6][5]
+            # Reshape board bytes into [2][H][W]
             board = np.frombuffer(board_bytes, dtype=np.int8).reshape(
-                2, BOARD_H, BOARD_W
+                2, board_h, board_w
             )
 
             rec = {
@@ -118,29 +231,67 @@ def read_file(path):
         return header_info, records
 
 
-def print_board(board, player):
+# ---------------------------------------------------------------------------
+# Board display
+# ---------------------------------------------------------------------------
+def print_board(board, player, gcfg):
     """Print a board state in human-readable format."""
-    print(f"  Side to move: {'White (0)' if player == 0 else 'Black (1)'}")
-    print(f"   {'   '.join(COL_LABELS)}")
-    print(f"  {'-' * (BOARD_W * 4)}")
-    for r in range(BOARD_H):
+    board_h = gcfg["board_h"]
+    board_w = gcfg["board_w"]
+    piece_names = gcfg["piece_names"]
+    col_labels = gcfg["col_labels"]
+    row_labels = gcfg["row_labels"]
+
+    print(f"  Side to move: {'Player 0' if player == 0 else 'Player 1'}")
+    col_header = "   ".join(col_labels[:board_w])
+    print(f"   {col_header}")
+    print(f"  {'-' * (board_w * 4)}")
+    for r in range(board_h):
         row_str = ""
-        for c in range(BOARD_W):
+        for c in range(board_w):
             w = board[0][r][c]
             b = board[1][r][c]
-            if w > 0:
-                row_str += f"w{PIECE_NAMES[w]} "
-            elif b > 0:
-                row_str += f"b{PIECE_NAMES[b]} "
+            if w > 0 and w < len(piece_names):
+                # Pad short piece names for alignment
+                pname = piece_names[w]
+                row_str += f"w{pname:<2s}"
+            elif b > 0 and b < len(piece_names):
+                pname = piece_names[b]
+                row_str += f"b{pname:<2s}"
             else:
                 row_str += " .  "
-        print(f"{ROW_LABELS[r]}|{row_str}")
+        label = row_labels[r] if r < len(row_labels) else str(r)
+        print(f"{label}|{row_str}")
     print()
 
 
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 def main():
-    files = sys.argv[1:] if len(sys.argv) > 1 else ["data/train.bin"]
+    parser = argparse.ArgumentParser(
+        description="Read and inspect training data files for MiniChess / MiniShogi / Gomoku",
+    )
+    parser.add_argument(
+        "--game",
+        type=str,
+        default=None,
+        choices=list(GAME_CONFIGS.keys()),
+        help=(
+            "Game type (default: auto-detect from data, "
+            f"fallback to '{DEFAULT_GAME}'). "
+            f"Options: {', '.join(GAME_CONFIGS.keys())}"
+        ),
+    )
+    parser.add_argument(
+        "files",
+        nargs="*",
+        default=["data/train.bin"],
+        help="Data files to read (default: data/train.bin)",
+    )
+    args = parser.parse_args()
 
+    files = args.files
     all_scores = []
 
     for path in files:
@@ -148,10 +299,21 @@ def main():
             print(f"File not found: {path}")
             continue
 
+        # Resolve game config for this file
+        if args.game:
+            gcfg = get_game_config(args.game)
+        else:
+            detected = detect_game_from_header(path)
+            if detected:
+                gcfg = get_game_config(detected)
+                print(f"  Auto-detected game: {detected}")
+            else:
+                gcfg = get_game_config(DEFAULT_GAME)
+
         file_size = os.path.getsize(path)
         print(f"=== {path} ({file_size} bytes) ===")
 
-        header, records = read_file(path)
+        header, records = read_file(path, gcfg)
         if header is None:
             continue
 
@@ -159,6 +321,8 @@ def main():
         print(f"  Version: {header['version']}")
         print(f"  Count:   {header['count']}")
         print(f"  Records read: {len(records)}")
+        print(f"  Game:    {gcfg['name']}")
+        print(f"  Board:   {gcfg['board_h']}x{gcfg['board_w']}")
         print()
 
         if not records:
@@ -194,7 +358,7 @@ def main():
         indices = [0, len(records) // 2, len(records) - 1][:n_samples]
         for idx in indices:
             rec = records[idx]
-            move_str = decode_best_move(rec.get("best_move"))
+            move_str = decode_best_move(rec.get("best_move"), gcfg)
             if move_str:
                 print(
                     f"  --- Record {idx} (score: {rec['score']}, move: {move_str}) ---"
@@ -211,7 +375,7 @@ def main():
                 extra_parts.append(f"ply={rec['ply']}")
             if extra_parts:
                 print(f"  {', '.join(extra_parts)}")
-            print_board(rec["board"], rec["player"])
+            print_board(rec["board"], rec["player"], gcfg)
 
     # Combined stats if multiple files
     if len(files) > 1 and all_scores:

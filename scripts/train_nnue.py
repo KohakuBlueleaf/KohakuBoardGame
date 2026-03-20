@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
 """
-train_nnue.py — Train a NNUE for MiniChess (6x5 board).
+train_nnue.py — Train a NNUE for MiniChess / MiniShogi / Gomoku.
 
 Supports two feature types:
-  PS:     PieceSquare(360)  -> Accumulator -> SCReLU -> ...
-  HalfKP: HalfKP(9000)     -> Accumulator -> SCReLU -> ...
+  PS:     PieceSquare  -> Accumulator -> SCReLU -> ...
+  HalfKP: HalfKP      -> Accumulator -> SCReLU -> ...
 
 Training target (following standard NNUE practice):
   target = (1 - wdl_weight) * sigmoid(score/scale) + wdl_weight * wdl_result
   loss   = MSE(sigmoid(predicted/scale), target)
 
+Game is auto-detected from the data file header (v4+ format with metadata)
+or selected via --game CLI argument.  Defaults to minichess for backward
+compatibility with old data files that lack metadata.
+
 Usage:
     python scripts/train_nnue.py --data "data/train_*.bin" --features halfkp --epochs 100
+    python scripts/train_nnue.py --game minishogi --data "data/shogi_*.bin" --features ps
+    python scripts/train_nnue.py --game gomoku --data "data/gomoku_*.bin" --features ps
 """
 
 import argparse
@@ -20,7 +26,7 @@ import os
 import struct
 import sys
 import time
-from typing import Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import torch
@@ -29,103 +35,272 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 # ---------------------------------------------------------------------------
+# Game configurations
+# ---------------------------------------------------------------------------
+GAME_CONFIGS: Dict[str, dict] = {
+    "minichess": {
+        "board_h": 6,
+        "board_w": 5,
+        "num_piece_types": 6,
+        "num_pt_no_king": 5,
+        "king_id": 6,  # piece type ID used for king on the board
+        "piece_names": [".", "P", "R", "N", "B", "Q", "K"],
+        "has_hand": False,
+        "num_hand_types": 0,
+    },
+    "minishogi": {
+        "board_h": 5,
+        "board_w": 5,
+        "num_piece_types": 11,  # 0=empty, 1-6 base, 7-10 promoted
+        "num_pt_no_king": 10,
+        "king_id": 6,
+        "piece_names": [
+            ".",
+            "P",
+            "S",
+            "G",
+            "B",
+            "R",
+            "K",
+            "+P",
+            "+S",
+            "+B",
+            "+R",
+        ],
+        "has_hand": True,
+        "num_hand_types": 5,  # pawn, silver, gold, bishop, rook (indices 1-5)
+    },
+    "gomoku": {
+        "board_h": 9,
+        "board_w": 9,
+        "num_piece_types": 2,  # 1=X (black), 2=O (white) -- but no king
+        "num_pt_no_king": 2,
+        "king_id": None,  # gomoku has no king
+        "piece_names": [".", "X", "O"],
+        "has_hand": False,
+        "num_hand_types": 0,
+    },
+}
+
+DEFAULT_GAME = "minichess"
+
+
+def get_game_config(game_name: str) -> dict:
+    """Return the game config dict, raising an error if unknown."""
+    name = game_name.lower()
+    if name not in GAME_CONFIGS:
+        raise ValueError(
+            f"Unknown game '{game_name}'. "
+            f"Available: {', '.join(GAME_CONFIGS.keys())}"
+        )
+    cfg = dict(GAME_CONFIGS[name])
+    # Derived constants
+    cfg["name"] = name
+    cfg["num_squares"] = cfg["board_h"] * cfg["board_w"]
+    cfg["num_colors"] = 2
+    cfg["board_cells"] = 2 * cfg["board_h"] * cfg["board_w"]  # total int8s for board
+    cfg["ps_size"] = cfg["num_colors"] * cfg["num_piece_types"] * cfg["num_squares"]
+    cfg["num_piece_features"] = (
+        cfg["num_colors"] * cfg["num_pt_no_king"] * cfg["num_squares"]
+    )
+    cfg["halfkp_size"] = cfg["num_squares"] * cfg["num_piece_features"]
+    cfg["policy_size"] = cfg["num_squares"] * cfg["num_squares"]  # from-to
+    # For MiniShogi hand features: additional feature dimensions for pieces in hand
+    if cfg["has_hand"]:
+        # Hand features: num_hand_types * max_count_per_type * num_colors
+        # For now, hand pieces are encoded on the board by the C++ engine
+        # (stored in the board array). This is a hook for future expansion
+        # where hand features might be separate input dimensions.
+        cfg["hand_feature_size"] = 0  # placeholder -- encoded within board
+    else:
+        cfg["hand_feature_size"] = 0
+    cfg["max_active"] = max(20, cfg["num_squares"])
+    return cfg
+
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-BOARD_H = 6
-BOARD_W = 5
-NUM_SQUARES = BOARD_H * BOARD_W  # 30
-NUM_PIECE_TYPES = 6  # Pawn(1)..King(6), indexed 0..5
-NUM_PT_NO_KING = 5  # Piece types excluding king
-NUM_COLORS = 2  # own=0, opponent=1
+NUM_COLORS = 2
 
-# PS: color * piece_type * square = 2*6*30 = 360
-PS_SIZE = NUM_COLORS * NUM_PIECE_TYPES * NUM_SQUARES  # 360
-
-# HalfKP: king_sq * color * piece_type_no_king * square = 30*2*5*30 = 9000
-NUM_PIECE_FEATURES = NUM_COLORS * NUM_PT_NO_KING * NUM_SQUARES  # 300
-HALFKP_SIZE = NUM_SQUARES * NUM_PIECE_FEATURES  # 9000
-MAX_ACTIVE = 20
-
+# Data file header formats
+# Legacy header: magic(4) + version(i32) + count(i32) = 12 bytes
 HEADER_FMT = "<4sii"
 HEADER_SIZE = struct.calcsize(HEADER_FMT)
 
-# Data format v1: board(60) + player(1) + score(2) = 63 bytes
-RECORD_V1_FMT = "<60sbh"
-RECORD_V1_SIZE = struct.calcsize(RECORD_V1_FMT)
-
-# Data format v2: board(60) + player(1) + score(2) + result(1) + ply(2) = 66 bytes
-RECORD_V2_FMT = "<60sbhbH"
-RECORD_V2_SIZE = struct.calcsize(RECORD_V2_FMT)
-
-# v3: board(60) + player(1) + score(2) + result(1) + ply(2) + best_move(2) = 68 bytes
-RECORD_V3_FMT = "<60sbhbHH"
-RECORD_V3_SIZE = struct.calcsize(RECORD_V3_FMT)
+# Extended header (v4+): legacy header + board_h(i16) + board_w(i16) + game_name(16s) = 32 bytes
+EXT_HEADER_FMT = "<4siiHH16s"
+EXT_HEADER_SIZE = struct.calcsize(EXT_HEADER_FMT)
 
 SCORE_FILTER = 10000
 NO_MOVE = 0xFFFF
 
 
 # ---------------------------------------------------------------------------
-# Data loading
+# Data file header reading & game auto-detection
 # ---------------------------------------------------------------------------
-def read_bin_file(
-    path: str,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Read a single .bin data file (supports v1, v2, and v3 formats).
+def read_data_header(path: str) -> dict:
+    """Read a data file header and return metadata dict.
 
-    Returns:
-        boards:     (N, 2, 6, 5) int8
-        players:    (N,) int8
-        scores:     (N,) int16
-        results:    (N,) int8  — game result from STM perspective (1=win, 0=draw, -1=loss)
-        plies:      (N,) uint16 — ply count (0 for v1 data)
-        best_moves: (N,) uint16 — best move (NO_MOVE=0xFFFF for v1/v2 data)
+    Supports both legacy (12-byte) and extended (32-byte, v4+) headers.
+    Returns: {magic, version, count, board_h, board_w, game_name (or None)}
     """
     with open(path, "rb") as f:
-        hdr_data = f.read(HEADER_SIZE)
-        if len(hdr_data) < HEADER_SIZE:
+        hdr_data = f.read(EXT_HEADER_SIZE)
+
+    if len(hdr_data) < HEADER_SIZE:
+        raise ValueError(f"File too small for header: {path}")
+
+    # Try legacy header first
+    magic, version, count = struct.unpack(HEADER_FMT, hdr_data[:HEADER_SIZE])
+    magic_str = magic.decode("ascii", errors="replace")
+    if magic_str not in ("MCDT", "BGDT"):
+        raise ValueError(f"Bad magic '{magic_str}' in {path}")
+
+    result = {
+        "magic": magic_str,
+        "version": version,
+        "count": count,
+        "board_h": None,
+        "board_w": None,
+        "game_name": None,
+    }
+
+    # v4+ has extended header with game metadata
+    if version >= 4 and len(hdr_data) >= EXT_HEADER_SIZE:
+        _, _, _, board_h, board_w, game_name_raw = struct.unpack(
+            EXT_HEADER_FMT, hdr_data[:EXT_HEADER_SIZE]
+        )
+        game_name = game_name_raw.rstrip(b"\x00").decode("ascii", errors="replace")
+        result["board_h"] = board_h
+        result["board_w"] = board_w
+        result["game_name"] = game_name.lower() if game_name else None
+
+    return result
+
+
+def detect_game_from_file(path: str) -> Optional[str]:
+    """Try to auto-detect game type from data file header.
+
+    Returns game name string or None if detection fails (legacy format).
+    """
+    try:
+        hdr = read_data_header(path)
+        if hdr["game_name"] and hdr["game_name"] in GAME_CONFIGS:
+            return hdr["game_name"]
+        # Fall back: try to match by board dimensions
+        if hdr["board_h"] is not None and hdr["board_w"] is not None:
+            for name, cfg in GAME_CONFIGS.items():
+                if (
+                    cfg["board_h"] == hdr["board_h"]
+                    and cfg["board_w"] == hdr["board_w"]
+                ):
+                    return name
+    except (ValueError, IOError):
+        pass
+    return None
+
+
+def resolve_game(cli_game: Optional[str], data_pattern: str) -> dict:
+    """Resolve game config from CLI arg and/or data file auto-detection.
+
+    Priority: CLI arg > auto-detect from first data file > default (minichess).
+    """
+    detected = None
+    files = sorted(glob.glob(data_pattern))
+    if files:
+        detected = detect_game_from_file(files[0])
+
+    if cli_game:
+        game_name = cli_game.lower()
+        if detected and detected != game_name:
+            print(
+                f"Warning: --game={game_name} overrides auto-detected "
+                f"game '{detected}' from data file"
+            )
+        return get_game_config(game_name)
+
+    if detected:
+        print(f"Auto-detected game: {detected}")
+        return get_game_config(detected)
+
+    print(f"No game specified or detected, defaulting to '{DEFAULT_GAME}'")
+    return get_game_config(DEFAULT_GAME)
+
+
+# ---------------------------------------------------------------------------
+# Data loading
+# ---------------------------------------------------------------------------
+def _make_record_dtype(board_cells: int, version: int) -> Tuple[np.dtype, int]:
+    """Create numpy dtype for a data record given board size and format version.
+
+    board_cells = 2 * BOARD_H * BOARD_W (total int8 elements for the board).
+    """
+    fields = [("board", np.int8, (board_cells,))]
+
+    if version == 1:
+        fields += [("player", np.int8), ("score", "<i2")]
+    elif version == 2:
+        fields += [
+            ("player", np.int8),
+            ("score", "<i2"),
+            ("result", np.int8),
+            ("ply", "<u2"),
+        ]
+    elif version >= 3:
+        fields += [
+            ("player", np.int8),
+            ("score", "<i2"),
+            ("result", np.int8),
+            ("ply", "<u2"),
+            ("best_move", "<u2"),
+        ]
+    else:
+        raise ValueError(f"Unknown data version {version}")
+
+    dt = np.dtype(fields)
+    return dt, dt.itemsize
+
+
+def read_bin_file(
+    path: str,
+    gcfg: dict,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Read a single .bin data file (supports v1, v2, v3, and v4+ formats).
+
+    Returns:
+        boards:     (N, 2, H, W) int8
+        players:    (N,) int8
+        scores:     (N,) int16
+        results:    (N,) int8
+        plies:      (N,) uint16
+        best_moves: (N,) uint16
+    """
+    board_h = gcfg["board_h"]
+    board_w = gcfg["board_w"]
+    board_cells = gcfg["board_cells"]
+
+    with open(path, "rb") as f:
+        # Read header -- try extended first, fall back to legacy
+        peek = f.read(EXT_HEADER_SIZE)
+        if len(peek) < HEADER_SIZE:
             raise ValueError(f"File too small for header: {path}")
 
-        magic, version, count = struct.unpack(HEADER_FMT, hdr_data)
-        magic = magic.decode("ascii", errors="replace")
-        if magic != "MCDT":
-            raise ValueError(f"Bad magic '{magic}' in {path}")
+        magic, version, count = struct.unpack(HEADER_FMT, peek[:HEADER_SIZE])
+        magic_str = magic.decode("ascii", errors="replace")
+        if magic_str not in ("MCDT", "BGDT"):
+            raise ValueError(f"Bad magic '{magic_str}' in {path}")
 
-        if version == 1:
-            record_size = RECORD_V1_SIZE
-            dt = np.dtype(
-                [
-                    ("board", np.int8, (60,)),
-                    ("player", np.int8),
-                    ("score", "<i2"),
-                ]
-            )
-        elif version == 2:
-            record_size = RECORD_V2_SIZE
-            dt = np.dtype(
-                [
-                    ("board", np.int8, (60,)),
-                    ("player", np.int8),
-                    ("score", "<i2"),
-                    ("result", np.int8),
-                    ("ply", "<u2"),
-                ]
-            )
-        elif version == 3:
-            record_size = RECORD_V3_SIZE
-            dt = np.dtype(
-                [
-                    ("board", np.int8, (60,)),
-                    ("player", np.int8),
-                    ("score", "<i2"),
-                    ("result", np.int8),
-                    ("ply", "<u2"),
-                    ("best_move", "<u2"),
-                ]
-            )
+        # Determine where records start
+        if version >= 4 and len(peek) >= EXT_HEADER_SIZE:
+            header_end = EXT_HEADER_SIZE
         else:
-            raise ValueError(f"Unknown data version {version} in {path}")
+            header_end = HEADER_SIZE
 
+        f.seek(header_end)
+
+        # Build record dtype
+        dt, record_size = _make_record_dtype(board_cells, version)
         raw = f.read(record_size * count)
 
     if len(raw) < record_size * count:
@@ -134,7 +309,7 @@ def read_bin_file(
         count = actual
 
     records = np.frombuffer(raw[: count * record_size], dtype=dt)
-    boards = records["board"].reshape(-1, 2, BOARD_H, BOARD_W).copy()
+    boards = records["board"].reshape(-1, 2, board_h, board_w).copy()
     players = records["player"].copy()
     scores = records["score"].copy()
 
@@ -155,6 +330,7 @@ def read_bin_file(
 
 def load_all_data(
     pattern: str,
+    gcfg: dict,
     min_ply: int = 0,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Load and concatenate data from all files matching *pattern*."""
@@ -173,7 +349,7 @@ def load_all_data(
     )
     for fp in files:
         print(f"  Loading {fp} ...", end="", flush=True)
-        b, p, s, r, ply, bm = read_bin_file(fp)
+        b, p, s, r, ply, bm = read_bin_file(fp, gcfg)
         has_moves = np.any(bm != NO_MOVE)
         ver_str = "3" if has_moves else ("2" if r.any() else "1")
         print(f" {len(b)} records (v{ver_str})")
@@ -217,37 +393,44 @@ def load_all_data(
 def board_to_ps_features(
     boards: np.ndarray,
     players: np.ndarray,
+    gcfg: dict,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Convert board arrays to PieceSquare dense feature tensors.
 
     Returns:
-        white_feats: (N, 360) float32
-        black_feats: (N, 360) float32
+        white_feats: (N, PS_SIZE) float32
+        black_feats: (N, PS_SIZE) float32
         stm:         (N,) bool
     """
+    board_h = gcfg["board_h"]
+    board_w = gcfg["board_w"]
+    num_squares = gcfg["num_squares"]
+    num_piece_types = gcfg["num_piece_types"]
+    ps_size = gcfg["ps_size"]
+
     N = len(boards)
-    white_feats = np.zeros((N, PS_SIZE), dtype=np.float32)
-    black_feats = np.zeros((N, PS_SIZE), dtype=np.float32)
+    white_feats = np.zeros((N, ps_size), dtype=np.float32)
+    black_feats = np.zeros((N, ps_size), dtype=np.float32)
 
     for color_plane in range(2):
-        for r in range(BOARD_H):
-            for c in range(BOARD_W):
+        for r in range(board_h):
+            for c in range(board_w):
                 piece_types = boards[:, color_plane, r, c]
                 has_piece = piece_types > 0
                 if not np.any(has_piece):
                     continue
                 pt = piece_types[has_piece].astype(np.int32) - 1
-                sq = r * BOARD_W + c
+                sq = r * board_w + c
 
                 w_color = color_plane
-                w_idx = w_color * NUM_PIECE_TYPES * NUM_SQUARES + pt * NUM_SQUARES + sq
+                w_idx = w_color * num_piece_types * num_squares + pt * num_squares + sq
                 white_feats[has_piece, w_idx] = 1.0
 
                 b_color = 1 - color_plane
-                mir_r = BOARD_H - 1 - r
-                b_sq = mir_r * BOARD_W + c
+                mir_r = board_h - 1 - r
+                b_sq = mir_r * board_w + c
                 b_idx = (
-                    b_color * NUM_PIECE_TYPES * NUM_SQUARES + pt * NUM_SQUARES + b_sq
+                    b_color * num_piece_types * num_squares + pt * num_squares + b_sq
                 )
                 black_feats[has_piece, b_idx] = 1.0
 
@@ -261,63 +444,95 @@ def board_to_ps_features(
 def board_to_halfkp_indices(
     boards: np.ndarray,
     players: np.ndarray,
+    gcfg: dict,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Convert board arrays to HalfKP sparse feature indices.
 
+    For games without a king (e.g. gomoku), falls back to PS features
+    stored in HalfKP-style sparse format (king_sq fixed to 0).
+
     Returns:
-        white_indices: (N, MAX_ACTIVE) int16, padded with HALFKP_SIZE
-        black_indices: (N, MAX_ACTIVE) int16, padded with HALFKP_SIZE
+        white_indices: (N, MAX_ACTIVE) int16/int32, padded with halfkp_size
+        black_indices: (N, MAX_ACTIVE) int16/int32, padded with halfkp_size
         stm:           (N,) bool
     """
+    board_h = gcfg["board_h"]
+    board_w = gcfg["board_w"]
+    num_squares = gcfg["num_squares"]
+    num_pt_no_king = gcfg["num_pt_no_king"]
+    king_id = gcfg["king_id"]
+    num_piece_features = gcfg["num_piece_features"]
+    halfkp_size = gcfg["halfkp_size"]
+    max_active = gcfg["max_active"]
+
     N = len(boards)
 
-    w_plane = boards[:, 0].reshape(N, -1)
-    b_plane = boards[:, 1].reshape(N, -1)
-    w_king_sq = np.argmax(w_plane == 6, axis=1).astype(np.int32)
-    b_king_sq = np.argmax(b_plane == 6, axis=1).astype(np.int32)
+    # Use int32 for indices when halfkp_size > 32767
+    idx_dtype = np.int32 if halfkp_size > 32767 else np.int16
 
-    b_king_r = b_king_sq // BOARD_W
-    b_king_c = b_king_sq % BOARD_W
-    b_king_mir = ((BOARD_H - 1 - b_king_r) * BOARD_W + b_king_c).astype(np.int32)
+    if king_id is not None:
+        # Standard HalfKP: find king squares
+        w_plane = boards[:, 0].reshape(N, -1)
+        b_plane = boards[:, 1].reshape(N, -1)
+        w_king_sq = np.argmax(w_plane == king_id, axis=1).astype(np.int32)
+        b_king_sq = np.argmax(b_plane == king_id, axis=1).astype(np.int32)
 
-    white_idx = np.full((N, MAX_ACTIVE), HALFKP_SIZE, dtype=np.int16)
-    black_idx = np.full((N, MAX_ACTIVE), HALFKP_SIZE, dtype=np.int16)
+        b_king_r = b_king_sq // board_w
+        b_king_c = b_king_sq % board_w
+        b_king_mir = ((board_h - 1 - b_king_r) * board_w + b_king_c).astype(np.int32)
+    else:
+        # No king (e.g. gomoku): use fixed king_sq=0 (degenerates to PS)
+        w_king_sq = np.zeros(N, dtype=np.int32)
+        b_king_mir = np.zeros(N, dtype=np.int32)
+
+    white_idx = np.full((N, max_active), halfkp_size, dtype=idx_dtype)
+    black_idx = np.full((N, max_active), halfkp_size, dtype=idx_dtype)
     w_cnt = np.zeros(N, dtype=np.int32)
     b_cnt = np.zeros(N, dtype=np.int32)
 
     for color_plane in range(2):
-        for r in range(BOARD_H):
-            for c in range(BOARD_W):
+        for r in range(board_h):
+            for c in range(board_w):
                 pts = boards[:, color_plane, r, c]
-                mask = (pts > 0) & (pts != 6)
+                if king_id is not None:
+                    mask = (pts > 0) & (pts != king_id)
+                else:
+                    mask = pts > 0
                 if not np.any(mask):
                     continue
 
                 indices = np.where(mask)[0]
                 pt_idx = pts[indices].astype(np.int32) - 1
-                sq = r * BOARD_W + c
+                sq = r * board_w + c
 
                 w_color = color_plane
                 w_feat = (
-                    w_king_sq[indices] * NUM_PIECE_FEATURES
-                    + w_color * (NUM_PT_NO_KING * NUM_SQUARES)
-                    + pt_idx * NUM_SQUARES
+                    w_king_sq[indices] * num_piece_features
+                    + w_color * (num_pt_no_king * num_squares)
+                    + pt_idx * num_squares
                     + sq
                 )
                 pos_w = w_cnt[indices]
-                white_idx[indices, pos_w] = w_feat.astype(np.int16)
+                # Clamp to max_active
+                valid_w = pos_w < max_active
+                if np.any(valid_w):
+                    vi = indices[valid_w]
+                    white_idx[vi, pos_w[valid_w]] = w_feat[valid_w].astype(idx_dtype)
                 w_cnt[indices] = pos_w + 1
 
                 b_color = 1 - color_plane
-                mir_sq = (BOARD_H - 1 - r) * BOARD_W + c
+                mir_sq = (board_h - 1 - r) * board_w + c
                 b_feat = (
-                    b_king_mir[indices] * NUM_PIECE_FEATURES
-                    + b_color * (NUM_PT_NO_KING * NUM_SQUARES)
-                    + pt_idx * NUM_SQUARES
+                    b_king_mir[indices] * num_piece_features
+                    + b_color * (num_pt_no_king * num_squares)
+                    + pt_idx * num_squares
                     + mir_sq
                 )
                 pos_b = b_cnt[indices]
-                black_idx[indices, pos_b] = b_feat.astype(np.int16)
+                valid_b = pos_b < max_active
+                if np.any(valid_b):
+                    vi = indices[valid_b]
+                    black_idx[vi, pos_b[valid_b]] = b_feat[valid_b].astype(idx_dtype)
                 b_cnt[indices] = pos_b + 1
 
     stm = players.astype(bool)
@@ -325,10 +540,40 @@ def board_to_halfkp_indices(
 
 
 # ---------------------------------------------------------------------------
+# Hand feature extraction hook (MiniShogi)
+# ---------------------------------------------------------------------------
+def extract_hand_features(
+    boards: np.ndarray,
+    players: np.ndarray,
+    gcfg: dict,
+) -> Optional[np.ndarray]:
+    """Extract hand piece features for games that have them (e.g. MiniShogi).
+
+    Currently the C++ engine encodes hand pieces within the board array,
+    so they are already captured by the standard feature extraction.
+    This function is a hook for future expansion where hand pieces might
+    need separate feature planes or additional input dimensions.
+
+    Returns None if the game has no hand pieces, or if hand features are
+    already embedded in the board representation.
+    """
+    if not gcfg["has_hand"]:
+        return None
+
+    # Placeholder: hand pieces are currently embedded in the board array
+    # by the C++ datagen. When a separate hand encoding is added to the
+    # data format, this function should extract and return those features.
+    #
+    # Expected future format:
+    #   hand_feats: (N, num_colors * num_hand_types * max_hand_count) float32
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Datasets
 # ---------------------------------------------------------------------------
 class PSDenseDataset(Dataset):
-    """PS features — precomputed dense tensors."""
+    """PS features -- precomputed dense tensors."""
 
     def __init__(self, white_feats, black_feats, stm, scores, results, best_moves=None):
         self.white_feats = torch.from_numpy(white_feats)
@@ -359,13 +604,21 @@ class PSDenseDataset(Dataset):
 
 
 class HalfKPSparseDataset(Dataset):
-    """HalfKP — sparse indices expanded to dense on access."""
+    """HalfKP -- sparse indices expanded to dense on access."""
 
     def __init__(
-        self, white_indices, black_indices, stm, scores, results, best_moves=None
+        self,
+        white_indices,
+        black_indices,
+        stm,
+        scores,
+        results,
+        halfkp_size,
+        best_moves=None,
     ):
         self.white_indices = white_indices
         self.black_indices = black_indices
+        self.halfkp_size = halfkp_size
         self.stm = torch.from_numpy(stm)
         self.scores = torch.from_numpy(scores.astype(np.float32))
         self.results = torch.from_numpy(results.astype(np.float32))
@@ -379,15 +632,17 @@ class HalfKPSparseDataset(Dataset):
         return len(self.scores)
 
     def __getitem__(self, idx):
-        w = torch.zeros(HALFKP_SIZE)
+        halfkp_size = self.halfkp_size
+
+        w = torch.zeros(halfkp_size)
         wi = self.white_indices[idx]
-        valid_w = wi[wi != HALFKP_SIZE]
+        valid_w = wi[wi != halfkp_size]
         if len(valid_w) > 0:
             w[valid_w.astype(np.int64)] = 1.0
 
-        b = torch.zeros(HALFKP_SIZE)
+        b = torch.zeros(halfkp_size)
         bi = self.black_indices[idx]
-        valid_b = bi[bi != HALFKP_SIZE]
+        valid_b = bi[bi != halfkp_size]
         if len(valid_b) > 0:
             b[valid_b.astype(np.int64)] = 1.0
 
@@ -405,14 +660,15 @@ def screlu(x: torch.Tensor) -> torch.Tensor:
     return torch.clamp(x, 0.0, 1.0).square()
 
 
-class MiniChessNNUE(nn.Module):
+class GameNNUE(nn.Module):
     def __init__(
         self,
-        feature_size: int = HALFKP_SIZE,
+        feature_size: int,
         accum_size: int = 128,
         l1_size: int = 32,
         l2_size: int = 32,
         use_policy: bool = False,
+        policy_size: int = 900,
     ):
         super().__init__()
         self.feature_size = feature_size
@@ -420,6 +676,7 @@ class MiniChessNNUE(nn.Module):
         self.l1_size = l1_size
         self.l2_size = l2_size
         self.use_policy = use_policy
+        self.policy_size = policy_size
 
         self.ft = nn.Linear(feature_size, accum_size)
         self.l1 = nn.Linear(accum_size * 2, l1_size)
@@ -427,9 +684,8 @@ class MiniChessNNUE(nn.Module):
         self.out = nn.Linear(l2_size, 1)
 
         if use_policy:
-            POLICY_SIZE = 900  # 30*30 from-to squares
             self.policy_l1 = nn.Linear(accum_size * 2, 128)
-            self.policy_out = nn.Linear(128, POLICY_SIZE)
+            self.policy_out = nn.Linear(128, policy_size)
 
     def forward(self, white_features, black_features, stm):
         w_accum = screlu(self.ft(white_features))
@@ -453,6 +709,10 @@ class MiniChessNNUE(nn.Module):
         return value
 
 
+# Backward-compatible alias
+MiniChessNNUE = GameNNUE
+
+
 # ---------------------------------------------------------------------------
 # Loss
 # ---------------------------------------------------------------------------
@@ -468,16 +728,13 @@ def nnue_loss(
     """Blended NNUE loss: MSE in sigmoid space.
 
     target = (1 - wdl_weight) * sigmoid(score/scale) + wdl_weight * wdl
-    where wdl = (result + 1) / 2  maps  -1→0.0, 0→0.5, 1→1.0
+    where wdl = (result + 1) / 2  maps  -1->0.0, 0->0.5, 1->1.0
     """
     pred_sig = torch.sigmoid(predicted / SCORE_SCALE)
     score_sig = torch.sigmoid(score / SCORE_SCALE)
     wdl = (result + 1.0) / 2.0
     target = (1.0 - wdl_weight) * score_sig + wdl_weight * wdl
     return torch.mean((pred_sig - target) ** 2)
-
-
-POLICY_SIZE = 900
 
 
 def dual_loss(
@@ -510,22 +767,21 @@ def dual_loss(
 # ---------------------------------------------------------------------------
 # Binary weight export
 # ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
 # Quantization constants (must match C++ compute_quant.hpp)
-# ---------------------------------------------------------------------------
 QA = 255  # FT accumulator scale (int16)
 QA_HIDDEN = 127  # hidden activation scale (uint8)
 QB = 64  # dense weight scale (int8)
-QAH_QB = QA_HIDDEN * QB  # 8128 — dense matmul output scale
+QAH_QB = QA_HIDDEN * QB  # 8128 -- dense matmul output scale
 
 
-def export_binary_weights(model: MiniChessNNUE, path: str) -> None:
+def export_binary_weights(model: GameNNUE, path: str, gcfg: dict) -> None:
     """Export float32 weights for C++ inference.
 
     Header (24 bytes): magic "MCNN", version, feature_size, accum_size, l1_size, l2_size
     ft_weight (feature_size, accum_size), ft_bias, l1..out weights/biases.
     """
-    version = 1 if model.feature_size == PS_SIZE else 2
+    ps_size = gcfg["ps_size"]
+    version = 1 if model.feature_size == ps_size else 2
     sd = model.state_dict()
     with open(path, "wb") as f:
         f.write(b"MCNN")
@@ -560,21 +816,13 @@ def export_binary_weights(model: MiniChessNNUE, path: str) -> None:
         )
 
 
-def export_quantized_weights(model: MiniChessNNUE, path: str) -> None:
+def export_quantized_weights(model: GameNNUE, path: str, gcfg: dict) -> None:
     """Export quantized int16/int8 weights for C++ SIMD inference.
 
     Same header as float, but version += 10 (11=PS_quant, 12=HalfKP_quant).
-    Data layout:
-        ft_weight:   int16 (feature_size, accum_size) — scale QA
-        ft_bias:     int16 (accum_size) — scale QA
-        l1_weight:   int8  (accum_size*2, l1_size) — TRANSPOSED, scale QB
-        l1_bias:     int32 (l1_size) — scale QA*QB
-        l2_weight:   int8  (l1_size, l2_size) — TRANSPOSED, scale QB
-        l2_bias:     int32 (l2_size) — scale QA*QB
-        out_weight:  int8  (l2_size, 1) — TRANSPOSED, scale QB
-        out_bias:    int32 (1) — scale QA*QB
     """
-    version = (1 if model.feature_size == PS_SIZE else 2) + 10
+    ps_size = gcfg["ps_size"]
+    version = (1 if model.feature_size == ps_size else 2) + 10
     sd = model.state_dict()
 
     def quant_i16(t, scale):
@@ -639,6 +887,28 @@ def export_quantized_weights(model: MiniChessNNUE, path: str) -> None:
 # Training
 # ---------------------------------------------------------------------------
 def train(args: argparse.Namespace) -> None:
+    # ---- Resolve game config ----------------------------------------------
+    gcfg = resolve_game(args.game, args.data)
+    game_name = gcfg["name"]
+    ps_size = gcfg["ps_size"]
+    halfkp_size = gcfg["halfkp_size"]
+    policy_size = gcfg["policy_size"]
+    max_active = gcfg["max_active"]
+
+    print(f"Game: {game_name}")
+    print(
+        f"  Board: {gcfg['board_h']}x{gcfg['board_w']}, "
+        f"Piece types: {gcfg['num_piece_types']}, "
+        f"Squares: {gcfg['num_squares']}"
+    )
+    print(
+        f"  PS size: {ps_size}, HalfKP size: {halfkp_size}, Policy size: {policy_size}"
+    )
+    if gcfg["has_hand"]:
+        print(
+            f"  Hand types: {gcfg['num_hand_types']} (hand features embedded in board)"
+        )
+
     if args.device == "auto":
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -649,6 +919,7 @@ def train(args: argparse.Namespace) -> None:
     print("Loading data...")
     boards, players, scores, results, plies, best_moves = load_all_data(
         args.data,
+        gcfg,
         min_ply=args.min_ply,
     )
     has_wdl = np.any(results != 0)
@@ -666,6 +937,11 @@ def train(args: argparse.Namespace) -> None:
             "Policy loss will be skipped (value-only training)."
         )
 
+    # ---- Extract hand features (hook) -------------------------------------
+    hand_feats = extract_hand_features(boards, players, gcfg)
+    if hand_feats is not None:
+        print(f"  Hand features shape: {hand_feats.shape}")
+
     # ---- Train/val split --------------------------------------------------
     N = len(scores)
     perm = np.random.RandomState(seed=42).permutation(N)
@@ -682,8 +958,8 @@ def train(args: argparse.Namespace) -> None:
     bm_val = best_moves[val_idx] if args.policy else None
 
     if feature_type == "ps":
-        feature_size = PS_SIZE
-        wf, bf, stm = board_to_ps_features(boards, players)
+        feature_size = ps_size
+        wf, bf, stm = board_to_ps_features(boards, players, gcfg)
         print(f"  Feature extraction: {time.time() - t0:.2f}s")
         print(f"  Active features per position: {wf.sum(axis=1).mean():.1f}")
         train_ds = PSDenseDataset(
@@ -703,10 +979,10 @@ def train(args: argparse.Namespace) -> None:
             bm_val,
         )
     elif feature_type == "halfkp":
-        feature_size = HALFKP_SIZE
-        wi, bi, stm = board_to_halfkp_indices(boards, players)
+        feature_size = halfkp_size
+        wi, bi, stm = board_to_halfkp_indices(boards, players, gcfg)
         print(f"  Feature extraction: {time.time() - t0:.2f}s")
-        active = (wi != HALFKP_SIZE).sum(axis=1).mean()
+        active = (wi != halfkp_size).sum(axis=1).mean()
         print(f"  Active features per position: {active:.1f}")
         train_ds = HalfKPSparseDataset(
             wi[train_idx],
@@ -714,6 +990,7 @@ def train(args: argparse.Namespace) -> None:
             stm[train_idx],
             scores[train_idx],
             results[train_idx],
+            halfkp_size,
             bm_train,
         )
         val_ds = HalfKPSparseDataset(
@@ -722,6 +999,7 @@ def train(args: argparse.Namespace) -> None:
             stm[val_idx],
             scores[val_idx],
             results[val_idx],
+            halfkp_size,
             bm_val,
         )
     else:
@@ -738,7 +1016,7 @@ def train(args: argparse.Namespace) -> None:
         num_workers=args.num_workers,
         pin_memory=(device.type == "cuda"),
         drop_last=False,
-        persistent_workers=True,
+        persistent_workers=(args.num_workers > 0),
     )
     val_loader = DataLoader(
         val_ds,
@@ -747,16 +1025,17 @@ def train(args: argparse.Namespace) -> None:
         num_workers=args.num_workers,
         pin_memory=(device.type == "cuda"),
         drop_last=False,
-        persistent_workers=True,
+        persistent_workers=(args.num_workers > 0),
     )
 
     # ---- Model ------------------------------------------------------------
-    model = MiniChessNNUE(
+    model = GameNNUE(
         feature_size=feature_size,
         accum_size=args.accum_size,
         l1_size=32,
         l2_size=32,
         use_policy=args.policy,
+        policy_size=policy_size,
     ).to(device)
 
     total_params = sum(p.numel() for p in model.parameters())
@@ -818,7 +1097,7 @@ def train(args: argparse.Namespace) -> None:
     # ---- Baseline loss ----------------------------------------------------
     baseline_train = evaluate(train_loader, "Baseline train")
     baseline_val = evaluate(val_loader, "Baseline val")
-    print(f"\nBaseline loss — train: {baseline_train:.6f}, val: {baseline_val:.6f}")
+    print(f"\nBaseline loss -- train: {baseline_train:.6f}, val: {baseline_val:.6f}")
 
     # ---- Training loop ----------------------------------------------------
     print(
@@ -905,11 +1184,11 @@ def train(args: argparse.Namespace) -> None:
     torch.save(model.state_dict(), args.output)
     print(f"  Saved PyTorch model to {args.output}")
 
-    export_binary_weights(model, args.export)
+    export_binary_weights(model, args.export, gcfg)
 
     # Export quantized version alongside
     quant_path = args.export.replace(".bin", "_quant.bin")
-    export_quantized_weights(model, quant_path)
+    export_quantized_weights(model, quant_path, gcfg)
 
 
 # ---------------------------------------------------------------------------
@@ -917,7 +1196,18 @@ def train(args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Train a NNUE for MiniChess (6x5)",
+        description="Train a NNUE for MiniChess / MiniShogi / Gomoku",
+    )
+    parser.add_argument(
+        "--game",
+        type=str,
+        default=None,
+        choices=list(GAME_CONFIGS.keys()),
+        help=(
+            "Game type (default: auto-detect from data, "
+            f"fallback to '{DEFAULT_GAME}'). "
+            f"Options: {', '.join(GAME_CONFIGS.keys())}"
+        ),
     )
     parser.add_argument(
         "--data",
@@ -930,7 +1220,7 @@ def main() -> None:
         type=str,
         default="halfkp",
         choices=["ps", "halfkp"],
-        help="Feature type: ps (360) or halfkp (9000) (default: halfkp)",
+        help="Feature type: ps or halfkp (default: halfkp)",
     )
     parser.add_argument(
         "--epochs",
