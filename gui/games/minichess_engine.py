@@ -119,6 +119,7 @@ class MiniChessState:
         # game_state mirrors the C++ enum: "none", "win", "draw", "unknown"
         self.game_state = "unknown"
         self.legal_actions = []
+        self.hash_counts = {}  # position_key -> count for repetition detection
 
     # ------------------------------------------------------------------ #
     # Legal move generation (port of get_legal_actions_naive)
@@ -255,6 +256,15 @@ class MiniChessState:
 
         self.legal_actions = all_actions
 
+    def position_key(self):
+        """Hashable key for the current board + side-to-move."""
+        return (self.player, tuple(
+            self.board[p][r][c]
+            for p in range(2)
+            for r in range(cfg.BOARD_H)
+            for c in range(cfg.BOARD_W)
+        ))
+
     # ------------------------------------------------------------------ #
     # Next state
     # ------------------------------------------------------------------ #
@@ -287,6 +297,9 @@ class MiniChessState:
         new_board[self.player][tr][tc] = moved
 
         ns = MiniChessState(new_board, 1 - self.player, self.step + 1)
+        ns.hash_counts = dict(self.hash_counts)
+        key = self.position_key()
+        ns.hash_counts[key] = ns.hash_counts.get(key, 0) + 1
 
         if self.game_state != "win":
             ns.get_legal_actions()
@@ -311,6 +324,11 @@ class MiniChessState:
         if self.game_state == "win":
             # The current player can capture the king => current player wins
             return ("win", self.player)
+
+        # 4-fold repetition → draw
+        key = self.position_key()
+        if self.hash_counts.get(key, 0) + 1 >= 4:
+            return ("draw", None)
 
         if self.step > cfg.MAX_STEP:
             white_material = 0
@@ -375,6 +393,7 @@ class MiniChessState:
         s.step = self.step
         s.game_state = self.game_state
         s.legal_actions = list(self.legal_actions)
+        s.hash_counts = dict(self.hash_counts)
         return s
 
     # ------------------------------------------------------------------ #

@@ -247,6 +247,7 @@ class MiniShogiState:
         self.game_state = "unknown"
         self.legal_actions = []
         self.last_move = None
+        self.hash_counts = {}  # position_key -> count for repetition detection
 
     @property
     def current_player(self):
@@ -427,6 +428,14 @@ class MiniShogiState:
 
         self.legal_actions = actions
 
+    def position_key(self):
+        """Hashable key for the current board + hand + side-to-move."""
+        return (self.player,
+                tuple(self.board[p][r][c]
+                      for p in range(2) for r in range(BOARD_SIZE) for c in range(BOARD_SIZE)),
+                tuple(self.hand[p][pt]
+                      for p in range(2) for pt in range(len(self.hand[0]))))
+
     # ------------------------------------------------------------------ #
     # Next state
     # ------------------------------------------------------------------ #
@@ -472,6 +481,9 @@ class MiniShogiState:
 
         ns = MiniShogiState(new_board, new_hand, opp, self.step + 1)
         ns.last_move = move
+        ns.hash_counts = dict(self.hash_counts)
+        key = self.position_key()
+        ns.hash_counts[key] = ns.hash_counts.get(key, 0) + 1
 
         if self.game_state != "win":
             ns.get_legal_actions()
@@ -492,6 +504,11 @@ class MiniShogiState:
         """
         if self.game_state == "win":
             return ("win", self.player)
+
+        # 4-fold repetition → draw
+        key = self.position_key()
+        if self.hash_counts.get(key, 0) + 1 >= 4:
+            return ("draw", None)
 
         if self.step > MAX_STEP:
             mat = [0, 0]
@@ -555,6 +572,7 @@ class MiniShogiState:
         s.game_state = self.game_state
         s.legal_actions = list(self.legal_actions)
         s.last_move = self.last_move
+        s.hash_counts = dict(self.hash_counts)
         return s
 
     def __repr__(self):
