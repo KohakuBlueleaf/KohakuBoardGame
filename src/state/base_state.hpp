@@ -4,6 +4,7 @@
 #include <utility>
 #include <cstddef>
 #include <cstdint>
+#include <unordered_map>
 
 /* === Type aliases === */
 typedef std::pair<size_t, size_t> Point;
@@ -20,8 +21,22 @@ public:
     int player = 0;
     GameState game_state = UNKNOWN;
     std::vector<Move> legal_actions;
+    std::unordered_map<uint64_t, int> hash_counts;  /* position hash → occurrence count */
 
     virtual ~BaseState() = default;
+
+    /* Inherit hash history from parent state (call in next_state) */
+    void inherit_history(const BaseState* parent){
+        hash_counts = parent->hash_counts;
+        hash_counts[parent->hash()]++;
+    }
+
+    /* Check if current position has appeared >= limit times (including now). */
+    bool check_repetition(int limit = 4) const {
+        auto it = hash_counts.find(hash());
+        int prev = (it != hash_counts.end()) ? it->second : 0;
+        return (prev + 1) >= limit;
+    }
 
     /* === Core === */
     virtual BaseState* next_state(const Move& m) = 0;
