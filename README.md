@@ -1,169 +1,190 @@
-# MiniChess
+# KohakuBoardGame
 
-A 6x5 chess variant engine with UBGI protocol, NNUE evaluation, and multiple search algorithms. Also supports Gomoku (9x9, 5-in-a-row).
+A multi-game board game engine framework with UBGI protocol, NNUE evaluation, and multiple search algorithms.
+
+## Supported Games
+
+| Game | Board | Pieces | Special Rules |
+|------|-------|--------|---------------|
+| **MiniChess** | 6x5 | P, R, N, B, Q, K | King capture wins. Pawn promotes on back rank. |
+| **MiniShogi** | 5x5 | P, S, G, B, R, K + promoted | Captured pieces go to hand and can be dropped. |
+| **Gomoku** | 9x9 | Black / White stones | 5-in-a-row wins. |
 
 ## Build
 
 ```bash
-make all        # builds minichess ubgi engine + selfplay, benchmark, datagen, nnue_bench
-make ubgi       # UBGI engine only
+make all              # builds all game engines + tools
+make minichess        # MiniChess UBGI engine (with NNUE)
+make minishogi        # MiniShogi UBGI engine
+make gomoku           # Gomoku UBGI engine
 ```
 
 Requires `g++` with C++20 support. Builds with `-O3 -march=native` for SIMD.
 
-Without NNUE:
+### Tools
+
+Per-game tool targets:
+
 ```bash
-make CXXFLAGS="-std=c++2a -O3 -DNO_NNUE" ubgi
-```
+make minichess-datagen    # data generation for NNUE training
+make minishogi-datagen
+make gomoku-datagen
 
-## Board
-
+make minichess-selfplay   # self-play
+make minichess-benchmark  # search benchmark
 ```
-  A  B  C  D  E
-6 bR bn bB bQ bK
-5 bP bP bP bP bP
-4  .  .  .  .  .
-3  .  .  .  .  .
-2 wP wP wP wP wP
-1 wR wn wB wQ wK
-```
-
-6x5 board. King capture wins. Pawns promote on back rank. Draw after 100 steps with equal material.
 
 ## Engine
 
 ```bash
 ./build/minichess-ubgi
+./build/minishogi-ubgi
+./build/gomoku-ubgi
 ```
 
-Supports `go depth/movetime/infinite`, `stop`, `setoption`, algorithm switching via UBGI protocol.
+All engines use the UBGI protocol and support `go depth/movetime/infinite`, `stop`, `setoption`, algorithm switching.
 
-### Runtime Parameters
+### Search Algorithms
 
-Each algorithm defines its own parameter set. Switching algorithm loads its defaults:
+| Algorithm | Description |
+|-----------|-------------|
+| **PVS** | Principal variation search with TT, null-move, LMR, quiescence, killer moves |
+| **AlphaBeta** | Basic alpha-beta pruning |
+| **MiniMax** | Exhaustive negamax |
+| **Random** | Random legal move |
+
+All features are independently toggled at runtime via UBGI options.
+
+### Multi-PV
+
+Set `MultiPV` option (1-10) to get top-K candidate moves with scores:
 
 ```
-setoption name Algorithm value pvs
+setoption name MultiPV value 3
 ```
 
-**PVS** (14 params):
-```
-UseNNUE, UseKPEval, UseEvalMobility, UseMoveOrdering,
-UseQuiescence (QuiescenceMaxDepth), UseTT,
-UseKillerMoves (KillerSlots), UseNullMove (NullMoveR),
-UseLMR (LMRFullDepth, LMRDepthLimit)
-```
+### Evaluation
 
-**AlphaBeta / MiniMax** (3 params): `UseNNUE, UseKPEval, UseEvalMobility`
+| Strategy | Flag | Description |
+|----------|------|-------------|
+| NNUE | `UseNNUE` | HalfKP features, 128-unit accumulator, SCReLU. AVX2/NEON SIMD. |
+| KP Eval | `UseKPEval` | Material + piece-square tables |
+| Material | (default) | Simple piece value sum |
 
-**Random**: no params.
-
-**Global**: `Hash` (TT size in bits, 2^N entries).
-
-Parameters are advertised dynamically via UBGI protocol based on the current algorithm.
+NNUE feature extraction is per-game — each game's State class implements its own feature encoding via `extract_nnue_features()`.
 
 ## GUI
 
 ```bash
-python gui/main.py
+python gui/main.py                    # MiniChess (default)
+python gui/main.py --game minishogi   # MiniShogi
+python gui/main.py --game gomoku      # Gomoku
 ```
 
 - Per-side engine + algorithm + search param configuration
-- [Params...] button opens modal editor with algo-specific options (read from engine)
-- Mode derived from selections: Human/Human, Human/AI, AI/AI
-- Background analysis toggle with live PV, score, depth display
-- Score history plot with white/black move markers
-- Vertical eval bar + move table in bottom panel
-- Undo (Z), Pause/Resume (Space)
+- Multi-PV display: top-3 candidates shown as colored arrows (green/blue/orange)
+- Background analysis with live PV, score, depth
+- Score history plot + eval bar + move table
+- Undo (Z), Pause/Resume (Space), Stop (Q)
 
 ## CLI
 
 ```bash
 # Human vs AI
-python cli/cli.py --white human --black build/minichess-ubgi.exe --time 2000
+python cli/cli.py --game minichess --white human --black build/minichess-ubgi --time 2000
 
-# AI vs AI tournament
-python cli/cli.py --white build/minichess-ubgi.exe --black build/minichess-ubgi.exe \
+# AI vs AI
+python cli/cli.py --game minishogi --white build/minishogi-ubgi --black build/minishogi-ubgi --depth 8
+
+# Tournament
+python cli/cli.py --white build/minichess-ubgi --black build/minichess-ubgi \
     --white-algo pvs --black-algo alphabeta --games 100 --time 2000
-
-# Fixed depth
-python cli/cli.py --white build/minichess-ubgi.exe --black build/minichess-ubgi.exe --depth 8
 ```
 
-## Evaluation
+## NNUE Training Pipeline
 
-Three strategies, selectable at runtime per algorithm:
-
-| Strategy | Flag | Description |
-|----------|------|-------------|
-| NNUE | `UseNNUE` | HalfKP features, 128-unit accumulator, SCReLU. AVX2/NEON SIMD. |
-| KP Eval | `UseKPEval` | Material (10x) + piece-square tables + king tropism |
-| Material | (default when KP off) | Simple piece value sum |
-
-Mobility bonus (`UseEvalMobility`) adds points per legal move advantage.
-
-## Search
-
-PVS combines:
-- Iterative deepening with TT seeding across depths
-- Null-window re-search (PVS framework)
-- Transposition table (Zobrist, dynamic size, always-replace)
-- Quiescence search (captures only at depth 0)
-- Move ordering: TT best move > MVV-LVA captures > killer moves > quiet
-- Null move pruning (pass at reduced depth)
-- Late move reductions (reduce late quiet moves)
-
-All features toggled independently at runtime.
-
-## NNUE Training
+### Data Generation
 
 ```bash
-./build/datagen -n 10000 -d 6 -o data/train.bin
-python scripts/train_nnue.py --data "data/train_*.bin" --features halfkp --epochs 100
+# Generate training data (all games supported)
+./build/minichess-datagen -n 10000 -d 6 -o data/minichess_train.bin
+./build/minishogi-datagen -n 10000 -d 6 -o data/minishogi_train.bin
+./build/gomoku-datagen -n 10000 -d 6 -o data/gomoku_train.bin
+
+# With NNUE model for stronger play
+./build/minichess-datagen -n 10000 -d 6 -m models/nnue_v2.bin -o data/train.bin
+
+# Parallel generation
+bash scripts/gen_data.sh -g minichess -n 100000 -d 6 -j 8 -o data/
 ```
 
-Binary format: 66 bytes/record (board + player + score + result + ply).
+### Training
+
+```bash
+# Auto-detects game from data file header (v4 format)
+python scripts/train_nnue.py --data "data/minichess_train.bin" --features halfkp --epochs 100
+
+# Explicit game selection
+python scripts/train_nnue.py --game minishogi --data "data/minishogi_train.bin" --features halfkp --epochs 100
+python scripts/train_nnue.py --game gomoku --data "data/gomoku_train.bin" --features ps --epochs 100
+```
+
+### Inspect Data
+
+```bash
+python scripts/read_data.py --game minichess data/train.bin
+```
 
 ## Project Structure
 
 ```
 src/
-  config.hpp                # board size, compile-time flags (NNUE, bitboard)
-  search_params.hpp         # ParamMap (generic key-value), ParamDef, helpers
-  search_types.hpp          # SearchContext, SearchResult
-  policy/
-    registry.hpp            # algorithm registry (name, defaults, param_defs, search)
-    pvs.hpp/cpp             # PVS — PVSParams, 14 tunable features
-    alphabeta.hpp/cpp       # alpha-beta — ABParams
-    minimax.hpp/cpp         # minimax — MMParams
-    random.hpp/cpp          # random move
-    pvs/
-      tt.hpp                # transposition table (dynamic allocation)
-      killer_moves.hpp      # killer move heuristic
-      move_ordering.hpp     # MVV-LVA + killer ordering
-      quiescence.hpp        # quiescence search
-  ubgi/
-    ubgi.hpp/cpp            # UBGI protocol, dynamic option advertisement
+  config.hpp                  # global settings (TT size, NNUE path)
+  search_types.hpp            # SearchContext, SearchResult, RankedMove (Multi-PV)
+  search_params.hpp           # ParamMap, ParamDef
+  state/
+    base_state.hpp            # BaseState — virtual interface for all games
   games/
-    minichess/              # MiniChess state, move gen (bitboard), eval
-    gomoku/                 # Gomoku state, threat-based eval
-  nnue/                     # NNUE: model, scalar/SIMD/quantized kernels
-gui/                        # Pygame GUI
-cli/                        # CLI tournament runner
-scripts/                    # training pipeline
+    minichess/                # 6x5 chess: state, config, NNUE features
+    minishogi/                # 5x5 shogi: state, config, drops, promotions
+    gomoku/                   # 9x9 gomoku: state, config, threat eval
+  policy/
+    registry.hpp              # algorithm registry
+    pvs.hpp/cpp               # PVS with 14 tunable features
+    alphabeta.hpp/cpp         # alpha-beta
+    minimax.hpp/cpp           # minimax
+    random.hpp/cpp            # random
+    pvs/
+      tt.hpp                  # transposition table
+      killer_moves.hpp        # killer move heuristic
+      move_ordering.hpp       # MVV-LVA (per-game PIECE_VAL)
+      quiescence.hpp          # quiescence search
+  ubgi/
+    ubgi.hpp/cpp              # UBGI protocol + MultiPV
+  nnue/                       # NNUE: model, scalar/SIMD/quantized compute
+gui/                          # Pygame GUI (all games)
+cli/                          # CLI runner
+scripts/                      # training pipeline (all games)
 ```
 
 ## Architecture
 
+The multi-game framework compiles each game separately with different `-I` paths. `#include "config.hpp"` and `#include "state.hpp"` resolve to game-specific files at compile time. Search algorithms, UBGI protocol, and training tools are fully game-agnostic.
+
 ```
-UBGI setoption ──> ParamMap (map<string,string>)
-                       |
-           ┌───────────┼───────────┐
-           v           v           v
-     PVS::search   AB::search   MM::search
-           |           |           |
-     PVSParams     ABParams     MMParams
-     ::from_map()  ::from_map() ::from_map()
+Game config (compile-time)    Search (game-agnostic)
+    |                              |
+    v                              v
+  State : BaseState ───────> PVS / AB / MM / Random
+    |                              |
+    v                              v
+  evaluate()                 SearchResult + Multi-PV
+  extract_nnue_features()    RootUpdate callback
+  get_legal_actions()        UBGI protocol
 ```
 
-Each algorithm owns its typed params struct, default values, and UBGI option definitions. The registry maps names to search functions and defaults. The engine dynamically advertises options based on the selected algorithm.
+Each game defines:
+- Board representation and legal move generation
+- Evaluation function (material, PST, game-specific heuristics)
+- NNUE feature extraction (optional, via `extract_nnue_features()` override)
+- Per-game `PIECE_VAL[]` for MVV-LVA move ordering
