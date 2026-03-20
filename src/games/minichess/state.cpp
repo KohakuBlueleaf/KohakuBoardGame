@@ -20,9 +20,9 @@
 int State::nnue_feature_count() const{
 #ifdef USE_NNUE
     if(nnue::g_model.version == 1){
-        return nnue::PS_SIZE;
+        return NNUE_PS_SIZE;
     }
-    return nnue::HALFKP_SIZE;
+    return NNUE_HALFKP_SIZE;
 #else
     return 0;
 #endif
@@ -45,15 +45,15 @@ int State::extract_nnue_features(int perspective, int* features) const{
                     if(perspective == 0){
                         int sq = r * BOARD_W + c;
                         features[count++] = (
-                            color_plane * nnue::NUM_PIECE_TYPES * nnue::NUM_SQUARES
-                            + pt_idx * nnue::NUM_SQUARES + sq
+                            color_plane * NUM_PIECE_TYPES * NNUE_NUM_SQUARES
+                            + pt_idx * NNUE_NUM_SQUARES + sq
                         );
                     }else{
                         int mir_r = BOARD_H - 1 - r;
                         int sq = mir_r * BOARD_W + c;
                         features[count++] = (
-                            (1 - color_plane) * nnue::NUM_PIECE_TYPES * nnue::NUM_SQUARES
-                            + pt_idx * nnue::NUM_SQUARES + sq
+                            (1 - color_plane) * NUM_PIECE_TYPES * NNUE_NUM_SQUARES
+                            + pt_idx * NNUE_NUM_SQUARES + sq
                         );
                     }
                 }
@@ -85,9 +85,9 @@ int State::extract_nnue_features(int perspective, int* features) const{
                     }
                     int sq = r * BOARD_W + c;
                     features[count++] = (
-                        king_sq * nnue::NUM_PIECE_FEATURES
-                        + color_plane * (nnue::NUM_PT_NO_KING * nnue::NUM_SQUARES)
-                        + (pt - 1) * nnue::NUM_SQUARES + sq
+                        king_sq * NNUE_PIECE_FEATURES
+                        + color_plane * (NUM_PT_NO_KING * NNUE_NUM_SQUARES)
+                        + (pt - 1) * NNUE_NUM_SQUARES + sq
                     );
                 }
             }
@@ -112,9 +112,9 @@ int State::extract_nnue_features(int perspective, int* features) const{
                     }
                     int mir_sq = (BOARD_H - 1 - r) * BOARD_W + c;
                     features[count++] = (
-                        king_sq_mir * nnue::NUM_PIECE_FEATURES
-                        + (1 - color_plane) * (nnue::NUM_PT_NO_KING * nnue::NUM_SQUARES)
-                        + (pt - 1) * nnue::NUM_SQUARES + mir_sq
+                        king_sq_mir * NNUE_PIECE_FEATURES
+                        + (1 - color_plane) * (NUM_PT_NO_KING * NNUE_NUM_SQUARES)
+                        + (pt - 1) * NNUE_NUM_SQUARES + mir_sq
                     );
                 }
             }

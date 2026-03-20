@@ -37,13 +37,13 @@ minichess:
 gomoku:
 	$(CXX) $(CXXFLAGS) $(GOMOKU_INC) -DNO_NNUE -o $(BUILD_DIR)/gomoku-ubgi.exe $(STATE_SOURCE_GK) $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
 minishogi:
-	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -DNO_NNUE -o $(BUILD_DIR)/minishogi-ubgi.exe $(STATE_SOURCE_MS) $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
+	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -o $(BUILD_DIR)/minishogi-ubgi.exe $(STATE_SOURCE_MS) $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
 
 # === Per-game datagen (Windows) ===
 minichess-datagen:
 	$(CXX) $(CXXFLAGS) $(MINICHESS_INC) -o $(BUILD_DIR)/minichess-datagen.exe $(STATE_SOURCE_MC) $(NNUE_SOURCE) $(POLICY_SRC) src/datagen.cpp
 minishogi-datagen:
-	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -DNO_NNUE -o $(BUILD_DIR)/minishogi-datagen.exe $(STATE_SOURCE_MS) $(NNUE_SOURCE) $(POLICY_SRC) src/datagen.cpp
+	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -o $(BUILD_DIR)/minishogi-datagen.exe $(STATE_SOURCE_MS) $(NNUE_SOURCE) $(POLICY_SRC) src/datagen.cpp
 gomoku-datagen:
 	$(CXX) $(CXXFLAGS) $(GOMOKU_INC) -DNO_NNUE -o $(BUILD_DIR)/gomoku-datagen.exe $(STATE_SOURCE_GK) $(NNUE_SOURCE) $(POLICY_SRC) src/datagen.cpp
 
@@ -51,7 +51,7 @@ gomoku-datagen:
 minichess-selfplay:
 	$(CXX) $(CXXFLAGS) $(MINICHESS_INC) -o $(BUILD_DIR)/minichess-selfplay.exe $(STATE_SOURCE_MC) $(NNUE_SOURCE) $(POLICY_SRC) src/selfplay.cpp
 minishogi-selfplay:
-	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -DNO_NNUE -o $(BUILD_DIR)/minishogi-selfplay.exe $(STATE_SOURCE_MS) $(NNUE_SOURCE) $(POLICY_SRC) src/selfplay.cpp
+	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -o $(BUILD_DIR)/minishogi-selfplay.exe $(STATE_SOURCE_MS) $(NNUE_SOURCE) $(POLICY_SRC) src/selfplay.cpp
 gomoku-selfplay:
 	$(CXX) $(CXXFLAGS) $(GOMOKU_INC) -DNO_NNUE -o $(BUILD_DIR)/gomoku-selfplay.exe $(STATE_SOURCE_GK) $(NNUE_SOURCE) $(POLICY_SRC) src/selfplay.cpp
 
@@ -59,7 +59,7 @@ gomoku-selfplay:
 minichess-benchmark:
 	$(CXX) $(CXXFLAGS) $(MINICHESS_INC) -o $(BUILD_DIR)/minichess-benchmark.exe $(STATE_SOURCE_MC) $(NNUE_SOURCE) $(POLICY_SRC) src/benchmark.cpp
 minishogi-benchmark:
-	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -DNO_NNUE -o $(BUILD_DIR)/minishogi-benchmark.exe $(STATE_SOURCE_MS) $(NNUE_SOURCE) $(POLICY_SRC) src/benchmark.cpp
+	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -o $(BUILD_DIR)/minishogi-benchmark.exe $(STATE_SOURCE_MS) $(NNUE_SOURCE) $(POLICY_SRC) src/benchmark.cpp
 gomoku-benchmark:
 	$(CXX) $(CXXFLAGS) $(GOMOKU_INC) -DNO_NNUE -o $(BUILD_DIR)/gomoku-benchmark.exe $(STATE_SOURCE_GK) $(NNUE_SOURCE) $(POLICY_SRC) src/benchmark.cpp
 
@@ -83,13 +83,13 @@ minichess:
 gomoku:
 	$(CXX) $(CXXFLAGS) $(GOMOKU_INC) -DNO_NNUE -o $(BUILD_DIR)/gomoku-ubgi $(STATE_SOURCE_GK) $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
 minishogi:
-	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -DNO_NNUE -o $(BUILD_DIR)/minishogi-ubgi $(STATE_SOURCE_MS) $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
+	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -o $(BUILD_DIR)/minishogi-ubgi $(STATE_SOURCE_MS) $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
 
 # === Per-game datagen (Unix) ===
 minichess-datagen:
 	$(CXX) $(CXXFLAGS) $(MINICHESS_INC) -o $(BUILD_DIR)/minichess-datagen $(STATE_SOURCE_MC) $(NNUE_SOURCE) $(POLICY_SRC) src/datagen.cpp
 minishogi-datagen:
-	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -DNO_NNUE -o $(BUILD_DIR)/minishogi-datagen $(STATE_SOURCE_MS) $(NNUE_SOURCE) $(POLICY_SRC) src/datagen.cpp
+	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -o $(BUILD_DIR)/minishogi-datagen $(STATE_SOURCE_MS) $(NNUE_SOURCE) $(POLICY_SRC) src/datagen.cpp
 gomoku-datagen:
 	$(CXX) $(CXXFLAGS) $(GOMOKU_INC) -DNO_NNUE -o $(BUILD_DIR)/gomoku-datagen $(STATE_SOURCE_GK) $(NNUE_SOURCE) $(POLICY_SRC) src/datagen.cpp
 
@@ -97,7 +97,7 @@ gomoku-datagen:
 minichess-selfplay:
 	$(CXX) $(CXXFLAGS) $(MINICHESS_INC) -o $(BUILD_DIR)/minichess-selfplay $(STATE_SOURCE_MC) $(NNUE_SOURCE) $(POLICY_SRC) src/selfplay.cpp
 minishogi-selfplay:
-	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -DNO_NNUE -o $(BUILD_DIR)/minishogi-selfplay $(STATE_SOURCE_MS) $(NNUE_SOURCE) $(POLICY_SRC) src/selfplay.cpp
+	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -o $(BUILD_DIR)/minishogi-selfplay $(STATE_SOURCE_MS) $(NNUE_SOURCE) $(POLICY_SRC) src/selfplay.cpp
 gomoku-selfplay:
 	$(CXX) $(CXXFLAGS) $(GOMOKU_INC) -DNO_NNUE -o $(BUILD_DIR)/gomoku-selfplay $(STATE_SOURCE_GK) $(NNUE_SOURCE) $(POLICY_SRC) src/selfplay.cpp
 
@@ -105,7 +105,7 @@ gomoku-selfplay:
 minichess-benchmark:
 	$(CXX) $(CXXFLAGS) $(MINICHESS_INC) -o $(BUILD_DIR)/minichess-benchmark $(STATE_SOURCE_MC) $(NNUE_SOURCE) $(POLICY_SRC) src/benchmark.cpp
 minishogi-benchmark:
-	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -DNO_NNUE -o $(BUILD_DIR)/minishogi-benchmark $(STATE_SOURCE_MS) $(NNUE_SOURCE) $(POLICY_SRC) src/benchmark.cpp
+	$(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -o $(BUILD_DIR)/minishogi-benchmark $(STATE_SOURCE_MS) $(NNUE_SOURCE) $(POLICY_SRC) src/benchmark.cpp
 gomoku-benchmark:
 	$(CXX) $(CXXFLAGS) $(GOMOKU_INC) -DNO_NNUE -o $(BUILD_DIR)/gomoku-benchmark $(STATE_SOURCE_GK) $(NNUE_SOURCE) $(POLICY_SRC) src/benchmark.cpp
 

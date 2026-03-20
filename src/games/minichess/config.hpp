@@ -12,9 +12,9 @@
 #define MAX_STEP 100
 #define USE_BITBOARD
 
-/* === NNUE feature layout === */
-#define NNUE_NUM_PIECE_TYPES 6
-#define NNUE_NUM_PT_NO_KING 5
+/* === Piece type counts (used by NNUE) === */
+#define NUM_PIECE_TYPES 6
+#define NUM_PT_NO_KING  5
 
 /* === MVV-LVA piece values for move ordering === */
 #define NUM_PIECE_VALS 7

@@ -184,15 +184,15 @@ int Model::extract_features_ps(const Board& board, int perspective, int* feature
                 if(perspective == 0){
                     int sq = r * BOARD_W + c;
                     features[count++] = (
-                        color_plane * NUM_PIECE_TYPES * NUM_SQUARES
-                        + pt_idx * NUM_SQUARES + sq
+                        color_plane * NUM_PIECE_TYPES * NNUE_NUM_SQUARES
+                        + pt_idx * NNUE_NUM_SQUARES + sq
                     );
                 }else{
                     int mir_r = BOARD_H - 1 - r;
                     int sq = mir_r * BOARD_W + c;
                     features[count++] = (
-                        (1 - color_plane) * NUM_PIECE_TYPES * NUM_SQUARES
-                        + pt_idx * NUM_SQUARES + sq
+                        (1 - color_plane) * NUM_PIECE_TYPES * NNUE_NUM_SQUARES
+                        + pt_idx * NNUE_NUM_SQUARES + sq
                     );
                 }
             }
@@ -227,9 +227,9 @@ int Model::extract_features_halfkp(const Board& board, int perspective, int* fea
                     }
                     int sq = r * BOARD_W + c;
                     features[count++] = (
-                        king_sq * NUM_PIECE_FEATURES
-                        + color_plane * (NUM_PT_NO_KING * NUM_SQUARES)
-                        + (pt - 1) * NUM_SQUARES + sq
+                        king_sq * NNUE_PIECE_FEATURES
+                        + color_plane * (NUM_PT_NO_KING * NNUE_NUM_SQUARES)
+                        + (pt - 1) * NNUE_NUM_SQUARES + sq
                     );
                 }
             }
@@ -254,9 +254,9 @@ int Model::extract_features_halfkp(const Board& board, int perspective, int* fea
                     }
                     int mir_sq = (BOARD_H - 1 - r) * BOARD_W + c;
                     features[count++] = (
-                        king_sq_mir * NUM_PIECE_FEATURES
-                        + (1 - color_plane) * (NUM_PT_NO_KING * NUM_SQUARES)
-                        + (pt - 1) * NUM_SQUARES + mir_sq
+                        king_sq_mir * NNUE_PIECE_FEATURES
+                        + (1 - color_plane) * (NUM_PT_NO_KING * NNUE_NUM_SQUARES)
+                        + (pt - 1) * NNUE_NUM_SQUARES + mir_sq
                     );
                 }
             }
@@ -269,8 +269,8 @@ int Model::extract_features_halfkp(const Board& board, int perspective, int* fea
 // Forward pass -- uses State's extract_nnue_features() virtual method
 // -------------------------------------------------------------------------
 int Model::evaluate(const BaseState& state, int player) const{
-    int white_features[MAX_ACTIVE];
-    int black_features[MAX_ACTIVE];
+    int white_features[NNUE_MAX_ACTIVE];
+    int black_features[NNUE_MAX_ACTIVE];
     int w_count = state.extract_nnue_features(0, white_features);
     int b_count = state.extract_nnue_features(1, black_features);
 

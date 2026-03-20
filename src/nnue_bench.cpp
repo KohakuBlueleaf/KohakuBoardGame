@@ -50,8 +50,8 @@ static Board make_board(const char w[6][5], const char b[6][5]){
 // calling the functions from compute.hpp.
 // ---------------------------------------------------------------------------
 static int evaluate_scalar(const nnue::Model& m, const Board& board, int player){
-    int white_features[nnue::MAX_ACTIVE];
-    int black_features[nnue::MAX_ACTIVE];
+    int white_features[NNUE_MAX_ACTIVE];
+    int black_features[NNUE_MAX_ACTIVE];
     int w_count, b_count;
 
     if(m.version == 1){
@@ -99,8 +99,8 @@ static int evaluate_scalar(const nnue::Model& m, const Board& board, int player)
 #define HAS_SIMD_EVAL 1
 
 static int evaluate_simd(const nnue::Model& m, const Board& board, int player){
-    int white_features[nnue::MAX_ACTIVE];
-    int black_features[nnue::MAX_ACTIVE];
+    int white_features[NNUE_MAX_ACTIVE];
+    int black_features[NNUE_MAX_ACTIVE];
     int w_count, b_count;
 
     if(m.version == 1){
@@ -245,8 +245,8 @@ struct QuantModel {
 
 static int evaluate_quant(const nnue::Model& m, const QuantModel& qm,
                            const Board& board, int player){
-    int white_features[nnue::MAX_ACTIVE];
-    int black_features[nnue::MAX_ACTIVE];
+    int white_features[NNUE_MAX_ACTIVE];
+    int black_features[NNUE_MAX_ACTIVE];
     int w_count, b_count;
 
     if(m.version == 1){

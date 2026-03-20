@@ -9,23 +9,15 @@
 
 namespace nnue {
 
-// Constants derived from game config macros
-constexpr int NUM_SQUARES = BOARD_H * BOARD_W;
-constexpr int NUM_COLORS = 2;
-#ifdef NNUE_NUM_PIECE_TYPES
-constexpr int NUM_PIECE_TYPES = NNUE_NUM_PIECE_TYPES;
-#else
-constexpr int NUM_PIECE_TYPES = 6;
-#endif
-#ifdef NNUE_NUM_PT_NO_KING
-constexpr int NUM_PT_NO_KING = NNUE_NUM_PT_NO_KING;
-#else
-constexpr int NUM_PT_NO_KING = 5;
-#endif
-constexpr int PS_SIZE = NUM_COLORS * NUM_PIECE_TYPES * NUM_SQUARES;
-constexpr int NUM_PIECE_FEATURES = NUM_COLORS * NUM_PT_NO_KING * NUM_SQUARES;
-constexpr int HALFKP_SIZE = NUM_SQUARES * NUM_PIECE_FEATURES;
-constexpr int MAX_ACTIVE = 20;
+/* All dimensions come from the per-game config.hpp macros.
+ * Games must define: BOARD_H, BOARD_W, NUM_PIECE_TYPES, NUM_PT_NO_KING.
+ */
+#define NNUE_NUM_SQUARES   (BOARD_H * BOARD_W)
+#define NNUE_NUM_COLORS    2
+#define NNUE_PS_SIZE       (NNUE_NUM_COLORS * NUM_PIECE_TYPES * NNUE_NUM_SQUARES)
+#define NNUE_PIECE_FEATURES (NNUE_NUM_COLORS * NUM_PT_NO_KING * NNUE_NUM_SQUARES)
+#define NNUE_HALFKP_SIZE   (NNUE_NUM_SQUARES * NNUE_PIECE_FEATURES)
+#define NNUE_MAX_ACTIVE    32
 
 struct Model {
     int version;

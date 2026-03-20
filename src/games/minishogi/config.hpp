@@ -26,7 +26,12 @@
 #define P_ROOK   10  /* dragon = promoted rook (rook + king) */
 
 #define NUM_PIECE_TYPES 11  /* 0-10 */
+#define NUM_PT_NO_KING  10  /* all except king (gap at index 5) */
 #define NUM_HAND_TYPES 5    /* pawn, silver, gold, bishop, rook (indices 1-5) */
+
+/* Default NNUE model path */
+#undef NNUE_FILE
+#define NNUE_FILE "models/minishogi-nnue_v1.bin"
 
 /* Drop moves use sentinel row = BOARD_H in the from-point */
 #define DROP_ROW BOARD_H
