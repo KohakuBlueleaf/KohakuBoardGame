@@ -42,17 +42,26 @@
 
 struct DataHeader {
     char magic[4];       /* "BGDT" (Board Game Data Training) */
-    int32_t version;     /* format version */
+    int32_t version;     /* format version (5 = with hand) */
     int32_t count;       /* number of records (updated at end) */
     int16_t board_h;     /* board height */
     int16_t board_w;     /* board width */
+    int16_t num_hand;    /* hand types per player (0 for no hand) */
+    int16_t reserved;    /* padding for alignment */
     char game_name[16];  /* null-terminated game name string */
 };
 
 constexpr int NUM_SQUARES = BOARD_H * BOARD_W;
 
+/* Max hand types across all games (for fixed record size) */
+#ifndef NUM_HAND_TYPES
+#define NUM_HAND_TYPES 0
+#endif
+constexpr int HAND_SIZE = NUM_HAND_TYPES;
+
 struct DataRecord {
     int8_t board[2][BOARD_H][BOARD_W]; /* per-game board layout */
+    int8_t hand[2][HAND_SIZE > 0 ? HAND_SIZE : 1]; /* hand pieces (unused slots = 0) */
     int8_t player;                     /* 1 byte: side to move (0 or 1) */
     int16_t score;                     /* 2 bytes: PVS score from STM perspective */
     int8_t result;                     /* 1 byte: game result from STM (1=win, 0=draw, -1=loss) */
@@ -240,11 +249,18 @@ static void play_game(
             }
 
             DataRecord rec;
+            std::memset(&rec, 0, sizeof(rec));
             for(int p = 0; p < 2; p++){
                 for(int r = 0; r < BOARD_H; r++){
                     for(int c = 0; c < BOARD_W; c++){
                         rec.board[p][r][c] = (int8_t)next->piece_at(p, r, c);
                     }
+                }
+            }
+            /* Export hand pieces */
+            for(int p = 0; p < 2; p++){
+                for(int pt = 0; pt < HAND_SIZE; pt++){
+                    rec.hand[p][pt] = (int8_t)next->hand_count(p, pt + 1);
                 }
             }
             rec.player = (int8_t)next->player;
@@ -331,12 +347,14 @@ int main(int argc, char* argv[]){
 
     /* Write placeholder header (count will be updated at end) */
     DataHeader header;
+    std::memset(&header, 0, sizeof(header));
     std::memcpy(header.magic, "BGDT", 4);
-    header.version = 4;
+    header.version = 5;
     header.count = 0;
     header.board_h = (int16_t)BOARD_H;
     header.board_w = (int16_t)BOARD_W;
-    std::memset(header.game_name, 0, sizeof(header.game_name));
+    header.num_hand = (int16_t)HAND_SIZE;
+    header.reserved = 0;
     std::strncpy(header.game_name, gname, sizeof(header.game_name) - 1);
     std::fwrite(&header, sizeof(DataHeader), 1, fp);
 

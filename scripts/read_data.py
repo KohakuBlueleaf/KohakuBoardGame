@@ -80,9 +80,16 @@ def get_game_config(game_name):
 HEADER_FMT = "<4sii"
 HEADER_SIZE = struct.calcsize(HEADER_FMT)
 
-# Extended header (v4+): legacy + board_h(u16) + board_w(u16) + game_name(16s) = 32 bytes
-EXT_HEADER_FMT = "<4siiHH16s"
-EXT_HEADER_SIZE = struct.calcsize(EXT_HEADER_FMT)
+# Extended header (v4): legacy + board_h(u16) + board_w(u16) + game_name(16s) = 32 bytes
+V4_HEADER_FMT = "<4siiHH16s"
+V4_HEADER_SIZE = struct.calcsize(V4_HEADER_FMT)
+
+# v5 header: legacy + board_h(u16) + board_w(u16) + num_hand(u16) + reserved(u16) + game_name(16s) = 36 bytes
+V5_HEADER_FMT = "<4siiHHHH16s"
+V5_HEADER_SIZE = struct.calcsize(V5_HEADER_FMT)
+
+# Use the largest header size for reading
+EXT_HEADER_SIZE = V5_HEADER_SIZE
 
 NO_MOVE = 0xFFFF
 
@@ -102,10 +109,18 @@ def detect_game_from_header(path):
         if magic.decode("ascii", errors="replace") not in ("MCDT", "BGDT"):
             return None
 
-        if version >= 4 and len(hdr_data) >= EXT_HEADER_SIZE:
-            _, _, _, board_h, board_w, game_raw = struct.unpack(
-                EXT_HEADER_FMT, hdr_data[:EXT_HEADER_SIZE]
+        if version >= 5 and len(hdr_data) >= V5_HEADER_SIZE:
+            _, _, _, board_h, board_w, num_hand, _, game_raw = struct.unpack(
+                V5_HEADER_FMT, hdr_data[:V5_HEADER_SIZE]
             )
+        elif version >= 4 and len(hdr_data) >= V4_HEADER_SIZE:
+            _, _, _, board_h, board_w, game_raw = struct.unpack(
+                V4_HEADER_FMT, hdr_data[:V4_HEADER_SIZE]
+            )
+        else:
+            return None
+
+        if version >= 4:
             game_name = (
                 game_raw.rstrip(b"\x00").decode("ascii", errors="replace").lower()
             )
@@ -176,20 +191,32 @@ def read_file(path, gcfg):
 
         header_info = {"magic": magic_str, "version": version, "count": count}
 
-        # Determine where records start
-        if version >= 4 and len(hdr_data) >= EXT_HEADER_SIZE:
-            f.seek(EXT_HEADER_SIZE)
+        # Parse num_hand from v5 header
+        num_hand = 0
+        if version >= 5 and len(hdr_data) >= V5_HEADER_SIZE:
+            _, _, _, _, _, num_hand, _, _ = struct.unpack(
+                V5_HEADER_FMT, hdr_data[:V5_HEADER_SIZE]
+            )
+            f.seek(V5_HEADER_SIZE)
+        elif version >= 4 and len(hdr_data) >= V4_HEADER_SIZE:
+            f.seek(V4_HEADER_SIZE)
         else:
             f.seek(HEADER_SIZE)
 
+        header_info["num_hand"] = num_hand
+        hand_cells = 2 * num_hand if num_hand > 0 else 2  # v5 always has hand[2][max(1,N)]
+
         # Build record format string
         board_fmt = f"{board_cells}s"
-        if version == 1:
-            rec_fmt = f"<{board_fmt}bh"
-        elif version == 2:
-            rec_fmt = f"<{board_fmt}bhbH"
+        if version >= 5:
+            hand_fmt = f"{hand_cells}s"
+            rec_fmt = f"<{board_fmt}{hand_fmt}bhbHH"
         elif version >= 3:
             rec_fmt = f"<{board_fmt}bhbHH"
+        elif version == 2:
+            rec_fmt = f"<{board_fmt}bhbH"
+        elif version == 1:
+            rec_fmt = f"<{board_fmt}bh"
         else:
             print(f"Error: unknown version {version}: {path}")
             return None, []
@@ -205,9 +232,18 @@ def read_file(path, gcfg):
                 break
 
             fields = struct.unpack(rec_fmt, rec_data)
-            board_bytes = fields[0]
-            player = fields[1]
-            score = fields[2]
+            idx = 0
+            board_bytes = fields[idx]; idx += 1
+
+            # v5: hand data follows board
+            hand = None
+            if version >= 5:
+                hand_bytes = fields[idx]; idx += 1
+                if num_hand > 0:
+                    hand = np.frombuffer(hand_bytes, dtype=np.int8).reshape(2, num_hand).copy()
+
+            player = fields[idx]; idx += 1
+            score = fields[idx]; idx += 1
 
             # Reshape board bytes into [2][H][W]
             board = np.frombuffer(board_bytes, dtype=np.int8).reshape(
@@ -219,12 +255,14 @@ def read_file(path, gcfg):
                 "player": player,
                 "score": score,
             }
+            if hand is not None:
+                rec["hand"] = hand
 
             if version >= 2:
-                rec["result"] = fields[3]
-                rec["ply"] = fields[4]
-            if version >= 3:
-                rec["best_move"] = fields[5]
+                rec["result"] = fields[idx]; idx += 1
+                rec["ply"] = fields[idx]; idx += 1
+            if version >= 3 or version >= 5:
+                rec["best_move"] = fields[idx]; idx += 1
 
             records.append(rec)
 

@@ -128,9 +128,17 @@ NUM_COLORS = 2
 HEADER_FMT = "<4sii"
 HEADER_SIZE = struct.calcsize(HEADER_FMT)
 
-# Extended header (v4+): legacy header + board_h(i16) + board_w(i16) + game_name(16s) = 32 bytes
-EXT_HEADER_FMT = "<4siiHH16s"
-EXT_HEADER_SIZE = struct.calcsize(EXT_HEADER_FMT)
+# v4 header: legacy + board_h(u16) + board_w(u16) + game_name(16s) = 32 bytes
+V4_HEADER_FMT = "<4siiHH16s"
+V4_HEADER_SIZE = struct.calcsize(V4_HEADER_FMT)
+
+# v5 header: legacy + board_h(u16) + board_w(u16) + num_hand(u16) + reserved(u16) + game_name(16s) = 36 bytes
+V5_HEADER_FMT = "<4siiHHHH16s"
+V5_HEADER_SIZE = struct.calcsize(V5_HEADER_FMT)
+
+# Backward compat alias
+EXT_HEADER_FMT = V4_HEADER_FMT
+EXT_HEADER_SIZE = V5_HEADER_SIZE  # read enough for v5
 
 SCORE_FILTER = 10000
 NO_MOVE = 0xFFFF
@@ -166,10 +174,19 @@ def read_data_header(path: str) -> dict:
         "game_name": None,
     }
 
-    # v4+ has extended header with game metadata
-    if version >= 4 and len(hdr_data) >= EXT_HEADER_SIZE:
+    # v5 header: includes num_hand
+    if version >= 5 and len(hdr_data) >= V5_HEADER_SIZE:
+        _, _, _, board_h, board_w, num_hand, _, game_name_raw = struct.unpack(
+            V5_HEADER_FMT, hdr_data[:V5_HEADER_SIZE]
+        )
+        game_name = game_name_raw.rstrip(b"\x00").decode("ascii", errors="replace")
+        result["board_h"] = board_h
+        result["board_w"] = board_w
+        result["num_hand"] = num_hand
+        result["game_name"] = game_name.lower() if game_name else None
+    elif version >= 4 and len(hdr_data) >= V4_HEADER_SIZE:
         _, _, _, board_h, board_w, game_name_raw = struct.unpack(
-            EXT_HEADER_FMT, hdr_data[:EXT_HEADER_SIZE]
+            V4_HEADER_FMT, hdr_data[:V4_HEADER_SIZE]
         )
         game_name = game_name_raw.rstrip(b"\x00").decode("ascii", errors="replace")
         result["board_h"] = board_h
@@ -231,12 +248,16 @@ def resolve_game(cli_game: Optional[str], data_pattern: str) -> dict:
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
-def _make_record_dtype(board_cells: int, version: int) -> Tuple[np.dtype, int]:
+def _make_record_dtype(board_cells: int, version: int, hand_cells: int = 0) -> Tuple[np.dtype, int]:
     """Create numpy dtype for a data record given board size and format version.
 
     board_cells = 2 * BOARD_H * BOARD_W (total int8 elements for the board).
+    hand_cells  = 2 * num_hand_types (v5+), or 2 if num_hand_types==0 (min 1 per player in C struct).
     """
     fields = [("board", np.int8, (board_cells,))]
+
+    if version >= 5:
+        fields.append(("hand", np.int8, (hand_cells,)))
 
     if version == 1:
         fields += [("player", np.int8), ("score", "<i2")]
@@ -266,7 +287,7 @@ def read_bin_file(
     path: str,
     gcfg: dict,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Read a single .bin data file (supports v1, v2, v3, and v4+ formats).
+    """Read a single .bin data file (supports v1-v5 formats).
 
     Returns:
         boards:     (N, 2, H, W) int8
@@ -275,14 +296,15 @@ def read_bin_file(
         results:    (N,) int8
         plies:      (N,) uint16
         best_moves: (N,) uint16
+    Also sets gcfg["_hands"] = (N, 2, num_hand) int8 if v5 with hand > 0.
     """
     board_h = gcfg["board_h"]
     board_w = gcfg["board_w"]
     board_cells = gcfg["board_cells"]
 
     with open(path, "rb") as f:
-        # Read header -- try extended first, fall back to legacy
-        peek = f.read(EXT_HEADER_SIZE)
+        # Read header
+        peek = f.read(V5_HEADER_SIZE)
         if len(peek) < HEADER_SIZE:
             raise ValueError(f"File too small for header: {path}")
 
@@ -291,16 +313,25 @@ def read_bin_file(
         if magic_str not in ("MCDT", "BGDT"):
             raise ValueError(f"Bad magic '{magic_str}' in {path}")
 
-        # Determine where records start
-        if version >= 4 and len(peek) >= EXT_HEADER_SIZE:
-            header_end = EXT_HEADER_SIZE
+        # Parse v5 header for hand info
+        num_hand = 0
+        if version >= 5 and len(peek) >= V5_HEADER_SIZE:
+            _, _, _, _, _, num_hand, _, _ = struct.unpack(
+                V5_HEADER_FMT, peek[:V5_HEADER_SIZE]
+            )
+            header_end = V5_HEADER_SIZE
+        elif version >= 4 and len(peek) >= V4_HEADER_SIZE:
+            header_end = V4_HEADER_SIZE
         else:
             header_end = HEADER_SIZE
 
         f.seek(header_end)
 
+        # Hand cells in the record: 2 * max(1, num_hand) matching C struct
+        hand_cells = 2 * num_hand if num_hand > 0 else 2
+
         # Build record dtype
-        dt, record_size = _make_record_dtype(board_cells, version)
+        dt, record_size = _make_record_dtype(board_cells, version, hand_cells)
         raw = f.read(record_size * count)
 
     if len(raw) < record_size * count:
@@ -312,6 +343,12 @@ def read_bin_file(
     boards = records["board"].reshape(-1, 2, board_h, board_w).copy()
     players = records["player"].copy()
     scores = records["score"].copy()
+
+    # Store hand data if available
+    if version >= 5 and num_hand > 0:
+        hands = records["hand"].reshape(-1, 2, num_hand).copy()
+        gcfg["_hands"] = hands
+        gcfg["_num_hand"] = num_hand
 
     if version >= 2:
         results = records["result"].copy()
