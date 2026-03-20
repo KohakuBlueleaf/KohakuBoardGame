@@ -34,6 +34,10 @@ static std::thread        g_search_thread;
 static std::mutex         g_io_mutex;
 static std::atomic<bool>  g_searching{false};
 static Move               g_best_move;
+#ifdef USE_NNUE
+static std::string        g_nnue_file = NNUE_FILE;
+static bool               g_nnue_dirty = true;  /* need to (re)load on isready */
+#endif
 
 
 /* === Helpers === */
@@ -410,11 +414,8 @@ static void cmd_setoption(std::istringstream& iss){
         }
     }else if(name == "NNUEFile"){
         #ifdef USE_NNUE
-        if(nnue::init(value.c_str())){
-            send("info string NNUE loaded: " + value);
-        }else{
-            send("info string ERROR: failed to load NNUE from " + value);
-        }
+        g_nnue_file = value;
+        g_nnue_dirty = true;
         #else
         send("info string ERROR: NNUE not compiled in");
         #endif
@@ -485,9 +486,7 @@ void loop(){
     g_algo = find_algo(default_algo_name());
     g_params = g_algo->default_params;
 
-    #ifdef USE_NNUE
-    nnue::init();
-    #endif
+    /* NNUE loaded on first 'isready' so client can set NNUEFile first */
 
     std::string handshake_cmd;
     std::string line;
@@ -531,6 +530,17 @@ void loop(){
                 send("uciok");
             }
         }else if(cmd == "isready"){
+            #ifdef USE_NNUE
+            if(g_nnue_dirty){
+                g_nnue_dirty = false;
+                if(nnue::init(g_nnue_file.c_str())){
+                    send("info string NNUE loaded: " + g_nnue_file);
+                }else{
+                    g_params["UseNNUE"] = "false";
+                    send("info string NNUE failed to load: " + g_nnue_file + " (UseNNUE disabled)");
+                }
+            }
+            #endif
             send("readyok");
         }else if(cmd == "setoption"){
             cmd_setoption(iss);

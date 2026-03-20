@@ -41,10 +41,13 @@ inline int param_int(const ParamMap& m, const std::string& key, int fallback = 0
     return std::atoi(it->second.c_str());
 }
 
-/* === NNUE compile-time check === */
+/* === NNUE availability: compiled in AND model actually loaded === */
+#ifdef USE_NNUE
+#include "nnue/nnue.hpp"
+#endif
 inline bool nnue_available(){
     #ifdef USE_NNUE
-    return true;
+    return nnue::g_model.loaded();
     #else
     return false;
     #endif

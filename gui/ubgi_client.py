@@ -13,14 +13,18 @@ import sys
 class UBGIEngine:
     """Manages a UBGI/UCI engine subprocess."""
 
-    def __init__(self, exe_path):
+    def __init__(self, exe_path, initial_options=None):
         """Launch engine process with stdin/stdout pipes.
 
-        Sends 'ubgi' and waits for 'ubgiok' or 'uciok', then sends
-        'isready' and waits for 'readyok'.
+        Sends 'ubgi' and waits for 'ubgiok' or 'uciok', then applies
+        *initial_options* (if any), then sends 'isready' and waits for
+        'readyok'.  This allows setting NNUEFile etc. before the engine
+        initialises resources.
 
         Args:
             exe_path: Path to a UBGI or UCI compatible engine executable.
+            initial_options: Optional dict of {name: value} to send as
+                setoption commands before isready.
 
         Raises:
             RuntimeError: If the engine fails to start or doesn't respond.
@@ -76,6 +80,11 @@ class UBGIEngine:
                     self.board_height = int(opt["default"])
                 except ValueError:
                     pass
+
+        # Apply initial options before isready (e.g. NNUEFile)
+        if initial_options:
+            for name, value in initial_options.items():
+                self._send(f"setoption name {name} value {value}")
 
         self._send("isready")
         if not self._wait_for("readyok", timeout=5.0):

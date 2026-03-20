@@ -364,10 +364,11 @@ class GameApp:
         if existing is not None and existing.is_alive():
             return existing
         try:
-            engine = UBGIEngine(side_config["engine"])
-            engine.set_option("Algorithm", side_config["algo"])
-            for name, value in side_config["params"].items():
-                engine.set_option(name, str(value))
+            # Build initial options: Algorithm + all params (including NNUEFile)
+            # These are sent before isready so the engine can load NNUE correctly.
+            init_opts = {"Algorithm": side_config["algo"]}
+            init_opts.update({k: str(v) for k, v in side_config["params"].items()})
+            engine = UBGIEngine(side_config["engine"], initial_options=init_opts)
             setattr(self, attr_name, engine)
             return engine
         except RuntimeError:
@@ -406,10 +407,9 @@ class GameApp:
         if exe_path is None:
             return None
         try:
-            engine = UBGIEngine(exe_path)
-            engine.set_option("Algorithm", self.analyze["algo"])
-            for name, value in self.analyze["params"].items():
-                engine.set_option(name, str(value))
+            init_opts = {"Algorithm": self.analyze["algo"]}
+            init_opts.update({k: str(v) for k, v in self.analyze["params"].items()})
+            engine = UBGIEngine(exe_path, initial_options=init_opts)
             self._analyze_engine = engine
             return engine
         except RuntimeError:
