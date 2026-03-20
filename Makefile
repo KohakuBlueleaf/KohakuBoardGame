@@ -24,7 +24,7 @@ MINISHOGI_INC = -Isrc/games/minishogi -Isrc/state -Isrc
 .PHONY: minichess-datagen minishogi-datagen gomoku-datagen
 .PHONY: minichess-selfplay minishogi-selfplay gomoku-selfplay
 .PHONY: minichess-benchmark minishogi-benchmark gomoku-benchmark
-all: |$(BUILD_DIR) minichess datagen selfplay benchmark nnue_bench
+all: |$(BUILD_DIR) minichess minishogi gomoku minichess-datagen minishogi-datagen gomoku-datagen minichess-selfplay minishogi-selfplay gomoku-selfplay minichess-benchmark minishogi-benchmark gomoku-benchmark selfplay benchmark nnue_bench
 
 $(BUILD_DIR):
 	mkdir "$(BUILD_DIR)"
