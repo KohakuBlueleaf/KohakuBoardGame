@@ -198,7 +198,7 @@ class BoardRenderer:
         row_map = {str(cfg.BOARD_H - i): i for i in range(cfg.BOARD_H)}
 
         overlay = pygame.Surface(
-            (cfg.BOARD_PIXEL_W + 2 * cfg.LABEL_MARGIN, cfg.BOARD_PIXEL_H + 2 * cfg.LABEL_MARGIN),
+            (cfg.WINDOW_W, cfg.WINDOW_H),
             pygame.SRCALPHA,
         )
 

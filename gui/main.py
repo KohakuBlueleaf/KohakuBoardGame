@@ -61,7 +61,7 @@ def _configure_board_size(game_name):
         _cfg.MAX_STEP = 200
         _cfg.SCORE_PLOT_MAX_CP = 2000
         _cfg.SCORE_DISPLAY_DIV = 100
-        _cfg.HAND_ROW_H = 40  # height of each hand row (gote top, sente bottom)
+        _cfg.HAND_ROW_H = 60  # height of each hand row (gote top, sente bottom)
     else:
         _cfg.BOARD_H = 6
         _cfg.BOARD_W = 5
@@ -77,13 +77,14 @@ def _configure_board_size(game_name):
     hand_h = getattr(_cfg, "HAND_ROW_H", 0)
     _cfg.HAND_TOP_Y = _cfg.BOARD_Y  # gote hand row above board
     if hand_h:
-        _cfg.BOARD_Y += hand_h  # push board down to make room
-    _cfg.HAND_BOTTOM_Y = _cfg.BOARD_Y + _cfg.BOARD_PIXEL_H  # sente hand below board
-    total_board_h = _cfg.BOARD_PIXEL_H + 2 * hand_h
+        _cfg.BOARD_Y += hand_h  # push board down below gote hand
+    # Sente hand goes BELOW the column labels (LABEL_MARGIN below board)
+    _cfg.HAND_BOTTOM_Y = _cfg.BOARD_Y + _cfg.BOARD_PIXEL_H + _cfg.LABEL_MARGIN
+    total_h = hand_h + _cfg.BOARD_PIXEL_H + _cfg.LABEL_MARGIN + hand_h
     _cfg.PANEL_X = _cfg.BOARD_X + _cfg.BOARD_PIXEL_W + 16
     _cfg.PANEL_Y = _cfg.HAND_TOP_Y
-    _cfg.PANEL_H = max(getattr(_cfg, "PANEL_H", total_board_h), total_board_h)
-    _cfg.BOTTOM_Y = _cfg.HAND_TOP_Y + total_board_h + _cfg.LABEL_MARGIN + 4
+    _cfg.PANEL_H = max(getattr(_cfg, "PANEL_H", total_h), total_h)
+    _cfg.BOTTOM_Y = _cfg.HAND_TOP_Y + total_h + 4
     _cfg.WINDOW_W = _cfg.PANEL_X + _cfg.PANEL_WIDTH + 12
     _cfg.WINDOW_H = _cfg.BOTTOM_Y + _cfg.BOTTOM_H + 8
 

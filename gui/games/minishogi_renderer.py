@@ -102,9 +102,9 @@ class MiniShogiRenderer:
         self._piece_h = int(cfg.SQUARE_SIZE * 0.88)
 
         # Hand piece layout metrics
-        self._hand_small_w = int(self._piece_w * 0.5)
-        self._hand_small_h = int(self._piece_h * 0.5)
-        self._hand_spacing_x = self._hand_small_w + 12  # horizontal spacing
+        self._hand_small_w = int(self._piece_w * 0.65)
+        self._hand_small_h = int(self._piece_h * 0.65)
+        self._hand_spacing_x = self._hand_small_w + 16  # horizontal spacing
 
         # Hand piece hit-test rects: (player, piece_type) -> pygame.Rect
         self._hand_rects = {}
@@ -138,17 +138,29 @@ class MiniShogiRenderer:
             if self._piece_font is None:
                 self._piece_font = pygame.freetype.Font(None, kanji_size)
 
-        # Smaller font for hand piece counts
+        # Hand font: same font family as pieces, just smaller
+        hand_size = int(cfg.SQUARE_SIZE * 0.30)
         self._hand_font = None
-        hand_size = int(cfg.SQUARE_SIZE * 0.24)
-        for name in self._FALLBACK_FONT_CANDIDATES:
-            try:
-                self._hand_font = pygame.freetype.SysFont(name, hand_size)
-                break
-            except Exception:
-                continue
+        if self._use_kanji and self._piece_font is not None:
+            # Re-create the same kanji font at hand size
+            for name in self._KANJI_FONT_CANDIDATES:
+                try:
+                    font = pygame.freetype.SysFont(name, hand_size)
+                    surf, rect = font.render("\u738b", fgcolor=(0, 0, 0))
+                    if rect.width > 2 and rect.height > 2:
+                        self._hand_font = font
+                        break
+                except Exception:
+                    continue
         if self._hand_font is None:
-            self._hand_font = pygame.freetype.Font(None, hand_size)
+            for name in self._FALLBACK_FONT_CANDIDATES:
+                try:
+                    self._hand_font = pygame.freetype.SysFont(name, hand_size)
+                    break
+                except Exception:
+                    continue
+            if self._hand_font is None:
+                self._hand_font = pygame.freetype.Font(None, hand_size)
 
         # Number font for PV labels
         self._num_font = pygame.font.SysFont("Arial", 14, bold=True)
@@ -382,28 +394,34 @@ class MiniShogiRenderer:
 
             # Parse move format
             if len(uci) >= 3 and uci[1] == "*":
-                # Drop move: e.g. "P*c3"
+                # Drop move: e.g. "P*c3" — arrow from hand to target
                 tc = col_map.get(uci[2])
                 tr = row_map.get(uci[3]) if len(uci) > 3 else None
                 if tc is None or tr is None:
                     continue
-                # Determine piece type from the drop character
                 drop_map = {"P": PAWN, "S": SILVER, "G": GOLD, "B": BISHOP, "R": ROOK}
                 drop_pt = drop_map.get(uci[0].upper(), PAWN)
-                # Draw ghost piece at drop target
-                ghost = self._render_piece(player_turn, drop_pt, alpha)
-                sx = cfg.BOARD_X + tc * cfg.SQUARE_SIZE
-                sy = cfg.BOARD_Y + tr * cfg.SQUARE_SIZE
-                px = sx + (cfg.SQUARE_SIZE - ghost.get_width()) // 2
-                py = sy + (cfg.SQUARE_SIZE - ghost.get_height()) // 2
-                self.surface.blit(ghost, (px, py))
 
-                # Move number
-                self._draw_pv_number(
-                    sx + cfg.SQUARE_SIZE // 2,
-                    sy + cfg.SQUARE_SIZE // 2,
-                    i + 1, player_turn, alpha
-                )
+                # Find the hand piece rect as arrow source
+                hand_rect = self._hand_rects.get((player_turn, drop_pt))
+                if hand_rect is not None:
+                    fx = hand_rect.centerx
+                    fy = hand_rect.centery
+                else:
+                    # Fallback: arrow starts from side of board
+                    fx = cfg.BOARD_X - 20 if player_turn == 0 else cfg.BOARD_X - 20
+                    fy = cfg.BOARD_Y + cfg.BOARD_PIXEL_H // 2
+
+                tx = cfg.BOARD_X + tc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
+                ty = cfg.BOARD_Y + tr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
+
+                if i == 0:
+                    color = (80, 220, 80, alpha)
+                else:
+                    color = (80, 160, 230, alpha)
+
+                self._draw_arrow(fx, fy, tx, ty, color, i)
+                self._draw_pv_number(tx, ty, i + 1, player_turn, alpha)
 
             elif len(uci) >= 4:
                 # Board move: e.g. "a1b2" or "a1b2+"
@@ -433,16 +451,16 @@ class MiniShogiRenderer:
                 self._draw_pv_number(mid_x, mid_y, i + 1, player_turn, alpha)
 
     def _draw_arrow(self, fx, fy, tx, ty, color, idx):
-        """Draw a directional arrow on the board."""
+        """Draw a directional arrow directly on the surface."""
         dx = tx - fx
         dy = ty - fy
         length = math.sqrt(dx * dx + dy * dy)
         if length < 1:
             return
 
+        # Use a full-window overlay so arrows are never clipped
         overlay = pygame.Surface(
-            (cfg.BOARD_PIXEL_W + 2 * cfg.LABEL_MARGIN,
-             cfg.BOARD_PIXEL_H + 2 * cfg.LABEL_MARGIN),
+            (cfg.WINDOW_W, cfg.WINDOW_H),
             pygame.SRCALPHA,
         )
 
