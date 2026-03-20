@@ -28,7 +28,9 @@ public:
     int evaluate(bool use_nnue = true, bool use_kp = true, bool use_mobility = true) override;
     std::string encode_output() const override;
     uint64_t hash() const override;
-    int piece_at(int /*player*/, int /*row*/, int /*col*/) const override { return 0; }
+    int piece_at(int p, int row, int col) const override {
+        return (board.board[row][col] == p + 1) ? 1 : 0;
+    }
     std::string cell_display(int row, int col) const override{
         char v = board.board[row][col];
         if(v == 1){

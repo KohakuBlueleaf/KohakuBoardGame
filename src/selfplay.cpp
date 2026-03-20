@@ -26,38 +26,38 @@ int main(){
 
     int step = 0;
     while(true){
-        /* === White's turn === */
+        /* === Player 0's turn === */
         step += 1;
         if(game->game_state == WIN){
             break;
         }
 
-        SearchContext ctx_w;
-        auto action_white = AlphaBeta::search(game, 9, ctx_w).best_move;
-        std::cout << "\nstep " << step << " white's turn\n";
-        std::cout << action_white.first.first << ", " << action_white.first.second << " -> "
-                  << action_white.second.first << ", " << action_white.second.second << "\n";
+        SearchContext ctx_0;
+        auto action_0 = AlphaBeta::search(game, 9, ctx_0).best_move;
+        std::cout << "\nstep " << step << " Player 0's turn\n";
+        std::cout << action_0.first.first << ", " << action_0.first.second << " -> "
+                  << action_0.second.first << ", " << action_0.second.second << "\n";
 
         State* prev = game;
-        game = game->next_state(action_white);
+        game = game->next_state(action_0);
         delete prev;
         std::cout << game->encode_output();
         std::cout << std::endl;
 
-        /* === Black's turn === */
+        /* === Player 1's turn === */
         step += 1;
         if(game->game_state == WIN){
             break;
         }
 
-        SearchContext ctx_b;
-        auto action_black = AlphaBeta::search(game, 9, ctx_b).best_move;
-        std::cout << "\nstep " << step << " black's turn\n";
-        std::cout << action_black.first.first << ", " << action_black.first.second << " -> "
-                  << action_black.second.first << ", " << action_black.second.second << "\n";
+        SearchContext ctx_1;
+        auto action_1 = AlphaBeta::search(game, 9, ctx_1).best_move;
+        std::cout << "\nstep " << step << " Player 1's turn\n";
+        std::cout << action_1.first.first << ", " << action_1.first.second << " -> "
+                  << action_1.second.first << ", " << action_1.second.second << "\n";
 
         prev = game;
-        game = game->next_state(action_black);
+        game = game->next_state(action_1);
         delete prev;
         std::cout << game->encode_output();
         std::cout << std::endl;
@@ -65,7 +65,7 @@ int main(){
 
     /* === Final move (winning capture) === */
     Move win_action = game->legal_actions.back();
-    std::cout << "\nstep " << step << " " << (game->player ? "black" : "white") << " WIN!\n";
+    std::cout << "\nstep " << step << " Player " << game->player << " WIN!\n";
     std::cout << win_action.first.first << ", " << win_action.first.second << " -> "
               << win_action.second.first << ", " << win_action.second.second << "\n";
 

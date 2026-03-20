@@ -14,20 +14,8 @@
 
 struct TestPos {
     const char* name;
-    Board board;
-    int player;
+    State* state;
 };
-
-static Board make_board(const char w[6][5], const char b[6][5]){
-    Board bd;
-    for(int i = 0; i < BOARD_H; i++){
-        for(int j = 0; j < BOARD_W; j++){
-            bd.board[0][i][j] = w[i][j];
-            bd.board[1][i][j] = b[i][j];
-        }
-    }
-    return bd;
-}
 
 
 /* === Timing helper === */
@@ -37,11 +25,11 @@ static double time_search(
     const TestPos& pos,
     int depth,
     double prev_ms
-){
+) {
     if(prev_ms > 5000.0){
         return -1.0;
     }
-    State* state = new State(pos.board, pos.player);
+    State* state = new State(*pos.state);
     state->get_legal_actions();
     SearchContext ctx;
     ctx.params = algo.default_params;
@@ -54,57 +42,65 @@ static double time_search(
 }
 
 
+/* === Build test positions by playing random opening moves === */
+
+static State* play_random_moves(int n_moves) {
+    State* state = new State();
+    state->get_legal_actions();
+    for(int i = 0; i < n_moves; i++){
+        if(state->game_state == WIN || state->game_state == DRAW){
+            break;
+        }
+        if(state->legal_actions.empty()){
+            break;
+        }
+        int idx = rand() % (int)state->legal_actions.size();
+        State* next = state->next_state(state->legal_actions[idx]);
+        delete state;
+        state = next;
+        state->get_legal_actions();
+    }
+    return state;
+}
+
+
 /* === Main === */
 
-int main(int argc, char* argv[]){
+int main(int argc, char* argv[]) {
 #ifdef USE_NNUE
     if(nnue::init()){
         std::cerr << "NNUE model loaded." << std::endl;
-    }else{
+    } else {
         std::cerr << "NNUE not loaded, using handcrafted eval." << std::endl;
     }
 #endif
 
+    srand(42);
+
     /* Optional label from command line */
     const char* label = (argc > 1) ? argv[1] : "";
 
+    /* Get game name from State */
+    State temp_state;
+    std::cout << "Game: " << temp_state.game_name() << " ("
+              << BOARD_H << "x" << BOARD_W << ")\n";
+
     /* === Test positions === */
-    TestPos positions[3];
+    constexpr int NUM_POS = 3;
+    TestPos positions[NUM_POS];
 
     /* 1. Starting position */
     positions[0].name = "init";
-    positions[0].board = Board();
-    positions[0].player = 0;
+    positions[0].state = new State();
+    positions[0].state->get_legal_actions();
 
-    /* 2. Midgame: pieces traded, open position */
-    {
-        const char w[6][5] = {
-            {0,0,0,0,0}, {0,0,0,0,0}, {0,0,1,0,0},
-            {0,1,0,0,0}, {0,0,0,0,1}, {2,0,0,5,6},
-        };
-        const char b[6][5] = {
-            {6,5,0,0,2}, {1,0,0,0,0}, {0,0,0,1,0},
-            {0,0,1,0,0}, {0,0,0,0,0}, {0,0,0,0,0},
-        };
-        positions[1].name = "mid";
-        positions[1].board = make_board(w, b);
-        positions[1].player = 0;
-    }
+    /* 2. Midgame: play some random opening moves */
+    positions[1].name = "mid";
+    positions[1].state = play_random_moves(10);
 
-    /* 3. Endgame: few pieces */
-    {
-        const char w[6][5] = {
-            {0,0,0,0,0}, {0,0,0,0,0}, {0,0,0,0,0},
-            {0,0,1,0,0}, {0,0,0,0,0}, {0,0,0,2,6},
-        };
-        const char b[6][5] = {
-            {6,0,2,0,0}, {0,0,0,0,0}, {0,1,0,0,0},
-            {0,0,0,0,0}, {0,0,0,0,0}, {0,0,0,0,0},
-        };
-        positions[2].name = "end";
-        positions[2].board = make_board(w, b);
-        positions[2].player = 0;
-    }
+    /* 3. Late game: more random moves */
+    positions[2].name = "late";
+    positions[2].state = play_random_moves(20);
 
     /* === Algorithm table from registry === */
     const auto& algos = get_algo_table();
@@ -114,7 +110,7 @@ int main(int argc, char* argv[]){
         std::cout << "[ " << label << " ]\n";
     }
 
-    for(int p = 0; p < 3; p++){
+    for(int p = 0; p < NUM_POS; p++){
         std::cout << "\n=== " << positions[p].name << " ===\n";
 
         /* Header */
@@ -137,7 +133,7 @@ int main(int argc, char* argv[]){
                 double ms = time_search(algo, positions[p], d, prev);
                 if(ms < 0){
                     std::cout << " | " << std::setw(9) << "-";
-                }else{
+                } else {
                     std::cout << " | " << std::setw(7) << std::fixed
                               << std::setprecision(1) << ms << "ms";
                     prev = ms;
@@ -145,6 +141,11 @@ int main(int argc, char* argv[]){
             }
             std::cout << "\n";
         }
+    }
+
+    /* Clean up */
+    for(int p = 0; p < NUM_POS; p++){
+        delete positions[p].state;
     }
 
     std::cout << std::endl;

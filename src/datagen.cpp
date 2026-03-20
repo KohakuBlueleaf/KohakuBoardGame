@@ -30,6 +30,10 @@
 #include "state.hpp"
 #include "./policy/pvs.hpp"
 
+#ifdef USE_NNUE
+#include "nnue/nnue.hpp"
+#endif
+
 
 /*============================================================
  * Binary format structures
@@ -37,18 +41,23 @@
 #pragma pack(push, 1)
 
 struct DataHeader {
-    char magic[4];     /* "MCDT" (MiniChess Data Training) */
-    int32_t version;   /* format version */
-    int32_t count;     /* number of records (updated at end) */
+    char magic[4];       /* "BGDT" (Board Game Data Training) */
+    int32_t version;     /* format version */
+    int32_t count;       /* number of records (updated at end) */
+    int16_t board_h;     /* board height */
+    int16_t board_w;     /* board width */
+    char game_name[16];  /* null-terminated game name string */
 };
 
+constexpr int NUM_SQUARES = BOARD_H * BOARD_W;
+
 struct DataRecord {
-    int8_t board[2][6][5];  /* 60 bytes: both player boards */
-    int8_t player;          /* 1 byte: side to move (0 or 1) */
-    int16_t score;          /* 2 bytes: PVS score from STM perspective */
-    int8_t result;          /* 1 byte: game result from STM (1=win, 0=draw, -1=loss) */
-    uint16_t ply;           /* 2 bytes: ply count from game start */
-    uint16_t best_move;     /* 2 bytes: encoded as from_sq*30+to_sq (0xFFFF = none) */
+    int8_t board[2][BOARD_H][BOARD_W]; /* per-game board layout */
+    int8_t player;                     /* 1 byte: side to move (0 or 1) */
+    int16_t score;                     /* 2 bytes: PVS score from STM perspective */
+    int8_t result;                     /* 1 byte: game result from STM (1=win, 0=draw, -1=loss) */
+    uint16_t ply;                      /* 2 bytes: ply count from game start */
+    uint16_t best_move;                /* 2 bytes: encoded as from_sq*NUM_SQUARES+to_sq (0xFFFF = none) */
 };
 
 #pragma pack(pop)
@@ -120,6 +129,7 @@ struct Config {
     int depth = 6;
     double epsilon = 0.15;
     const char* output = "data/train.bin";
+    const char* nnue_model = nullptr;
     unsigned int seed = 42;
 };
 
@@ -129,6 +139,7 @@ static void print_usage(const char* prog){
     std::fprintf(stderr, "  -d DEPTH        Search depth (default: 6)\n");
     std::fprintf(stderr, "  -e EPSILON      Jitter probability (default: 0.15)\n");
     std::fprintf(stderr, "  -o OUTPUT       Output file (default: data/train.bin)\n");
+    std::fprintf(stderr, "  -m MODEL        NNUE model file (default: auto-detect)\n");
     std::fprintf(stderr, "  -s SEED         Random seed (default: 42)\n");
     std::fprintf(stderr, "  -h              Show this help\n");
 }
@@ -157,6 +168,7 @@ static Config parse_args(int argc, char* argv[]){
             case 'd': cfg.depth = std::atoi(val); break;
             case 'e': cfg.epsilon = std::atof(val); break;
             case 'o': cfg.output = val; break;
+            case 'm': cfg.nnue_model = val; break;
             case 's': cfg.seed = (unsigned int)std::atoi(val); break;
             default:
                 std::fprintf(stderr, "Unknown flag: -%c\n", flag);
@@ -179,7 +191,7 @@ static void play_game(
     game->get_legal_actions();
 
     size_t first_record = records.size();
-    int winner = -1;  /* -1=undecided, 0=white, 1=black, 2=draw */
+    int winner = -1;  /* -1=undecided, 0=player0, 1=player1, 2=draw */
 
     int step = 0;
     while(step < MAX_STEP){
@@ -217,13 +229,8 @@ static void play_game(
 
         /* Record the position if it's not terminal */
         if(next->game_state != WIN){
-            State* eval_copy = new State(next->board, next->player);
-            eval_copy->get_legal_actions();
-
-            SearchContext eval_ctx;
-            SearchResult eval_result = PVS::search(eval_copy, cfg.depth, eval_ctx);
-            int score = eval_result.score;
-            delete eval_copy;
+            /* Direct eval — no search. Full eval function for training labels. */
+            int score = next->evaluate(true, true, true);
 
             if(score > 32767){
                 score = 32767;
@@ -236,7 +243,7 @@ static void play_game(
             for(int p = 0; p < 2; p++){
                 for(int r = 0; r < BOARD_H; r++){
                     for(int c = 0; c < BOARD_W; c++){
-                        rec.board[p][r][c] = next->board.board[p][r][c];
+                        rec.board[p][r][c] = (int8_t)next->piece_at(p, r, c);
                     }
                 }
             }
@@ -245,12 +252,12 @@ static void play_game(
             rec.result = 0;  /* placeholder, filled below */
             rec.ply = (uint16_t)step;
 
-            Move bm = eval_result.best_move;
-            uint16_t encoded_move = 0xFFFF; /* no move sentinel */
-            if(bm != Move()){
-                int from_sq = bm.first.first * BOARD_W + bm.first.second;
-                int to_sq = bm.second.first * BOARD_W + bm.second.second;
-                encoded_move = (uint16_t)(from_sq * 30 + to_sq);
+            /* Best move from the search (or the jittered move) */
+            uint16_t encoded_move = 0xFFFF;
+            if(chosen_move != Move()){
+                int from_sq = chosen_move.first.first * BOARD_W + chosen_move.first.second;
+                int to_sq = chosen_move.second.first * BOARD_W + chosen_move.second.second;
+                encoded_move = (uint16_t)(from_sq * NUM_SQUARES + to_sq);
             }
             rec.best_move = encoded_move;
 
@@ -289,7 +296,26 @@ int main(int argc, char* argv[]){
     /* Also seed stdlib rand (used by some engine internals) */
     srand(cfg.seed);
 
-    std::fprintf(stderr, "MiniChess Data Generator\n");
+    /* Use a temporary State to get game_name at runtime */
+    State temp_state;
+    const char* gname = temp_state.game_name();
+
+    /* Load NNUE model if available */
+#ifdef USE_NNUE
+    if(cfg.nnue_model){
+        if(nnue::init(cfg.nnue_model)){
+            std::fprintf(stderr, "NNUE loaded: %s\n", cfg.nnue_model);
+        }else{
+            std::fprintf(stderr, "Warning: failed to load NNUE from %s\n", cfg.nnue_model);
+        }
+    }else{
+        if(nnue::init()){
+            std::fprintf(stderr, "NNUE loaded: %s\n", NNUE_FILE);
+        }
+    }
+#endif
+
+    std::fprintf(stderr, "%s Data Generator\n", gname);
     std::fprintf(stderr, "  Games:   %d\n", cfg.num_games);
     std::fprintf(stderr, "  Depth:   %d\n", cfg.depth);
     std::fprintf(stderr, "  Epsilon: %.2f\n", cfg.epsilon);
@@ -305,9 +331,13 @@ int main(int argc, char* argv[]){
 
     /* Write placeholder header (count will be updated at end) */
     DataHeader header;
-    std::memcpy(header.magic, "MCDT", 4);
-    header.version = 3;
+    std::memcpy(header.magic, "BGDT", 4);
+    header.version = 4;
     header.count = 0;
+    header.board_h = (int16_t)BOARD_H;
+    header.board_w = (int16_t)BOARD_W;
+    std::memset(header.game_name, 0, sizeof(header.game_name));
+    std::strncpy(header.game_name, gname, sizeof(header.game_name) - 1);
     std::fwrite(&header, sizeof(DataHeader), 1, fp);
 
     auto t_start = std::chrono::steady_clock::now();
