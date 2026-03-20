@@ -180,9 +180,7 @@ class GameApp:
             "depth": 0,  # 0 = use time limit
         }
         self.black = {
-            "engine": (
-                self._available_engines[0][1] if self._available_engines else None
-            ),
+            "engine": self._best_engine_for_game(),
             "algo": _cfg.DEFAULT_ALGORITHM,
             "params": {},
             "depth": 0,
@@ -251,6 +249,21 @@ class GameApp:
     # Engine auto-selection / probing
     # ------------------------------------------------------------------
 
+    def _best_engine_for_game(self):
+        """Return the best engine path for the current game.
+
+        Prefers engines whose name starts with the game name
+        (e.g. 'minishogi-ubgi' for game 'minishogi'), then falls back
+        to the first available engine.
+        """
+        if not self._available_engines:
+            return None
+        game = self._game_name.lower().replace(" ", "")
+        for name, path in self._available_engines:
+            if name.lower().startswith(game):
+                return path
+        return self._available_engines[0][1]
+
     def _probe_engine_options(self):
         """Probe engine to get per-algorithm option sets.
 
@@ -262,7 +275,7 @@ class GameApp:
         exe_path = (
             self.white["engine"]
             or self.black["engine"]
-            or (self._available_engines[0][1] if self._available_engines else None)
+            or self._best_engine_for_game()
         )
         if exe_path is None:
             return
@@ -331,6 +344,15 @@ class GameApp:
             algo = side["algo"]
             side["params"] = dict(self._algo_defaults.get(algo, {}))
 
+    def _probe_engine_options_from(self, exe_path):
+        """Re-probe engine options from a specific engine path."""
+        old_white = self.white["engine"]
+        old_black = self.black["engine"]
+        # Temporarily set engine path so _probe_engine_options picks it up
+        self.white["engine"] = exe_path
+        self._probe_engine_options()
+        self.white["engine"] = old_white
+
     def _get_or_create_uci_engine(self, side_config, attr_name):
         """Create or reuse a UCI engine for a given side configuration.
 
@@ -374,12 +396,12 @@ class GameApp:
     def _get_or_create_analyze_engine(self):
         if self._analyze_engine is not None and self._analyze_engine.is_alive():
             return self._analyze_engine
-        # Use explicit analyze engine path, or fall back to any available
+        # Use explicit analyze engine path, or fall back to game-matched engine
         exe_path = (
             self.analyze["engine"]
             or self.white["engine"]
             or self.black["engine"]
-            or (self._available_engines[0][1] if self._available_engines else None)
+            or self._best_engine_for_game()
         )
         if exe_path is None:
             return None
@@ -776,6 +798,7 @@ class GameApp:
         self.ai_thinking = True
         self.ai_result = {"move": None, "depth": 0, "ready": False}
         self.search_info = {}
+        self._ai_start_time = time.time()
 
         attr = "white_uci_engine" if player == 0 else "black_uci_engine"
         uci = self._get_or_create_uci_engine(side, attr)
@@ -805,11 +828,39 @@ class GameApp:
                 done_callback=self._on_uci_bestmove,
             )
 
+    def _force_kill_ai_engine(self):
+        """Kill the AI engine after timeout; use last known best move."""
+        player = self.game_state.player
+        attr = "white_uci_engine" if player == 0 else "black_uci_engine"
+        engine = getattr(self, attr, None)
+
+        # Extract best move from last search info (currmove or pv[0])
+        bestmove = None
+        info = self.search_info
+        if info.get("pv"):
+            bestmove = UBGIEngine.uci_to_move(info["pv"][0])
+        elif info.get("currmove"):
+            bestmove = UBGIEngine.uci_to_move(info["currmove"])
+
+        # Kill engine process
+        if engine is not None:
+            try:
+                engine.quit()
+            except Exception:
+                pass
+            setattr(self, attr, None)
+
+        depth = info.get("depth", 0)
+        self.ai_result = {"move": bestmove, "depth": depth, "ready": True}
+
     def _on_uci_info(self, info_dict):
         if "score_cp" in info_dict and self.game_state.player == 1:
             info_dict["score_cp"] = -info_dict["score_cp"]
+        # Preserve last known PV and currmove for timeout fallback
         if "pv" not in info_dict and "pv" in self.search_info:
             info_dict["pv"] = self.search_info["pv"]
+        if "currmove" not in info_dict and "currmove" in self.search_info:
+            info_dict["currmove"] = self.search_info["currmove"]
         self.search_info = info_dict
 
     def _on_uci_bestmove(self, bestmove_str):
@@ -826,6 +877,13 @@ class GameApp:
     # ------------------------------------------------------------------
 
     def update(self):
+        # Force-kill engine if it exceeds the timeout
+        if self.ai_thinking and not self.ai_result.get("ready"):
+            elapsed = time.time() - getattr(self, "_ai_start_time", 0)
+            kill_after = self.time_limit + 1.0  # 1s grace period
+            if elapsed > kill_after:
+                self._force_kill_ai_engine()
+
         if self.ai_result.get("ready"):
             move = self.ai_result["move"]
             depth = self.ai_result["depth"]
@@ -934,6 +992,11 @@ class GameApp:
         self._available_engines = discover_engines(_cfg.BUILD_DIR)
         engine_names = ["Human"] + [name for name, _path in self._available_engines]
         engine_paths = [None] + [path for _name, path in self._available_engines]
+        # Re-probe if we haven't probed yet
+        if not self._engine_algorithms:
+            best = self._best_engine_for_game()
+            if best:
+                self._probe_engine_options_from(best)
         algo_list = self._engine_algorithms or [_cfg.DEFAULT_ALGORITHM]
 
         def _engine_index(exe_path):
@@ -1047,8 +1110,24 @@ class GameApp:
                 )
                 w.configure(state=st)
 
-        w_combo.bind("<<ComboboxSelected>>", lambda e: _update())
-        b_combo.bind("<<ComboboxSelected>>", lambda e: _update())
+        def _on_engine_change(e=None):
+            _update()
+            # Re-probe if an engine is selected and we haven't probed yet
+            for var in (white_engine_var, black_engine_var):
+                name = var.get()
+                if name != "Human":
+                    idx = engine_names.index(name) if name in engine_names else 0
+                    path = engine_paths[idx]
+                    if path and not self._engine_algorithms:
+                        self._probe_engine_options_from(path)
+                        # Update algo comboboxes with new list
+                        new_algos = self._engine_algorithms or [_cfg.DEFAULT_ALGORITHM]
+                        for cb in (w_widgets[0], b_widgets[0]):
+                            cb.configure(values=new_algos)
+                    break
+
+        w_combo.bind("<<ComboboxSelected>>", _on_engine_change)
+        b_combo.bind("<<ComboboxSelected>>", _on_engine_change)
         _update()
 
         btn_frame = ttk.Frame(dialog)
@@ -1127,6 +1206,11 @@ class GameApp:
         self._available_engines = discover_engines(_cfg.BUILD_DIR)
         engine_names = ["Human"] + [name for name, _path in self._available_engines]
         engine_paths = [None] + [path for _name, path in self._available_engines]
+        # Re-probe if we haven't probed yet
+        if not self._engine_algorithms:
+            best = self._best_engine_for_game()
+            if best:
+                self._probe_engine_options_from(best)
         algo_list = self._engine_algorithms or [_cfg.DEFAULT_ALGORITHM]
 
         def _engine_index(exe_path):

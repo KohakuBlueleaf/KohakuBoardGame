@@ -2,6 +2,7 @@
 // g++ --std=c++2a -O3 -march=native -o build/nnue_bench src/state/state.cpp src/nnue/nnue.cpp src/nnue_bench.cpp
 
 #include "config.hpp"
+#include "state.hpp"
 
 #ifdef USE_NNUE
 
@@ -49,18 +50,11 @@ static Board make_board(const char w[6][5], const char b[6][5]){
 // Scalar float evaluate -- mirrors nnue::Model::evaluate() exactly,
 // calling the functions from compute.hpp.
 // ---------------------------------------------------------------------------
-static int evaluate_scalar(const nnue::Model& m, const Board& board, int player){
+static int evaluate_scalar(const nnue::Model& m, const State& state, int player){
     int white_features[nnue::MAX_ACTIVE];
     int black_features[nnue::MAX_ACTIVE];
-    int w_count, b_count;
-
-    if(m.version == 1){
-        w_count = state.extract_nnue_features(0, white_features);
-        b_count = state.extract_nnue_features(1, black_features);
-    }else{
-        w_count = state.extract_nnue_features(0, white_features);
-        b_count = state.extract_nnue_features(1, black_features);
-    }
+    int w_count = state.extract_nnue_features(0, white_features);
+    int b_count = state.extract_nnue_features(1, black_features);
 
     float w_accum[256], b_accum[256];
     nnue::accumulate_sparse(white_features, w_count, m.ft_weight, m.ft_bias, w_accum, m.accum_size);
@@ -98,18 +92,11 @@ static int evaluate_scalar(const nnue::Model& m, const Board& board, int player)
 #if HAS_SIMD_HEADER && (defined(NNUE_NEON) || defined(NNUE_AVX2))
 #define HAS_SIMD_EVAL 1
 
-static int evaluate_simd(const nnue::Model& m, const Board& board, int player){
+static int evaluate_simd(const nnue::Model& m, const State& state, int player){
     int white_features[nnue::MAX_ACTIVE];
     int black_features[nnue::MAX_ACTIVE];
-    int w_count, b_count;
-
-    if(m.version == 1){
-        w_count = state.extract_nnue_features(0, white_features);
-        b_count = state.extract_nnue_features(1, black_features);
-    }else{
-        w_count = state.extract_nnue_features(0, white_features);
-        b_count = state.extract_nnue_features(1, black_features);
-    }
+    int w_count = state.extract_nnue_features(0, white_features);
+    int b_count = state.extract_nnue_features(1, black_features);
 
     float w_accum[256], b_accum[256];
     nnue::accumulate_sparse_simd(white_features, w_count, m.ft_weight, m.ft_bias, w_accum, m.accum_size);
@@ -244,18 +231,11 @@ struct QuantModel {
 };
 
 static int evaluate_quant(const nnue::Model& m, const QuantModel& qm,
-                           const Board& board, int player){
+                           const State& state, int player){
     int white_features[nnue::MAX_ACTIVE];
     int black_features[nnue::MAX_ACTIVE];
-    int w_count, b_count;
-
-    if(m.version == 1){
-        w_count = state.extract_nnue_features(0, white_features);
-        b_count = state.extract_nnue_features(1, black_features);
-    }else{
-        w_count = state.extract_nnue_features(0, white_features);
-        b_count = state.extract_nnue_features(1, black_features);
-    }
+    int w_count = state.extract_nnue_features(0, white_features);
+    int b_count = state.extract_nnue_features(1, black_features);
 
     // FT: int16 sparse accumulation
     int16_t w_accum[256], b_accum[256];
@@ -434,12 +414,12 @@ int main(){
         {
             // Warm up
             for(int i = 0; i < 1000; i++){
-                score_scalar = evaluate_scalar(model, pos.board, pos.player);
+                score_scalar = evaluate_scalar(model, State(pos.board, pos.player), pos.player);
             }
 
             int64_t t0 = now_ns();
             for(int i = 0; i < N_ITERS; i++){
-                score_scalar = evaluate_scalar(model, pos.board, pos.player);
+                score_scalar = evaluate_scalar(model, State(pos.board, pos.player), pos.player);
             }
             int64_t t1 = now_ns();
 
@@ -453,12 +433,12 @@ int main(){
         int score_simd = 0;
         {
             for(int i = 0; i < 1000; i++){
-                score_simd = evaluate_simd(model, pos.board, pos.player);
+                score_simd = evaluate_simd(model, State(pos.board, pos.player), pos.player);
             }
 
             int64_t t0 = now_ns();
             for(int i = 0; i < N_ITERS; i++){
-                score_simd = evaluate_simd(model, pos.board, pos.player);
+                score_simd = evaluate_simd(model, State(pos.board, pos.player), pos.player);
             }
             int64_t t1 = now_ns();
 
@@ -484,12 +464,12 @@ int main(){
         int score_quant = 0;
         {
             for(int i = 0; i < 1000; i++){
-                score_quant = evaluate_quant(model, qmodel, pos.board, pos.player);
+                score_quant = evaluate_quant(model, qmodel, State(pos.board, pos.player), pos.player);
             }
 
             int64_t t0 = now_ns();
             for(int i = 0; i < N_ITERS; i++){
-                score_quant = evaluate_quant(model, qmodel, pos.board, pos.player);
+                score_quant = evaluate_quant(model, qmodel, State(pos.board, pos.player), pos.player);
             }
             int64_t t1 = now_ns();
 
