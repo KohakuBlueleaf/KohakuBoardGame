@@ -34,7 +34,9 @@ class GomokuRenderer:
                     pygame.draw.circle(self.surface, (60, 60, 60), (sx, sy), radius, 2)
                 elif val == 2:
                     pygame.draw.circle(self.surface, (240, 240, 240), (sx, sy), radius)
-                    pygame.draw.circle(self.surface, (100, 100, 100), (sx, sy), radius, 2)
+                    pygame.draw.circle(
+                        self.surface, (100, 100, 100), (sx, sy), radius, 2
+                    )
 
     def draw_pv(self, state, pv_moves):
         """Draw semi-transparent ghost stones for the principal variation."""

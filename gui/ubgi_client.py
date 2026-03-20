@@ -564,7 +564,7 @@ class UBGIEngine:
             import config as _c
         bh = _c.BOARD_H
         (fr, fc), (tr, tc) = move
-        col_ch = lambda c: chr(ord('a') + c)
+        col_ch = lambda c: chr(ord("a") + c)
         row_ch = lambda r: str(bh - r)
         # Placement move
         if (fr, fc) == (tr, tc):
@@ -600,18 +600,28 @@ class UBGIEngine:
         if uci_str is None or len(uci_str) < 2:
             return None
 
-        drop_map = {"P": 1, "S": 2, "G": 3, "B": 4, "R": 5,
-                     "p": 1, "s": 2, "g": 3, "b": 4, "r": 5}
+        drop_map = {
+            "P": 1,
+            "S": 2,
+            "G": 3,
+            "B": 4,
+            "R": 5,
+            "p": 1,
+            "s": 2,
+            "g": 3,
+            "b": 4,
+            "r": 5,
+        }
 
         def parse_sq(s, offset):
-            col = ord(s[offset]) - ord('a')
+            col = ord(s[offset]) - ord("a")
             row = bh - int(s[offset + 1])
             return (row, col)
 
         # Drop move: X*rc
-        if len(uci_str) >= 3 and uci_str[1] == '*':
+        if len(uci_str) >= 3 and uci_str[1] == "*":
             pt = drop_map.get(uci_str[0], 0)
-            col = ord(uci_str[2]) - ord('a')
+            col = ord(uci_str[2]) - ord("a")
             row = bh - int(uci_str[3]) if len(uci_str) > 3 else 0
             return ((bh, pt), (row, col))
 
@@ -623,11 +633,10 @@ class UBGIEngine:
         # Board move (possibly with promotion)
         fr, fc = parse_sq(uci_str, 0)
         tr, tc = parse_sq(uci_str, 2)
-        promote = len(uci_str) >= 5 and uci_str[4] == '+'
+        promote = len(uci_str) >= 5 and uci_str[4] == "+"
         if promote:
             tr += bh
         return ((fr, fc), (tr, tc))
-
 
 
 def discover_engines(build_dir):
