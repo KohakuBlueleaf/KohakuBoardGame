@@ -22,25 +22,61 @@ def _get_game_module(game_name):
     """Return (StateClass, format_move, RendererClass, player_labels, player_colors) for the given game."""
     if game_name in ("Gomoku", "gomoku"):
         try:
-            from gui.games.gomoku_engine import GomokuState, format_move, PLAYER_LABELS, PLAYER_COLORS
+            from gui.games.gomoku_engine import (
+                GomokuState,
+                format_move,
+                PLAYER_LABELS,
+                PLAYER_COLORS,
+            )
             from gui.games.gomoku_renderer import GomokuRenderer
         except ImportError:
-            from games.gomoku_engine import GomokuState, format_move, PLAYER_LABELS, PLAYER_COLORS
+            from games.gomoku_engine import (
+                GomokuState,
+                format_move,
+                PLAYER_LABELS,
+                PLAYER_COLORS,
+            )
             from games.gomoku_renderer import GomokuRenderer
         return GomokuState, format_move, GomokuRenderer, PLAYER_LABELS, PLAYER_COLORS
     if game_name in ("MiniShogi", "minishogi"):
         try:
-            from gui.games.minishogi_engine import MiniShogiState, format_move, PLAYER_LABELS, PLAYER_COLORS
+            from gui.games.minishogi_engine import (
+                MiniShogiState,
+                format_move,
+                PLAYER_LABELS,
+                PLAYER_COLORS,
+            )
             from gui.games.minishogi_renderer import MiniShogiRenderer
         except ImportError:
-            from games.minishogi_engine import MiniShogiState, format_move, PLAYER_LABELS, PLAYER_COLORS
+            from games.minishogi_engine import (
+                MiniShogiState,
+                format_move,
+                PLAYER_LABELS,
+                PLAYER_COLORS,
+            )
             from games.minishogi_renderer import MiniShogiRenderer
-        return MiniShogiState, format_move, MiniShogiRenderer, PLAYER_LABELS, PLAYER_COLORS
+        return (
+            MiniShogiState,
+            format_move,
+            MiniShogiRenderer,
+            PLAYER_LABELS,
+            PLAYER_COLORS,
+        )
     try:
-        from gui.games.minichess_engine import MiniChessState, format_move, PLAYER_LABELS, PLAYER_COLORS
+        from gui.games.minichess_engine import (
+            MiniChessState,
+            format_move,
+            PLAYER_LABELS,
+            PLAYER_COLORS,
+        )
         from gui.games.minichess_renderer import MiniChessRenderer
     except ImportError:
-        from games.minichess_engine import MiniChessState, format_move, PLAYER_LABELS, PLAYER_COLORS
+        from games.minichess_engine import (
+            MiniChessState,
+            format_move,
+            PLAYER_LABELS,
+            PLAYER_COLORS,
+        )
         from games.minichess_renderer import MiniChessRenderer
     return MiniChessState, format_move, MiniChessRenderer, PLAYER_LABELS, PLAYER_COLORS
 
@@ -96,6 +132,15 @@ class GameApp:
         # Configure board size BEFORE creating the window
         _configure_board_size(game_name)
 
+        # Initialize Tk BEFORE pygame to avoid NSApplication conflict on macOS.
+        # SDL and Tk both register their own NSApplication subclass; whichever
+        # comes second crashes.  Keeping a hidden Tk root alive lets us reuse
+        # it for settings dialogs later.
+        import tkinter as tk
+
+        self._tk_root = tk.Tk()
+        self._tk_root.withdraw()
+
         pygame.init()
         pygame.display.set_caption(game_name.capitalize())
 
@@ -103,12 +148,14 @@ class GameApp:
         self.clock = pygame.time.Clock()
 
         # Select game module (state class, move formatter, renderer, labels, colors)
-        state_cls, fmt_move, renderer_cls, player_labels, player_colors = _get_game_module(game_name)
+        state_cls, fmt_move, renderer_cls, player_labels, player_colors = (
+            _get_game_module(game_name)
+        )
         self._state_class = state_cls
         self._format_move = fmt_move
         self._game_name = game_name
-        self._player_labels = player_labels   # {0: "White"/"Black", 1: "Black"/"White"}
-        self._player_colors = player_colors   # {0: (r,g,b), 1: (r,g,b)}
+        self._player_labels = player_labels  # {0: "White"/"Black", 1: "Black"/"White"}
+        self._player_colors = player_colors  # {0: (r,g,b), 1: (r,g,b)}
 
         game_renderer = renderer_cls(self.screen)
         self.board_renderer = BoardRenderer(self.screen, game_renderer=game_renderer)
@@ -466,6 +513,10 @@ class GameApp:
         finally:
             self._shutdown_uci_engines()
             pygame.quit()
+            try:
+                self._tk_root.destroy()
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Event handling
@@ -498,7 +549,7 @@ class GameApp:
 
         # Check hand piece click (MiniShogi drop support)
         gr = self.board_renderer.game_renderer
-        if gr is not None and hasattr(gr, 'screen_to_hand') and self._is_human_turn():
+        if gr is not None and hasattr(gr, "screen_to_hand") and self._is_human_turn():
             hand_sel = gr.screen_to_hand(x, y, self.game_state)
             if hand_sel is not None:
                 self._select_hand_piece(hand_sel)
@@ -609,7 +660,7 @@ class GameApp:
     def _sync_hand_highlight(self, hand_key):
         """Update the renderer's hand highlight if it supports it."""
         gr = self.board_renderer.game_renderer
-        if gr is not None and hasattr(gr, 'set_selected_hand'):
+        if gr is not None and hasattr(gr, "set_selected_hand"):
             gr.set_selected_hand(hand_key)
 
     def _find_legal_move(self, dest_row, dest_col):
@@ -893,9 +944,7 @@ class GameApp:
                     return idx
             return 0
 
-        root = tk.Tk()
-        root.withdraw()
-        dialog = tk.Toplevel(root)
+        dialog = tk.Toplevel(self._tk_root)
         dialog.title("New Game")
         dialog.resizable(False, False)
         dialog.grab_set()
@@ -1023,7 +1072,6 @@ class GameApp:
         sw, sh = dialog.winfo_screenwidth(), dialog.winfo_screenheight()
         dialog.geometry(f"+{(sw - dw) // 2}+{(sh - dh) // 2}")
         dialog.wait_window()
-        root.destroy()
 
         if not applied[0]:
             return
@@ -1089,9 +1137,7 @@ class GameApp:
                     return idx
             return 0
 
-        root = tk.Tk()
-        root.withdraw()
-        dialog = tk.Toplevel(root)
+        dialog = tk.Toplevel(self._tk_root)
         dialog.title("Settings")
         dialog.resizable(False, False)
         dialog.grab_set()
@@ -1181,7 +1227,6 @@ class GameApp:
         sw, sh = dialog.winfo_screenwidth(), dialog.winfo_screenheight()
         dialog.geometry(f"+{(sw - dw) // 2}+{(sh - dh) // 2}")
         dialog.wait_window()
-        root.destroy()
 
         if not applied[0]:
             return
@@ -1367,7 +1412,8 @@ class GameApp:
 def main():
     parser = argparse.ArgumentParser(description="UBGI GUI")
     parser.add_argument(
-        "--game", default="minichess",
+        "--game",
+        default="minichess",
         help="Game type: minichess, gomoku (default: minichess)",
     )
     args = parser.parse_args()

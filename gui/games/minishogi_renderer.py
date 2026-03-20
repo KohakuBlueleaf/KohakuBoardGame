@@ -11,30 +11,62 @@ except ImportError:
 
 try:
     from gui.games.minishogi_engine import (
-        EMPTY, PAWN, SILVER, GOLD, BISHOP, ROOK, KING,
-        P_PAWN, P_SILVER, P_BISHOP, P_ROOK,
-        BOARD_SIZE, PIECE_SYMBOLS, PIECE_NAMES,
+        EMPTY,
+        PAWN,
+        SILVER,
+        GOLD,
+        BISHOP,
+        ROOK,
+        KING,
+        P_PAWN,
+        P_SILVER,
+        P_BISHOP,
+        P_ROOK,
+        BOARD_SIZE,
+        PIECE_SYMBOLS,
+        PIECE_NAMES,
         _DROP_PIECE_CHAR,
     )
 except ImportError:
     from games.minishogi_engine import (
-        EMPTY, PAWN, SILVER, GOLD, BISHOP, ROOK, KING,
-        P_PAWN, P_SILVER, P_BISHOP, P_ROOK,
-        BOARD_SIZE, PIECE_SYMBOLS, PIECE_NAMES,
+        EMPTY,
+        PAWN,
+        SILVER,
+        GOLD,
+        BISHOP,
+        ROOK,
+        KING,
+        P_PAWN,
+        P_SILVER,
+        P_BISHOP,
+        P_ROOK,
+        BOARD_SIZE,
+        PIECE_SYMBOLS,
+        PIECE_NAMES,
         _DROP_PIECE_CHAR,
     )
 
 # Colors for pieces
-_SENTE_BG = (240, 210, 150)       # light wood
-_GOTE_BG = (190, 150, 100)        # darker wood
-_PIECE_OUTLINE = (60, 40, 20)     # dark brown outline
-_NORMAL_TEXT = (20, 20, 20)        # black text
-_PROMOTED_TEXT = (180, 30, 30)     # red text for promoted pieces
+_SENTE_BG = (240, 210, 150)  # light wood
+_GOTE_BG = (190, 150, 100)  # darker wood
+_PIECE_OUTLINE = (60, 40, 20)  # dark brown outline
+_NORMAL_TEXT = (20, 20, 20)  # black text
+_PROMOTED_TEXT = (180, 30, 30)  # red text for promoted pieces
 _HAND_HIGHLIGHT = (255, 255, 100, 140)  # selected hand piece highlight
 
 # All piece types used on the board
-_ALL_PIECE_TYPES = (PAWN, SILVER, GOLD, BISHOP, ROOK, KING,
-                    P_PAWN, P_SILVER, P_BISHOP, P_ROOK)
+_ALL_PIECE_TYPES = (
+    PAWN,
+    SILVER,
+    GOLD,
+    BISHOP,
+    ROOK,
+    KING,
+    P_PAWN,
+    P_SILVER,
+    P_BISHOP,
+    P_ROOK,
+)
 
 # Promoted piece types (drawn in red)
 _PROMOTED_TYPES = {P_PAWN, P_SILVER, P_BISHOP, P_ROOK}
@@ -63,21 +95,21 @@ def _pentagon_points(cx, cy, w, h, pointing_up):
         top = cy - hh
         bot = cy + hh
         points = [
-            (cx, top),                                          # tip
-            (cx + shoulder, top + 0.3 * h),                     # right shoulder
-            (cx + hw * 0.82, bot),                              # right base
-            (cx - hw * 0.82, bot),                              # left base
-            (cx - shoulder, top + 0.3 * h),                     # left shoulder
+            (cx, top),  # tip
+            (cx + shoulder, top + 0.3 * h),  # right shoulder
+            (cx + hw * 0.82, bot),  # right base
+            (cx - hw * 0.82, bot),  # left base
+            (cx - shoulder, top + 0.3 * h),  # left shoulder
         ]
     else:
         top = cy - hh
         bot = cy + hh
         points = [
-            (cx, bot),                                          # tip (bottom)
-            (cx - shoulder, bot - 0.3 * h),                     # left shoulder
-            (cx - hw * 0.82, top),                              # left base (top)
-            (cx + hw * 0.82, top),                              # right base (top)
-            (cx + shoulder, bot - 0.3 * h),                     # right shoulder
+            (cx, bot),  # tip (bottom)
+            (cx - shoulder, bot - 0.3 * h),  # left shoulder
+            (cx - hw * 0.82, top),  # left base (top)
+            (cx + hw * 0.82, top),  # right base (top)
+            (cx + shoulder, bot - 0.3 * h),  # right shoulder
         ]
     return points
 
@@ -87,11 +119,25 @@ class MiniShogiRenderer:
 
     # Font preference: Japanese fonts first, then fallback
     _KANJI_FONT_CANDIDATES = (
-        "Yu Mincho", "YuMincho", "MS Mincho", "MS Gothic",
-        "Meiryo", "Noto Sans CJK JP", "Noto Sans JP",
-        "Arial Unicode MS", "Segoe UI Symbol",
+        "Noto Sans JP",
+        "Noto Sans CJK JP",
+        "Yu Mincho",
+        "YuMincho",
+        "MS Mincho",
+        "MS Gothic",
+        "Meiryo",
+        "Arial Unicode MS",
+        "Apple Symbols",
+        "Segoe UI Symbol",
     )
-    _FALLBACK_FONT_CANDIDATES = ("Segoe UI Symbol", "DejaVu Sans", "Arial", None)
+    _FALLBACK_FONT_CANDIDATES = (
+        "Apple Symbols",
+        "Segoe UI Symbol",
+        "DejaVu Sans",
+        "Arial",
+        "Menlo",
+        None,
+    )
 
     def __init__(self, surface):
         self.surface = surface
@@ -118,7 +164,8 @@ class MiniShogiRenderer:
         for name in self._KANJI_FONT_CANDIDATES:
             try:
                 font = pygame.freetype.SysFont(name, kanji_size)
-                # Test rendering a kanji character
+                if "freesansbold" in getattr(font, "path", ""):
+                    continue
                 surf, rect = font.render("\u738b", fgcolor=(0, 0, 0))
                 if rect.width > 2 and rect.height > 2:
                     self._piece_font = font
@@ -131,7 +178,10 @@ class MiniShogiRenderer:
         if self._piece_font is None:
             for name in self._FALLBACK_FONT_CANDIDATES:
                 try:
-                    self._piece_font = pygame.freetype.SysFont(name, kanji_size)
+                    font = pygame.freetype.SysFont(name, kanji_size)
+                    if name is not None and "freesansbold" in getattr(font, "path", ""):
+                        continue
+                    self._piece_font = font
                     break
                 except Exception:
                     continue
@@ -146,6 +196,8 @@ class MiniShogiRenderer:
             for name in self._KANJI_FONT_CANDIDATES:
                 try:
                     font = pygame.freetype.SysFont(name, hand_size)
+                    if "freesansbold" in getattr(font, "path", ""):
+                        continue
                     surf, rect = font.render("\u738b", fgcolor=(0, 0, 0))
                     if rect.width > 2 and rect.height > 2:
                         self._hand_font = font
@@ -183,7 +235,7 @@ class MiniShogiRenderer:
         cx = (w + 4) / 2
         cy = (h + 4) / 2
 
-        pointing_up = (player == 0)
+        pointing_up = player == 0
         pts = _pentagon_points(cx, cy, w, h, pointing_up)
 
         # Background fill
@@ -205,9 +257,13 @@ class MiniShogiRenderer:
             char = PIECE_NAMES.get(piece_type, "?")
 
         try:
-            text_surf, text_rect = self._piece_font.render(char, fgcolor=text_color_alpha)
+            text_surf, text_rect = self._piece_font.render(
+                char, fgcolor=text_color_alpha
+            )
         except Exception:
-            text_surf, text_rect = self._piece_font.render("?", fgcolor=text_color_alpha)
+            text_surf, text_rect = self._piece_font.render(
+                "?", fgcolor=text_color_alpha
+            )
 
         tx = cx - text_rect.width / 2
         ty = cy - text_rect.height / 2
@@ -267,7 +323,7 @@ class MiniShogiRenderer:
         Gote's hand: row above board.  Sente's hand: row below board.
         Each piece is a small pentagon with count in bottom-right.
         """
-        if not hasattr(state, 'hand'):
+        if not hasattr(state, "hand"):
             return
 
         self._hand_rects.clear()
@@ -299,9 +355,11 @@ class MiniShogiRenderer:
                 )
 
                 # Highlight if selected
-                if (self._selected_hand is not None
-                        and self._selected_hand == (BOARD_SIZE, pt)
-                        and player == state.current_player):
+                if (
+                    self._selected_hand is not None
+                    and self._selected_hand == (BOARD_SIZE, pt)
+                    and player == state.current_player
+                ):
                     hl = pygame.Surface((sw + 8, sh + 8), pygame.SRCALPHA)
                     hl.fill(_HAND_HIGHLIGHT)
                     self.surface.blit(hl, (draw_x - 2, draw_y - 2))
@@ -310,7 +368,7 @@ class MiniShogiRenderer:
                 small_surf = pygame.Surface((sw + 4, sh + 4), pygame.SRCALPHA)
                 scx = (sw + 4) / 2
                 scy_local = (sh + 4) / 2
-                pointing_up = (player == 0)
+                pointing_up = player == 0
                 pts = _pentagon_points(scx, scy_local, sw, sh, pointing_up)
 
                 if count > 0:
@@ -321,14 +379,18 @@ class MiniShogiRenderer:
                 pygame.draw.polygon(small_surf, _PIECE_OUTLINE, pts, 1)
 
                 # Piece character
-                char = (PIECE_SYMBOLS.get(player, {}).get(pt, "?")
-                        if self._use_kanji else PIECE_NAMES.get(pt, "?"))
+                char = (
+                    PIECE_SYMBOLS.get(player, {}).get(pt, "?")
+                    if self._use_kanji
+                    else PIECE_NAMES.get(pt, "?")
+                )
                 try:
                     fg = _NORMAL_TEXT if count > 0 else (100, 90, 80)
                     text_surf, text_rect = self._hand_font.render(char, fgcolor=fg)
-                    small_surf.blit(text_surf,
-                                    (scx - text_rect.width / 2,
-                                     scy_local - text_rect.height / 2))
+                    small_surf.blit(
+                        text_surf,
+                        (scx - text_rect.width / 2, scy_local - text_rect.height / 2),
+                    )
                 except Exception:
                     pass
 
@@ -345,10 +407,13 @@ class MiniShogiRenderer:
                         badge_r = max(cnt_rect.width, cnt_rect.height) // 2 + 2
                         bx = draw_x + sw + 2
                         by = draw_y + sh - 2
-                        pygame.draw.circle(self.surface, (40, 40, 44), (bx, by), badge_r)
-                        self.surface.blit(cnt_surf,
-                                          (bx - cnt_rect.width // 2,
-                                           by - cnt_rect.height // 2))
+                        pygame.draw.circle(
+                            self.surface, (40, 40, 44), (bx, by), badge_r
+                        )
+                        self.surface.blit(
+                            cnt_surf,
+                            (bx - cnt_rect.width // 2, by - cnt_rect.height // 2),
+                        )
                     except Exception:
                         pass
 
@@ -359,7 +424,7 @@ class MiniShogiRenderer:
             (BOARD_SIZE, piece_type) if a hand piece for the current player
             was clicked and has count > 0, else None.
         """
-        if not hasattr(state, 'hand'):
+        if not hasattr(state, "hand"):
             return None
         player = state.current_player
         for pt in _HAND_PIECES:
@@ -489,10 +554,7 @@ class MiniShogiRenderer:
         num_surf = self._num_font.render(str(number), True, fg)
         nr = max(num_surf.get_width(), num_surf.get_height()) // 2 + 3
         bg_surf = pygame.Surface((nr * 2 + 2, nr * 2 + 2), pygame.SRCALPHA)
-        pygame.draw.circle(
-            bg_surf, (0, 0, 0, min(200, alpha)),
-            (nr + 1, nr + 1), nr
-        )
+        pygame.draw.circle(bg_surf, (0, 0, 0, min(200, alpha)), (nr + 1, nr + 1), nr)
         self.surface.blit(bg_surf, (cx - nr - 1, cy - nr - 1))
         self.surface.blit(
             num_surf,

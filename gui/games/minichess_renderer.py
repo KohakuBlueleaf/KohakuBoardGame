@@ -12,7 +12,14 @@ except ImportError:
 class MiniChessRenderer:
     """Renders MiniChess board with pre-rendered Unicode chess piece glyphs."""
 
-    _FONT_CANDIDATES = ("Segoe UI Symbol", "DejaVu Sans", "Arial Unicode MS", None)
+    _FONT_CANDIDATES = (
+        "Segoe UI Symbol",
+        "Apple Symbols",
+        "DejaVu Sans",
+        "Arial Unicode MS",
+        "Menlo",
+        None,
+    )
 
     def __init__(self, surface):
         self.surface = surface
@@ -21,6 +28,8 @@ class MiniChessRenderer:
         for name in self._FONT_CANDIDATES:
             try:
                 font = pygame.freetype.SysFont(name, cfg.FONT_SIZE_PIECE)
+                if name is not None and "freesansbold" in getattr(font, "path", ""):
+                    continue
                 font.render(cfg.PIECE_UNICODE[0][cfg.KING], fgcolor=(255, 255, 255))
                 self.piece_font = font
                 break
@@ -36,7 +45,14 @@ class MiniChessRenderer:
         shadow_color = (0, 0, 0)
         piece_colors = {0: cfg.COLOR_WHITE_PIECE, 1: cfg.COLOR_BLACK_PIECE}
         for player in (0, 1):
-            for piece_type in (cfg.PAWN, cfg.ROOK, cfg.KNIGHT, cfg.BISHOP, cfg.QUEEN, cfg.KING):
+            for piece_type in (
+                cfg.PAWN,
+                cfg.ROOK,
+                cfg.KNIGHT,
+                cfg.BISHOP,
+                cfg.QUEEN,
+                cfg.KING,
+            ):
                 char = cfg.PIECE_UNICODE[player][piece_type]
                 fg = piece_colors[player]
                 main_surf, main_rect = self.piece_font.render(char, fgcolor=fg)
@@ -51,7 +67,9 @@ class MiniChessRenderer:
                     piece_type = self._get_piece(state, player, row, col)
                     if piece_type is None or piece_type == cfg.EMPTY:
                         continue
-                    main_surf, shadow_surf, glyph_rect = self._glyphs[player][piece_type]
+                    main_surf, shadow_surf, glyph_rect = self._glyphs[player][
+                        piece_type
+                    ]
                     sx = cfg.BOARD_X + col * cfg.SQUARE_SIZE
                     sy = cfg.BOARD_Y + row * cfg.SQUARE_SIZE
                     cx = sx + (cfg.SQUARE_SIZE - glyph_rect.width) // 2

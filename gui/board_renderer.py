@@ -13,7 +13,14 @@ class BoardRenderer:
     """Renders game boards on a Pygame surface."""
 
     # Font candidates in preference order
-    _FONT_CANDIDATES = ("Segoe UI Symbol", "DejaVu Sans", "Arial Unicode MS", None)
+    _FONT_CANDIDATES = (
+        "Segoe UI Symbol",
+        "Apple Symbols",
+        "DejaVu Sans",
+        "Arial Unicode MS",
+        "Helvetica",
+        None,
+    )
 
     def __init__(self, surface, game_renderer=None):
         self.surface = surface
@@ -22,7 +29,10 @@ class BoardRenderer:
         self.label_font = None
         for name in self._FONT_CANDIDATES:
             try:
-                self.label_font = pygame.freetype.SysFont(name, cfg.FONT_SIZE_LABEL)
+                font = pygame.freetype.SysFont(name, cfg.FONT_SIZE_LABEL)
+                if name is not None and "freesansbold" in getattr(font, "path", ""):
+                    continue
+                self.label_font = font
                 break
             except Exception:
                 continue
@@ -47,7 +57,9 @@ class BoardRenderer:
     # Public API
     # -----------------------------------------------------------------
 
-    def draw(self, state, selected=None, legal_moves=None, last_move=None, pv_arrows=None):
+    def draw(
+        self, state, selected=None, legal_moves=None, last_move=None, pv_arrows=None
+    ):
         self._draw_squares()
         self._draw_last_move(last_move)
         self._draw_selected(selected)
@@ -98,8 +110,12 @@ class BoardRenderer:
         for row in range(cfg.BOARD_H):
             for col in range(cfg.BOARD_W):
                 x, y = self.board_to_screen(row, col)
-                color = cfg.COLOR_LIGHT_SQ if (row + col) % 2 == 0 else cfg.COLOR_DARK_SQ
-                pygame.draw.rect(self.surface, color, (x, y, cfg.SQUARE_SIZE, cfg.SQUARE_SIZE))
+                color = (
+                    cfg.COLOR_LIGHT_SQ if (row + col) % 2 == 0 else cfg.COLOR_DARK_SQ
+                )
+                pygame.draw.rect(
+                    self.surface, color, (x, y, cfg.SQUARE_SIZE, cfg.SQUARE_SIZE)
+                )
 
     def _draw_overlay(self, row, col, color_with_alpha):
         """Draw a semi-transparent overlay on a single square."""
@@ -167,7 +183,9 @@ class BoardRenderer:
             has_opponent = opponent_piece is not None
 
             # Use a per-pixel alpha surface for the indicator
-            overlay = pygame.Surface((cfg.SQUARE_SIZE, cfg.SQUARE_SIZE), pygame.SRCALPHA)
+            overlay = pygame.Surface(
+                (cfg.SQUARE_SIZE, cfg.SQUARE_SIZE), pygame.SRCALPHA
+            )
             local_cx = cfg.SQUARE_SIZE // 2
             local_cy = cfg.SQUARE_SIZE // 2
 
@@ -180,12 +198,12 @@ class BoardRenderer:
                     ring_width,
                 )
             else:
-                pygame.draw.circle(overlay, cfg.COLOR_LEGAL, (local_cx, local_cy), radius)
+                pygame.draw.circle(
+                    overlay, cfg.COLOR_LEGAL, (local_cx, local_cy), radius
+                )
 
             sq_x, sq_y = self.board_to_screen(actual_tr, tc)
             self.surface.blit(overlay, (sq_x, sq_y))
-
-
 
     def _draw_pv_arrows(self, pv_moves):
         """Draw numbered arrows on the board for the principal variation."""

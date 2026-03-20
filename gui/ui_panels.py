@@ -9,7 +9,7 @@ except ImportError:
 
 
 def _make_font(size, bold=False):
-    for name in ("Segoe UI", "Arial", None):
+    for name in ("Segoe UI", "Helvetica", "Arial", None):
         font = pygame.font.SysFont(name, size, bold=bold)
         if font is not None:
             return font
@@ -56,7 +56,9 @@ class Button:
             bg = cfg.COLOR_BTN
             fg = cfg.COLOR_BTN_TEXT
         pygame.draw.rect(surface, bg, self.rect, border_radius=6)
-        pygame.draw.rect(surface, cfg.COLOR_TEXT_DIM, self.rect, width=1, border_radius=6)
+        pygame.draw.rect(
+            surface, cfg.COLOR_TEXT_DIM, self.rect, width=1, border_radius=6
+        )
         label = self.font.render(self.text, True, fg)
         lx = self.rect.x + (self.rect.width - label.get_width()) // 2
         ly = self.rect.y + (self.rect.height - label.get_height()) // 2
@@ -212,7 +214,11 @@ class SidePanel:
                 self._DOT_RADIUS,
                 width=1,
             )
-            who = f"{p0_name} to move" if state.current_player == 0 else f"{p1_name} to move"
+            who = (
+                f"{p0_name} to move"
+                if state.current_player == 0
+                else f"{p1_name} to move"
+            )
             surf = self.font_normal.render(who, True, cfg.COLOR_TEXT)
             self.surface.blit(surf, (cx + self._DOT_RADIUS * 2 + 8, cy + 2))
             cy += max(surf.get_height(), self._DOT_RADIUS * 2) + self._LINE_GAP
@@ -299,7 +305,9 @@ class SidePanel:
         plot_x = inner_x + eval_w + cfg.BOTTOM_GAP
         remaining_w = bw - 2 * pad - eval_w - cfg.BOTTOM_GAP
         plot_w = remaining_w // 2
-        self._draw_score_plot(plot_x, inner_y, score_history, plot_w, inner_h, player_colors)
+        self._draw_score_plot(
+            plot_x, inner_y, score_history, plot_w, inner_h, player_colors
+        )
 
         table_x = plot_x + plot_w + cfg.BOTTOM_GAP
         table_w = bw - (table_x - bx) - pad
@@ -372,7 +380,9 @@ class SidePanel:
             )
 
         if not score_history:
-            pygame.draw.rect(self.surface, cfg.COLOR_TEXT_DIM, (cx, cy, plot_w, plot_h), 1)
+            pygame.draw.rect(
+                self.surface, cfg.COLOR_TEXT_DIM, (cx, cy, plot_w, plot_h), 1
+            )
             return
 
         n_total = len(score_history)
@@ -438,8 +448,12 @@ class SidePanel:
         pygame.draw.rect(self.surface, cfg.COLOR_TEXT_DIM, (cx, cy, plot_w, plot_h), 1)
 
         divisor = getattr(cfg, "SCORE_DISPLAY_DIV", 100)
-        label_top = self.font_small.render(f"+{max_cp / divisor:.0f}", True, (90, 90, 90))
-        label_bot = self.font_small.render(f"-{max_cp / divisor:.0f}", True, (90, 90, 90))
+        label_top = self.font_small.render(
+            f"+{max_cp / divisor:.0f}", True, (90, 90, 90)
+        )
+        label_bot = self.font_small.render(
+            f"-{max_cp / divisor:.0f}", True, (90, 90, 90)
+        )
         self.surface.blit(label_top, (cx + 2, cy + 1))
         self.surface.blit(label_bot, (cx + 2, cy + plot_h - label_bot.get_height() - 1))
 
@@ -534,7 +548,9 @@ class SidePanel:
             self.surface.blit(surf, (cx, cy))
             cy += surf.get_height() + self._LINE_GAP
         elif ai_depth is not None:
-            surf = self.font_normal.render(f"Depth: {ai_depth}", True, cfg.COLOR_TEXT_DIM)
+            surf = self.font_normal.render(
+                f"Depth: {ai_depth}", True, cfg.COLOR_TEXT_DIM
+            )
             self.surface.blit(surf, (cx, cy))
             cy += surf.get_height() + self._LINE_GAP
 
