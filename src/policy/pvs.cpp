@@ -315,11 +315,15 @@ SearchResult PVS::search(State *state, int depth, SearchContext& ctx){
     result.seldepth  = ctx.seldepth;
     result.nodes     = ctx.nodes;
     result.pv = extract_pv(state, depth + 10);
-    /* Ensure best_move is the first PV move */
-    if(result.pv.empty() && best_move != Move()){
-        result.pv = {best_move};
-    }else if(!result.pv.empty() && result.pv[0] != best_move && best_move != Move()){
-        result.pv[0] = best_move;
+    /* Ensure PV starts with root best_move */
+    if(best_move != Move() && (result.pv.empty() || result.pv[0] != best_move)){
+        /* TT PV disagrees with root — rebuild from best_move's child */
+        State* child = state->next_state(best_move);
+        auto tail = extract_pv(child, depth + 9);
+        delete child;
+        result.pv.clear();
+        result.pv.push_back(best_move);
+        result.pv.insert(result.pv.end(), tail.begin(), tail.end());
     }
 
     return result;
