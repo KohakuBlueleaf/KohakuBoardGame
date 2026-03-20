@@ -4,10 +4,24 @@ import sys
 
 try:
     from gui.games.minishogi_engine import (
-        MiniShogiState, format_move,
-        BOARD_SIZE, MAX_STEP, EMPTY, PAWN, SILVER, GOLD, BISHOP, ROOK, KING,
-        P_PAWN, P_SILVER, P_BISHOP, P_ROOK,
-        PIECE_NAMES, _DROP_PIECE_CHAR, _CHAR_TO_DROP_PIECE,
+        MiniShogiState,
+        format_move,
+        BOARD_SIZE,
+        MAX_STEP,
+        EMPTY,
+        PAWN,
+        SILVER,
+        GOLD,
+        BISHOP,
+        ROOK,
+        KING,
+        P_PAWN,
+        P_SILVER,
+        P_BISHOP,
+        P_ROOK,
+        PIECE_NAMES,
+        _DROP_PIECE_CHAR,
+        _CHAR_TO_DROP_PIECE,
     )
 except ImportError:
     raise ImportError(
@@ -23,12 +37,28 @@ ROW_LABELS = "54321"  # row_labels[internal_row] = display rank
 # Piece display: uppercase = sente, lowercase = gote
 _PIECE_DISPLAY = {
     0: {
-        PAWN: " P", SILVER: " S", GOLD: " G", BISHOP: " B", ROOK: " R", KING: " K",
-        P_PAWN: "+P", P_SILVER: "+S", P_BISHOP: "+B", P_ROOK: "+R",
+        PAWN: " P",
+        SILVER: " S",
+        GOLD: " G",
+        BISHOP: " B",
+        ROOK: " R",
+        KING: " K",
+        P_PAWN: "+P",
+        P_SILVER: "+S",
+        P_BISHOP: "+B",
+        P_ROOK: "+R",
     },
     1: {
-        PAWN: " p", SILVER: " s", GOLD: " g", BISHOP: " b", ROOK: " r", KING: " k",
-        P_PAWN: "+p", P_SILVER: "+s", P_BISHOP: "+b", P_ROOK: "+r",
+        PAWN: " p",
+        SILVER: " s",
+        GOLD: " g",
+        BISHOP: " b",
+        ROOK: " r",
+        KING: " k",
+        P_PAWN: "+p",
+        P_SILVER: "+s",
+        P_BISHOP: "+b",
+        P_ROOK: "+r",
     },
 }
 
@@ -39,6 +69,7 @@ _HAND_NAMES = {1: "P", 2: "S", 3: "G", 4: "B", 5: "R"}
 # ---------------------------------------------------------------------------
 # UCI move conversion
 # ---------------------------------------------------------------------------
+
 
 def uci_to_move(uci_str):
     """Convert a UCI move string to internal move tuple.
@@ -115,6 +146,7 @@ def move_to_uci(move):
 # Board display
 # ---------------------------------------------------------------------------
 
+
 def _format_hand(hand_counts):
     """Format a player's hand pieces as a compact string like 'P S B'."""
     parts = []
@@ -168,13 +200,16 @@ def print_board(state, game_ctx):
 # Human move input
 # ---------------------------------------------------------------------------
 
+
 def get_human_move(state, game_ctx):
     """Prompt human player for a MiniShogi move via numbered list or algebraic notation."""
     legal = state.legal_actions
     player_name = "Sente" if state.player == 0 else "Gote"
 
     print(f"  {player_name}'s legal moves:")
-    entries = [f"{i + 1:>3}. {game_ctx['format_move'](mv)}" for i, mv in enumerate(legal)]
+    entries = [
+        f"{i + 1:>3}. {game_ctx['format_move'](mv)}" for i, mv in enumerate(legal)
+    ]
     cols = 4
     for i in range(0, len(entries), cols):
         row = entries[i : i + cols]
@@ -222,6 +257,7 @@ def get_human_move(state, game_ctx):
 # Apply engine move
 # ---------------------------------------------------------------------------
 
+
 def apply_move(state, uci_str, game_ctx):
     """Apply a UCI move string to the state. Returns (new_state, move_tuple)."""
     move = uci_to_move(uci_str)
@@ -231,6 +267,7 @@ def apply_move(state, uci_str, game_ctx):
 # ---------------------------------------------------------------------------
 # Game over check
 # ---------------------------------------------------------------------------
+
 
 def check_game_over(state):
     """Check if the game is over. Returns (result, winner).
@@ -254,6 +291,7 @@ def check_game_over(state):
 # ---------------------------------------------------------------------------
 # Game context
 # ---------------------------------------------------------------------------
+
 
 def get_context(board_size=5):
     """Return the game context dict for MiniShogi."""

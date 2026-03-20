@@ -164,7 +164,12 @@ def load_all_data(
         sys.exit(1)
 
     all_boards, all_players, all_scores, all_results, all_plies, all_best_moves = (
-        [], [], [], [], [], [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
     )
     for fp in files:
         print(f"  Loading {fp} ...", end="", flush=True)
@@ -332,7 +337,9 @@ class PSDenseDataset(Dataset):
         self.scores = torch.from_numpy(scores.astype(np.float32))
         self.results = torch.from_numpy(results.astype(np.float32))
         self.best_moves = (
-            torch.from_numpy(best_moves.astype(np.int64)) if best_moves is not None else None
+            torch.from_numpy(best_moves.astype(np.int64))
+            if best_moves is not None
+            else None
         )
 
     def __len__(self):
@@ -354,14 +361,18 @@ class PSDenseDataset(Dataset):
 class HalfKPSparseDataset(Dataset):
     """HalfKP — sparse indices expanded to dense on access."""
 
-    def __init__(self, white_indices, black_indices, stm, scores, results, best_moves=None):
+    def __init__(
+        self, white_indices, black_indices, stm, scores, results, best_moves=None
+    ):
         self.white_indices = white_indices
         self.black_indices = black_indices
         self.stm = torch.from_numpy(stm)
         self.scores = torch.from_numpy(scores.astype(np.float32))
         self.results = torch.from_numpy(results.astype(np.float32))
         self.best_moves = (
-            torch.from_numpy(best_moves.astype(np.int64)) if best_moves is not None else None
+            torch.from_numpy(best_moves.astype(np.int64))
+            if best_moves is not None
+            else None
         )
 
     def __len__(self):
@@ -544,7 +555,9 @@ def export_binary_weights(model: MiniChessNNUE, path: str) -> None:
     total_bytes = os.path.getsize(path)
     print(f"  Exported float weights to {path} ({total_bytes} bytes)")
     if model.use_policy:
-        print("  Note: Policy head weights NOT exported to binary (C++ support pending)")
+        print(
+            "  Note: Policy head weights NOT exported to binary (C++ support pending)"
+        )
 
 
 def export_quantized_weights(model: MiniChessNNUE, path: str) -> None:
@@ -617,7 +630,9 @@ def export_quantized_weights(model: MiniChessNNUE, path: str) -> None:
         f"(QB={QB}, clipped={int((l1_w_float.abs() > 127/QB).sum())})"
     )
     if model.use_policy:
-        print("  Note: Policy head weights NOT exported to binary (C++ support pending)")
+        print(
+            "  Note: Policy head weights NOT exported to binary (C++ support pending)"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -680,7 +695,11 @@ def train(args: argparse.Namespace) -> None:
             bm_train,
         )
         val_ds = PSDenseDataset(
-            wf[val_idx], bf[val_idx], stm[val_idx], scores[val_idx], results[val_idx],
+            wf[val_idx],
+            bf[val_idx],
+            stm[val_idx],
+            scores[val_idx],
+            results[val_idx],
             bm_val,
         )
     elif feature_type == "halfkp":
@@ -698,7 +717,11 @@ def train(args: argparse.Namespace) -> None:
             bm_train,
         )
         val_ds = HalfKPSparseDataset(
-            wi[val_idx], bi[val_idx], stm[val_idx], scores[val_idx], results[val_idx],
+            wi[val_idx],
+            bi[val_idx],
+            stm[val_idx],
+            scores[val_idx],
+            results[val_idx],
             bm_val,
         )
     else:
@@ -766,8 +789,11 @@ def train(args: argparse.Namespace) -> None:
                     bm = None
 
                 wf, bf, s, sc, res = (
-                    wf.to(device), bf.to(device), s.to(device),
-                    sc.to(device), res.to(device),
+                    wf.to(device),
+                    bf.to(device),
+                    s.to(device),
+                    sc.to(device),
+                    res.to(device),
                 )
                 if bm is not None:
                     bm = bm.to(device)
@@ -775,8 +801,13 @@ def train(args: argparse.Namespace) -> None:
                 if model.use_policy:
                     value_pred, policy_logits = model(wf, bf, s)
                     total_loss += dual_loss(
-                        value_pred, policy_logits, sc, res, bm,
-                        args.wdl_weight, args.policy_weight,
+                        value_pred,
+                        policy_logits,
+                        sc,
+                        res,
+                        bm,
+                        args.wdl_weight,
+                        args.policy_weight,
                     ).item()
                 else:
                     pred = model(wf, bf, s)
@@ -812,8 +843,11 @@ def train(args: argparse.Namespace) -> None:
                 bm = None
 
             wf, bf, s, sc, res = (
-                wf.to(device), bf.to(device), s.to(device),
-                sc.to(device), res.to(device),
+                wf.to(device),
+                bf.to(device),
+                s.to(device),
+                sc.to(device),
+                res.to(device),
             )
             if bm is not None:
                 bm = bm.to(device)
@@ -821,8 +855,13 @@ def train(args: argparse.Namespace) -> None:
             if model.use_policy:
                 value_pred, policy_logits = model(wf, bf, s)
                 loss = dual_loss(
-                    value_pred, policy_logits, sc, res, bm,
-                    args.wdl_weight, args.policy_weight,
+                    value_pred,
+                    policy_logits,
+                    sc,
+                    res,
+                    bm,
+                    args.wdl_weight,
+                    args.policy_weight,
                 )
             else:
                 pred = model(wf, bf, s)

@@ -198,7 +198,12 @@ class MiniChessState:
                             dr, dc = move_list[k]
                             pr, pc = dr + i, dc + j
 
-                            if pr >= cfg.BOARD_H or pr < 0 or pc >= cfg.BOARD_W or pc < 0:
+                            if (
+                                pr >= cfg.BOARD_H
+                                or pr < 0
+                                or pc >= cfg.BOARD_W
+                                or pc < 0
+                            ):
                                 break
                             if self_board[pr][pc]:
                                 break
@@ -348,7 +353,8 @@ class MiniChessState:
         for pl in range(2):
             for i in range(cfg.BOARD_H):
                 lines.append(
-                    " ".join(str(self.board[pl][i][j]) for j in range(cfg.BOARD_W)) + " "
+                    " ".join(str(self.board[pl][i][j]) for j in range(cfg.BOARD_W))
+                    + " "
                 )
             lines.append("")
         return "\n".join(lines) + "\n"
@@ -405,4 +411,7 @@ def format_move(move):
     Uses *COL_LABELS* and *ROW_LABELS* from config.
     """
     (fr, fc), (tr, tc) = move
-    return f"{cfg.COL_LABELS[fc]}{cfg.ROW_LABELS[fr]}->" f"{cfg.COL_LABELS[tc]}{cfg.ROW_LABELS[tr]}"
+    return (
+        f"{cfg.COL_LABELS[fc]}{cfg.ROW_LABELS[fr]}->"
+        f"{cfg.COL_LABELS[tc]}{cfg.ROW_LABELS[tr]}"
+    )

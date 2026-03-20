@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     from gui.ubgi_client import UBGIEngine as _UBGIEngineStatic
+
     _parse_info = _UBGIEngineStatic.parse_info
 except ImportError:
     _parse_info = lambda line: {}  # fallback: no info parsing
@@ -37,15 +38,19 @@ def _init_game(game_name, board_size=None):
     """Initialize game-specific context. Called once from main()."""
     if game_name == "minichess":
         from cli.games.minichess import get_context
+
         _game_ctx.update(get_context())
     elif game_name == "gomoku":
         from cli.games.gomoku import get_context
+
         _game_ctx.update(get_context(board_size or 9))
     elif game_name == "minishogi":
         from cli.games.minishogi import get_context
+
         _game_ctx.update(get_context())
     else:
         _game_ctx.update({"name": "generic"})
+
 
 ALGO_CHOICES = ["pvs", "alphabeta", "minimax", "random"]
 
@@ -169,7 +174,7 @@ def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
     # Setup phase -- blocking communicate for handshake (UBGI, backward compatible with UCI)
     setup_cmds = ["ubgi"]
     setup_cmds.append(f"setoption name Algorithm value {algo}")
-    for p in (params or []):
+    for p in params or []:
         if "=" in p:
             k, v = p.split("=", 1)
             setup_cmds.append(f"setoption name {k} value {v}")
@@ -407,8 +412,12 @@ def run_game(
 
             if bestmove_uci is None:
                 if verbose:
-                    print(f"  >> {side_name} engine failed to return a move! {side_name} loses.")
-                    print(f"     algo={algo_name}, moves={len(uci_moves)}, last_info={info}")
+                    print(
+                        f"  >> {side_name} engine failed to return a move! {side_name} loses."
+                    )
+                    print(
+                        f"     algo={algo_name}, moves={len(uci_moves)}, last_info={info}"
+                    )
                 return "black" if is_white else "white"
 
             # Move validation (for games with state)
@@ -475,7 +484,15 @@ def run_game(
 
 
 def run_tournament(
-    engine1_path, engine2_path, time_limit, algo1, algo2, num_games, verbose, depth=0, params=None
+    engine1_path,
+    engine2_path,
+    time_limit,
+    algo1,
+    algo2,
+    num_games,
+    verbose,
+    depth=0,
+    params=None,
 ):
     """Run a tournament of N games, alternating colors."""
     engine1_wins = 0
@@ -583,9 +600,10 @@ def main():
     )
 
     parser.add_argument(
-        "--game", default="minichess",
+        "--game",
+        default="minichess",
         help="Game type for board display and move input (default: minichess). "
-             "Built-in: minichess, minishogi, gomoku. Use 'generic' for any other UBGI engine.",
+        "Built-in: minichess, minishogi, gomoku. Use 'generic' for any other UBGI engine.",
     )
     parser.add_argument(
         "--white", required=True, help='Path to UBGI/UCI engine for White, or "human".'
@@ -624,11 +642,15 @@ def main():
         "--depth", type=int, default=0, help="Fixed search depth (0 = use time limit)."
     )
     parser.add_argument(
-        "--param", action="append", default=[],
+        "--param",
+        action="append",
+        default=[],
         help="Set engine param: --param UseNNUE=false. Can repeat.",
     )
     parser.add_argument(
-        "--board-size", type=int, default=9,
+        "--board-size",
+        type=int,
+        default=9,
         help="Board size for gomoku (default: 9).",
     )
 

@@ -196,13 +196,17 @@ def main():
             rec = records[idx]
             move_str = decode_best_move(rec.get("best_move"))
             if move_str:
-                print(f"  --- Record {idx} (score: {rec['score']}, move: {move_str}) ---")
+                print(
+                    f"  --- Record {idx} (score: {rec['score']}, move: {move_str}) ---"
+                )
             else:
                 print(f"  --- Record {idx} (score: {rec['score']}) ---")
             extra_parts = []
             if "result" in rec:
                 result_map = {1: "win", 0: "draw", -1: "loss"}
-                extra_parts.append(f"result={result_map.get(rec['result'], rec['result'])}")
+                extra_parts.append(
+                    f"result={result_map.get(rec['result'], rec['result'])}"
+                )
             if "ply" in rec:
                 extra_parts.append(f"ply={rec['ply']}")
             if extra_parts:

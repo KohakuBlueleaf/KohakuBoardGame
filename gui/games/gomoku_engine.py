@@ -63,7 +63,11 @@ class GomokuState:
             count = 1
             for sign in (1, -1):
                 r, c = row + sign * dr, col + sign * dc
-                while 0 <= r < BOARD_SIZE and 0 <= c < BOARD_SIZE and self.board[r][c] == stone:
+                while (
+                    0 <= r < BOARD_SIZE
+                    and 0 <= c < BOARD_SIZE
+                    and self.board[r][c] == stone
+                ):
                     count += 1
                     r += sign * dr
                     c += sign * dc

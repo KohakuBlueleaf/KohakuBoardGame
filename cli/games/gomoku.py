@@ -57,11 +57,13 @@ def get_human_move(state, game_ctx):
             continue
 
         if len(raw) >= 2 and raw[0].isalpha():
-            col = ord(raw[0]) - ord('A')
+            col = ord(raw[0]) - ord("A")
             try:
                 row_num = int(raw[1:])
             except ValueError:
-                print("  Invalid move format. Use column letter + row number (e.g. E5).")
+                print(
+                    "  Invalid move format. Use column letter + row number (e.g. E5)."
+                )
                 continue
 
             row = size - row_num
@@ -93,7 +95,7 @@ def uci_to_move(uci_str, size):
     """Convert gomoku UCI string (e.g. 'e5') to ((r,c),(r,c)) tuple."""
     if uci_str is None or len(uci_str) < 2:
         return None
-    col = ord(uci_str[0].lower()) - ord('a')
+    col = ord(uci_str[0].lower()) - ord("a")
     row = size - int(uci_str[1:])
     return ((row, col), (row, col))
 
@@ -101,7 +103,7 @@ def uci_to_move(uci_str, size):
 def move_to_uci(move, size):
     """Convert ((r,c),(r,c)) tuple to gomoku UCI string (e.g. 'e5')."""
     _, (r, c) = move
-    return chr(ord('a') + c) + str(size - r)
+    return chr(ord("a") + c) + str(size - r)
 
 
 def apply_move(state, uci_str, game_ctx):
@@ -112,7 +114,7 @@ def apply_move(state, uci_str, game_ctx):
     size = state["size"]
     board = [row[:] for row in state["board"]]
 
-    col = ord(uci_str[0].lower()) - ord('a')
+    col = ord(uci_str[0].lower()) - ord("a")
     try:
         row_num = int(uci_str[1:])
     except ValueError:

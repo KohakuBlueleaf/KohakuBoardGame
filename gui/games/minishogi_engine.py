@@ -24,18 +24,44 @@ PLAYER_LABELS = {0: "Sente", 1: "Gote"}
 PLAYER_COLORS = {0: (200, 160, 80), 1: (80, 60, 40)}  # wood-like
 
 PIECE_NAMES = {
-    PAWN: "P", SILVER: "S", GOLD: "G", BISHOP: "B", ROOK: "R", KING: "K",
-    P_PAWN: "+P", P_SILVER: "+S", P_BISHOP: "+B", P_ROOK: "+R",
+    PAWN: "P",
+    SILVER: "S",
+    GOLD: "G",
+    BISHOP: "B",
+    ROOK: "R",
+    KING: "K",
+    P_PAWN: "+P",
+    P_SILVER: "+S",
+    P_BISHOP: "+B",
+    P_ROOK: "+R",
 }
 
 # Kanji/symbol for rendering
 PIECE_SYMBOLS = {
-    0: {PAWN: "\u6b69", SILVER: "\u9280", GOLD: "\u91d1", BISHOP: "\u89d2",
-        ROOK: "\u98db", KING: "\u738b",
-        P_PAWN: "\u3068", P_SILVER: "\u5168", P_BISHOP: "\u99ac", P_ROOK: "\u9f8d"},
-    1: {PAWN: "\u6b69", SILVER: "\u9280", GOLD: "\u91d1", BISHOP: "\u89d2",
-        ROOK: "\u98db", KING: "\u7389",
-        P_PAWN: "\u3068", P_SILVER: "\u5168", P_BISHOP: "\u99ac", P_ROOK: "\u9f8d"},
+    0: {
+        PAWN: "\u6b69",
+        SILVER: "\u9280",
+        GOLD: "\u91d1",
+        BISHOP: "\u89d2",
+        ROOK: "\u98db",
+        KING: "\u738b",
+        P_PAWN: "\u3068",
+        P_SILVER: "\u5168",
+        P_BISHOP: "\u99ac",
+        P_ROOK: "\u9f8d",
+    },
+    1: {
+        PAWN: "\u6b69",
+        SILVER: "\u9280",
+        GOLD: "\u91d1",
+        BISHOP: "\u89d2",
+        ROOK: "\u98db",
+        KING: "\u7389",
+        P_PAWN: "\u3068",
+        P_SILVER: "\u5168",
+        P_BISHOP: "\u99ac",
+        P_ROOK: "\u9f8d",
+    },
 }
 
 # Drop piece name abbreviations (for UCI-style notation)
@@ -60,8 +86,17 @@ _DEMOTE_MAP = {
 
 # Material values for MAX_STEP game-over
 _MATERIAL_TABLE = {
-    EMPTY: 0, PAWN: 1, SILVER: 5, GOLD: 5, BISHOP: 8, ROOK: 10, KING: 100,
-    P_PAWN: 5, P_SILVER: 5, P_BISHOP: 12, P_ROOK: 14,
+    EMPTY: 0,
+    PAWN: 1,
+    SILVER: 5,
+    GOLD: 5,
+    BISHOP: 8,
+    ROOK: 10,
+    KING: 100,
+    P_PAWN: 5,
+    P_SILVER: 5,
+    P_BISHOP: 12,
+    P_ROOK: 14,
 }
 
 MAX_STEP = 200
@@ -91,6 +126,7 @@ _BISHOP_DIRS = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
 # ---------------------------------------------------------------------------
 # Promotion zone helpers
 # ---------------------------------------------------------------------------
+
 
 def _in_promotion_zone(row, player):
     """Return True if (row) is in the promotion zone for player."""
@@ -123,6 +159,7 @@ def _must_promote(piece_type, to_row, player):
 # ---------------------------------------------------------------------------
 # Initial board layout
 # ---------------------------------------------------------------------------
+
 
 def _make_initial_board():
     """Return the starting position as board[2][BOARD_SIZE][BOARD_SIZE]."""
@@ -170,6 +207,7 @@ def _deep_copy_hand(hand):
 # Step-move helpers for each piece type
 # ---------------------------------------------------------------------------
 
+
 def _step_moves(piece_type, player):
     """Return list of (dr, dc) step offsets for a stepping piece."""
     if piece_type == GOLD or piece_type == P_PAWN or piece_type == P_SILVER:
@@ -190,6 +228,7 @@ def _step_moves(piece_type, player):
 # ---------------------------------------------------------------------------
 # MiniShogiState
 # ---------------------------------------------------------------------------
+
 
 class MiniShogiState:
     """Game state for MiniShogi (5x5)."""
@@ -530,6 +569,7 @@ class MiniShogiState:
 # Move formatting
 # ---------------------------------------------------------------------------
 
+
 def format_move(move):
     """Format move as a display string.
 
@@ -547,7 +587,9 @@ def format_move(move):
 
     promoting = tr >= BOARD_SIZE
     actual_tr = tr - BOARD_SIZE if promoting else tr
-    result = f"{col_labels[fc]}{row_labels[fr]}->{col_labels[tc]}{row_labels[actual_tr]}"
+    result = (
+        f"{col_labels[fc]}{row_labels[fr]}->{col_labels[tc]}{row_labels[actual_tr]}"
+    )
     if promoting:
         result += "+"
     return result

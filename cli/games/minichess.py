@@ -6,7 +6,12 @@ try:
     from gui.games.minichess_engine import MiniChessState, format_move
     from gui.ubgi_client import UBGIEngine
     from gui.config import (
-        BOARD_H, BOARD_W, MAX_STEP, PIECE_UNICODE, COL_LABELS, ROW_LABELS,
+        BOARD_H,
+        BOARD_W,
+        MAX_STEP,
+        PIECE_UNICODE,
+        COL_LABELS,
+        ROW_LABELS,
     )
 except ImportError:
     raise ImportError(
@@ -42,7 +47,9 @@ def get_human_move(state, game_ctx):
     player_name = "White" if state.player == 0 else "Black"
 
     print(f"  {player_name}'s legal moves:")
-    entries = [f"{i + 1:>3}. {game_ctx['format_move'](mv)}" for i, mv in enumerate(legal)]
+    entries = [
+        f"{i + 1:>3}. {game_ctx['format_move'](mv)}" for i, mv in enumerate(legal)
+    ]
     cols = 4
     for i in range(0, len(entries), cols):
         row = entries[i : i + cols]
