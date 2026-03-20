@@ -216,6 +216,7 @@ State* State::next_state(const Move& move){
     next.board[this->player][to.first][to.second] = moved;
 
     State* next_state = new State(next, 1-this->player);
+    next_state->inherit_history(this);
 
     if(this->game_state != WIN){
         next_state->get_legal_actions();
@@ -620,6 +621,12 @@ void State::get_legal_actions_bitboard(){
  * Dispatcher
  *============================================================*/
 void State::get_legal_actions(){
+    /* 4-fold repetition → draw */
+    if(check_repetition()){
+        game_state = DRAW;
+        legal_actions.clear();
+        return;
+    }
     #ifdef USE_BITBOARD
     get_legal_actions_bitboard();
     #else

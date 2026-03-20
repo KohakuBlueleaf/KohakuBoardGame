@@ -539,6 +539,12 @@ void State::get_legal_actions(){
     legal_actions.clear();
     legal_actions.reserve(128);
 
+    /* 4-fold repetition → draw */
+    if(check_repetition()){
+        game_state = DRAW;
+        return;
+    }
+
     /* Check draw by step limit */
     if(step >= MAX_STEP){
         game_state = DRAW;
@@ -623,6 +629,7 @@ State* State::next_state(const Move& move){
 
     State* ns = new State(next, opp);
     ns->step = this->step + 1;
+    ns->inherit_history(this);
 
     if(this->game_state != WIN){
         ns->get_legal_actions();

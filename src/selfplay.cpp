@@ -28,7 +28,7 @@ int main(){
     while(true){
         /* === Player 0's turn === */
         step += 1;
-        if(game->game_state == WIN){
+        if(game->game_state == WIN || game->game_state == DRAW){
             break;
         }
 
@@ -46,7 +46,7 @@ int main(){
 
         /* === Player 1's turn === */
         step += 1;
-        if(game->game_state == WIN){
+        if(game->game_state == WIN || game->game_state == DRAW){
             break;
         }
 
@@ -61,6 +61,12 @@ int main(){
         delete prev;
         std::cout << game->encode_output();
         std::cout << std::endl;
+    }
+
+    if(game->game_state == DRAW){
+        std::cout << "\nDraw by repetition or step limit!\n";
+        delete game;
+        return 0;
     }
 
     /* === Final move (winning capture) === */
