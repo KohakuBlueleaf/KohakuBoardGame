@@ -28,7 +28,9 @@ int main(){
     while(true){
         /* === White's turn === */
         step += 1;
-        if(game->game_state == WIN){ break; }
+        if(game->game_state == WIN){
+            break;
+        }
 
         SearchContext ctx_w;
         auto action_white = AlphaBeta::search(game, 9, ctx_w).best_move;
@@ -44,7 +46,9 @@ int main(){
 
         /* === Black's turn === */
         step += 1;
-        if(game->game_state == WIN){ break; }
+        if(game->game_state == WIN){
+            break;
+        }
 
         SearchContext ctx_b;
         auto action_black = AlphaBeta::search(game, 9, ctx_b).best_move;

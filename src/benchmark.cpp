@@ -38,7 +38,9 @@ static double time_search(
     int depth,
     double prev_ms
 ){
-    if(prev_ms > 5000.0){ return -1.0; }
+    if(prev_ms > 5000.0){
+        return -1.0;
+    }
     State* state = new State(pos.board, pos.player);
     state->get_legal_actions();
     SearchContext ctx;
@@ -108,7 +110,9 @@ int main(int argc, char* argv[]){
     const auto& algos = get_algo_table();
     int max_depth = 6;
 
-    if(label[0]){ std::cout << "[ " << label << " ]\n"; }
+    if(label[0]){
+        std::cout << "[ " << label << " ]\n";
+    }
 
     for(int p = 0; p < 3; p++){
         std::cout << "\n=== " << positions[p].name << " ===\n";

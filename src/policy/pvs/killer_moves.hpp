@@ -14,8 +14,12 @@ static constexpr int MAX_KILLER_SLOTS = 4;
 inline Move killer_table[MAX_PLY][MAX_KILLER_SLOTS];
 
 inline void store_killer(int ply, const Move& move, int slots){
-    if(ply >= MAX_PLY){ return; }
-    if(killer_table[ply][0] == move){ return; }
+    if(ply >= MAX_PLY){
+        return;
+    }
+    if(killer_table[ply][0] == move){
+        return;
+    }
     int n = (slots > MAX_KILLER_SLOTS) ? MAX_KILLER_SLOTS : slots;
     for(int i = n - 1; i > 0; i--){
         killer_table[ply][i] = killer_table[ply][i - 1];
@@ -24,7 +28,9 @@ inline void store_killer(int ply, const Move& move, int slots){
 }
 
 inline bool is_killer(int ply, const Move& move, int slots){
-    if(ply >= MAX_PLY){ return false; }
+    if(ply >= MAX_PLY){
+        return false;
+    }
     int n = (slots > MAX_KILLER_SLOTS) ? MAX_KILLER_SLOTS : slots;
     for(int i = 0; i < n; i++){
         if(killer_table[ply][i] == move){

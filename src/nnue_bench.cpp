@@ -34,13 +34,14 @@ static inline int64_t now_ns(){ return hires_time(); }
 // ---------------------------------------------------------------------------
 // Board construction helper (same pattern as benchmark.cpp)
 // ---------------------------------------------------------------------------
-static Board make_board(const char w[6][5], const char b[6][5]) {
+static Board make_board(const char w[6][5], const char b[6][5]){
     Board bd;
-    for (int i = 0; i < BOARD_H; i++)
-        for (int j = 0; j < BOARD_W; j++) {
+    for(int i = 0; i < BOARD_H; i++){
+        for(int j = 0; j < BOARD_W; j++){
             bd.board[0][i][j] = w[i][j];
             bd.board[1][i][j] = b[i][j];
         }
+    }
     return bd;
 }
 
@@ -48,15 +49,15 @@ static Board make_board(const char w[6][5], const char b[6][5]) {
 // Scalar float evaluate -- mirrors nnue::Model::evaluate() exactly,
 // calling the functions from compute.hpp.
 // ---------------------------------------------------------------------------
-static int evaluate_scalar(const nnue::Model& m, const Board& board, int player) {
+static int evaluate_scalar(const nnue::Model& m, const Board& board, int player){
     int white_features[nnue::MAX_ACTIVE];
     int black_features[nnue::MAX_ACTIVE];
     int w_count, b_count;
 
-    if (m.version == 1) {
+    if(m.version == 1){
         w_count = m.extract_features_ps(board, 0, white_features);
         b_count = m.extract_features_ps(board, 1, black_features);
-    } else {
+    }else{
         w_count = m.extract_features_halfkp(board, 0, white_features);
         b_count = m.extract_features_halfkp(board, 1, black_features);
     }
@@ -69,10 +70,10 @@ static int evaluate_scalar(const nnue::Model& m, const Board& board, int player)
     nnue::screlu(b_accum, m.accum_size);
 
     float concat[512];
-    if (player == 0) {
+    if(player == 0){
         std::memcpy(concat, w_accum, m.accum_size * sizeof(float));
         std::memcpy(concat + m.accum_size, b_accum, m.accum_size * sizeof(float));
-    } else {
+    }else{
         std::memcpy(concat, b_accum, m.accum_size * sizeof(float));
         std::memcpy(concat + m.accum_size, w_accum, m.accum_size * sizeof(float));
     }
@@ -97,15 +98,15 @@ static int evaluate_scalar(const nnue::Model& m, const Board& board, int player)
 #if HAS_SIMD_HEADER && (defined(NNUE_NEON) || defined(NNUE_AVX2))
 #define HAS_SIMD_EVAL 1
 
-static int evaluate_simd(const nnue::Model& m, const Board& board, int player) {
+static int evaluate_simd(const nnue::Model& m, const Board& board, int player){
     int white_features[nnue::MAX_ACTIVE];
     int black_features[nnue::MAX_ACTIVE];
     int w_count, b_count;
 
-    if (m.version == 1) {
+    if(m.version == 1){
         w_count = m.extract_features_ps(board, 0, white_features);
         b_count = m.extract_features_ps(board, 1, black_features);
-    } else {
+    }else{
         w_count = m.extract_features_halfkp(board, 0, white_features);
         b_count = m.extract_features_halfkp(board, 1, black_features);
     }
@@ -118,10 +119,10 @@ static int evaluate_simd(const nnue::Model& m, const Board& board, int player) {
     nnue::screlu_simd(b_accum, m.accum_size);
 
     float concat[512];
-    if (player == 0) {
+    if(player == 0){
         std::memcpy(concat, w_accum, m.accum_size * sizeof(float));
         std::memcpy(concat + m.accum_size, b_accum, m.accum_size * sizeof(float));
-    } else {
+    }else{
         std::memcpy(concat, b_accum, m.accum_size * sizeof(float));
         std::memcpy(concat + m.accum_size, w_accum, m.accum_size * sizeof(float));
     }
@@ -175,7 +176,7 @@ struct QuantModel {
                    l2_weight(nullptr), l2_bias(nullptr),
                    out_weight(nullptr), out_bias(nullptr) {}
 
-    ~QuantModel() {
+    ~QuantModel(){
         delete[] ft_weight; delete[] ft_bias;
         delete[] l1_weight; delete[] l1_bias;
         delete[] l2_weight; delete[] l2_bias;
@@ -183,7 +184,7 @@ struct QuantModel {
     }
 
     // Quantize from float model using helpers from compute_quant.hpp.
-    void quantize_from(const nnue::Model& m) {
+    void quantize_from(const nnue::Model& m){
         feature_size = m.feature_size;
         accum_size   = m.accum_size;
         l1_size      = m.l1_size;
@@ -201,27 +202,37 @@ struct QuantModel {
         l1_weight = new int8_t[(size_t)l1_in * l1_size];
         l1_bias   = new int32_t[l1_size];
         // Transpose during quantization: src[o][i] -> dst[i][o]
-        for (int o = 0; o < l1_size; o++)
-            for (int i = 0; i < l1_in; i++) {
+        for(int o = 0; o < l1_size; o++){
+            for(int i = 0; i < l1_in; i++){
                 float v = m.l1_weight[o * l1_in + i];
                 int q = static_cast<int>(std::round(v * nnue::QB));
-                if (q < -128) q = -128;
-                if (q >  127) q =  127;
+                if(q < -128){
+                    q = -128;
+                }
+                if(q > 127){
+                    q = 127;
+                }
                 l1_weight[i * l1_size + o] = static_cast<int8_t>(q);
             }
+        }
         nnue::quantize_dense_bias(m.l1_bias, l1_bias, l1_size);
 
         // L2: float (l2_size, l1_size) -> int8 TRANSPOSED (l1_size, l2_size)
         l2_weight = new int8_t[(size_t)l1_size * l2_size];
         l2_bias   = new int32_t[l2_size];
-        for (int o = 0; o < l2_size; o++)
-            for (int i = 0; i < l1_size; i++) {
+        for(int o = 0; o < l2_size; o++){
+            for(int i = 0; i < l1_size; i++){
                 float v = m.l2_weight[o * l1_size + i];
                 int q = static_cast<int>(std::round(v * nnue::QB));
-                if (q < -128) q = -128;
-                if (q >  127) q =  127;
+                if(q < -128){
+                    q = -128;
+                }
+                if(q > 127){
+                    q = 127;
+                }
                 l2_weight[i * l2_size + o] = static_cast<int8_t>(q);
             }
+        }
         nnue::quantize_dense_bias(m.l2_bias, l2_bias, l2_size);
 
         // Output: float (1, l2_size) -> int8 TRANSPOSED (l2_size, 1)
@@ -233,15 +244,15 @@ struct QuantModel {
 };
 
 static int evaluate_quant(const nnue::Model& m, const QuantModel& qm,
-                           const Board& board, int player) {
+                           const Board& board, int player){
     int white_features[nnue::MAX_ACTIVE];
     int black_features[nnue::MAX_ACTIVE];
     int w_count, b_count;
 
-    if (m.version == 1) {
+    if(m.version == 1){
         w_count = m.extract_features_ps(board, 0, white_features);
         b_count = m.extract_features_ps(board, 1, black_features);
-    } else {
+    }else{
         w_count = m.extract_features_halfkp(board, 0, white_features);
         b_count = m.extract_features_halfkp(board, 1, black_features);
     }
@@ -261,10 +272,10 @@ static int evaluate_quant(const nnue::Model& m, const QuantModel& qm,
     // Concat uint8 accumulators (stm first)
     uint8_t concat_q[512];
     int asize = qm.accum_size;
-    if (player == 0) {
+    if(player == 0){
         std::memcpy(concat_q, w_act, asize);
         std::memcpy(concat_q + asize, b_act, asize);
-    } else {
+    }else{
         std::memcpy(concat_q, b_act, asize);
         std::memcpy(concat_q + asize, w_act, asize);
     }
@@ -309,7 +320,7 @@ struct TestPos {
     int player;
 };
 
-static void make_positions(TestPos* positions) {
+static void make_positions(TestPos* positions){
     // 1. Starting position (default Board constructor)
     positions[0].name   = "starting";
     positions[0].board   = Board();
@@ -379,10 +390,10 @@ static void make_positions(TestPos* positions) {
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
-int main() {
+int main(){
     // Load model
     nnue::Model model;
-    if (!model.load(NNUE_FILE)) {
+    if(!model.load(NNUE_FILE)){
         std::fprintf(stderr, "Failed to load NNUE model from %s\n", NNUE_FILE);
         return 1;
     }
@@ -414,7 +425,7 @@ int main() {
     int simd_count  = 0;
     int quant_count = 0;
 
-    for (int p = 0; p < NUM_POS; p++) {
+    for(int p = 0; p < NUM_POS; p++){
         const TestPos& pos = positions[p];
         std::printf("Position: %s (player=%d)\n", pos.name, pos.player);
 
@@ -422,12 +433,14 @@ int main() {
         int score_scalar = 0;
         {
             // Warm up
-            for (int i = 0; i < 1000; i++)
+            for(int i = 0; i < 1000; i++){
                 score_scalar = evaluate_scalar(model, pos.board, pos.player);
+            }
 
             int64_t t0 = now_ns();
-            for (int i = 0; i < N_ITERS; i++)
+            for(int i = 0; i < N_ITERS; i++){
                 score_scalar = evaluate_scalar(model, pos.board, pos.player);
+            }
             int64_t t1 = now_ns();
 
             double ns_per = (double)(t1 - t0) / N_ITERS;
@@ -439,12 +452,14 @@ int main() {
 #if HAS_SIMD_EVAL
         int score_simd = 0;
         {
-            for (int i = 0; i < 1000; i++)
+            for(int i = 0; i < 1000; i++){
                 score_simd = evaluate_simd(model, pos.board, pos.player);
+            }
 
             int64_t t0 = now_ns();
-            for (int i = 0; i < N_ITERS; i++)
+            for(int i = 0; i < N_ITERS; i++){
                 score_simd = evaluate_simd(model, pos.board, pos.player);
+            }
             int64_t t1 = now_ns();
 
             double ns_per = (double)(t1 - t0) / N_ITERS;
@@ -453,10 +468,10 @@ int main() {
             std::printf("  SIMD float:    %7.1f ns/eval, score=%d\n", ns_per, score_simd);
 
             // Correctness: SIMD must match scalar exactly
-            if (score_simd != score_scalar) {
+            if(score_simd != score_scalar){
                 std::printf("  *** MISMATCH: scalar=%d, simd=%d ***\n",
                             score_scalar, score_simd);
-            } else {
+            }else{
                 std::printf("  [OK] SIMD matches scalar exactly.\n");
             }
         }
@@ -468,12 +483,14 @@ int main() {
 #if HAS_QUANT_EVAL
         int score_quant = 0;
         {
-            for (int i = 0; i < 1000; i++)
+            for(int i = 0; i < 1000; i++){
                 score_quant = evaluate_quant(model, qmodel, pos.board, pos.player);
+            }
 
             int64_t t0 = now_ns();
-            for (int i = 0; i < N_ITERS; i++)
+            for(int i = 0; i < N_ITERS; i++){
                 score_quant = evaluate_quant(model, qmodel, pos.board, pos.player);
+            }
             int64_t t1 = now_ns();
 
             double ns_per = (double)(t1 - t0) / N_ITERS;
@@ -483,10 +500,10 @@ int main() {
 
             // Correctness: quantized should be close (within +/- 5 centipawns)
             int diff = std::abs(score_quant - score_scalar);
-            if (diff > 5) {
+            if(diff > 5){
                 std::printf("  *** WARNING: quantized differs by %d cp (scalar=%d, quant=%d) ***\n",
                             diff, score_scalar, score_quant);
-            } else {
+            }else{
                 std::printf("  [OK] Quantized within +/-%d cp of scalar.\n", diff);
             }
         }
@@ -502,19 +519,19 @@ int main() {
     double avg_scalar = total_scalar_ns / NUM_POS;
     std::printf("  Scalar float:  %7.1f ns/eval (baseline)\n", avg_scalar);
 
-    if (simd_count > 0) {
+    if(simd_count > 0){
         double avg_simd = total_simd_ns / simd_count;
         std::printf("  SIMD float:    %7.1f ns/eval, speedup=%.2fx\n",
                     avg_simd, avg_scalar / avg_simd);
-    } else {
+    }else{
         std::printf("  SIMD float:    (not available)\n");
     }
 
-    if (quant_count > 0) {
+    if(quant_count > 0){
         double avg_quant = total_quant_ns / quant_count;
         std::printf("  Quantized:     %7.1f ns/eval, speedup=%.2fx\n",
                     avg_quant, avg_scalar / avg_quant);
-    } else {
+    }else{
         std::printf("  Quantized:     (not available)\n");
     }
 
@@ -526,7 +543,7 @@ int main() {
 
 #include <cstdio>
 
-int main() {
+int main(){
     std::printf("NNUE is disabled (USE_NNUE not defined). Nothing to benchmark.\n");
     return 0;
 }

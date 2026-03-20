@@ -15,9 +15,13 @@ public:
     int step = 0;
     int score = 0;
 
-    State(){};
-    State(int player){ this->player = player; };
-    State(Board board, int player): board(board){ this->player = player; };
+    State(){}
+    State(int player){
+        this->player = player;
+    }
+    State(Board board, int player): board(board){
+        this->player = player;
+    }
 
     State* next_state(const Move& move) override;
     void get_legal_actions() override;
@@ -25,10 +29,14 @@ public:
     std::string encode_output() const override;
     uint64_t hash() const override;
     int piece_at(int /*player*/, int /*row*/, int /*col*/) const override { return 0; }
-    std::string cell_display(int row, int col) const override {
+    std::string cell_display(int row, int col) const override{
         char v = board.board[row][col];
-        if(v == 1) return " X ";
-        if(v == 2) return " O ";
+        if(v == 1){
+            return " X ";
+        }
+        if(v == 2){
+            return " O ";
+        }
         return " . ";
     }
 

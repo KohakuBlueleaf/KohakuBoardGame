@@ -18,7 +18,7 @@ inline int quiescence_ctx(
     SearchContext& ctx,
     const PVSParams& p,
     int ply
-) {
+){
     ctx.nodes++;
     if(ply > ctx.seldepth){
         ctx.seldepth = ply;

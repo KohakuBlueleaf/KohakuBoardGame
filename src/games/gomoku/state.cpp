@@ -25,8 +25,10 @@ static void init_gomoku_zobrist(){
     gomoku_zobrist_ready = true;
 }
 
-uint64_t State::hash() const {
-    if(!gomoku_zobrist_ready){ init_gomoku_zobrist(); }
+uint64_t State::hash() const{
+    if(!gomoku_zobrist_ready){
+        init_gomoku_zobrist();
+    }
     uint64_t h = 0;
     for(int r = 0; r < BOARD_H; r++){
         for(int c = 0; c < BOARD_W; c++){
@@ -35,7 +37,9 @@ uint64_t State::hash() const {
             }
         }
     }
-    if(player){ h ^= gomoku_zobrist_side; }
+    if(player){
+        h ^= gomoku_zobrist_side;
+    }
     return h;
 }
 
@@ -44,7 +48,7 @@ uint64_t State::hash() const {
  * Count consecutive stones in one direction from (row, col).
  * Starts at (row+dr, col+dc) and walks while stones match.
  *============================================================*/
-int State::count_dir(int row, int col, int dr, int dc) const {
+int State::count_dir(int row, int col, int dr, int dc) const{
     int who = board.board[row][col];
     int count = 0;
     int r = row + dr, c = col + dc;
@@ -62,11 +66,13 @@ int State::count_dir(int row, int col, int dr, int dc) const {
  * Check if the stone at (row, col) creates a winning line.
  * Examines 4 axes (horizontal, vertical, two diagonals).
  *============================================================*/
-bool State::check_win_at(int row, int col) const {
+bool State::check_win_at(int row, int col) const{
     static const int dirs[4][2] = {{0, 1}, {1, 0}, {1, 1}, {1, -1}};
     for(auto& d : dirs){
-        int total = 1 + count_dir(row, col, d[0], d[1])
-                      + count_dir(row, col, -d[0], -d[1]);
+        int total = (
+            1 + count_dir(row, col, d[0], d[1])
+            + count_dir(row, col, -d[0], -d[1])
+        );
         if(total >= WIN_LENGTH){
             return true;
         }
@@ -111,7 +117,9 @@ void State::get_legal_actions(){
             if(board.board[r][c] != 0){
                 for(int dr = -2; dr <= 2; dr++){
                     for(int dc = -2; dc <= 2; dc++){
-                        if(abs(dr) + abs(dc) > 2) continue;
+                        if(abs(dr) + abs(dc) > 2){
+                            continue;
+                        }
                         int nr = r + dr;
                         int nc = c + dc;
                         if(nr >= 0 && nr < BOARD_H && nc >= 0 && nc < BOARD_W){
@@ -177,7 +185,9 @@ static ThreatCounts count_threats(const Board& board, int who){
     static const int dirs[4][2] = {{0, 1}, {1, 0}, {1, 1}, {1, -1}};
     for(int r = 0; r < BOARD_H; r++){
         for(int c = 0; c < BOARD_W; c++){
-            if(board.board[r][c] != who){ continue; }
+            if(board.board[r][c] != who){
+                continue;
+            }
             for(auto& d : dirs){
                 /* skip if not the start of the line */
                 int pr = r - d[0], pc = c - d[1];
@@ -199,23 +209,35 @@ static ThreatCounts count_threats(const Board& board, int who){
                 /* count open ends */
                 int open_ends = 0;
                 if(nr >= 0 && nr < BOARD_H && nc >= 0 && nc < BOARD_W
-                   && board.board[nr][nc] == 0){ open_ends++; }
+                   && board.board[nr][nc] == 0){
+                    open_ends++;
+                }
                 if(pr >= 0 && pr < BOARD_H && pc >= 0 && pc < BOARD_W
-                   && board.board[pr][pc] == 0){ open_ends++; }
+                   && board.board[pr][pc] == 0){
+                    open_ends++;
+                }
 
                 /* classify */
-                if(len >= WIN_LENGTH)    { t.five++;  }
-                else if(len == 4){
-                    if(open_ends == 2)   { t.open4++; }
-                    else if(open_ends==1){ t.half4++; }
-                }
-                else if(len == 3){
-                    if(open_ends == 2)   { t.open3++; }
-                    else if(open_ends==1){ t.half3++; }
-                }
-                else if(len == 2){
-                    if(open_ends == 2)   { t.open2++; }
-                    else if(open_ends==1){ t.half2++; }
+                if(len >= WIN_LENGTH){
+                    t.five++;
+                }else if(len == 4){
+                    if(open_ends == 2){
+                        t.open4++;
+                    }else if(open_ends == 1){
+                        t.half4++;
+                    }
+                }else if(len == 3){
+                    if(open_ends == 2){
+                        t.open3++;
+                    }else if(open_ends == 1){
+                        t.half3++;
+                    }
+                }else if(len == 2){
+                    if(open_ends == 2){
+                        t.open2++;
+                    }else if(open_ends == 1){
+                        t.half2++;
+                    }
                 }
             }
         }
@@ -263,18 +285,38 @@ int State::evaluate(bool /*use_nnue*/, bool /*use_kp*/, bool /*use_mobility*/){
     ThreatCounts opp = count_threats(board, opp_id);
 
     /* --- STM decisive wins --- */
-    if(my.five  > 0)                          { return  P_MAX - 1; }
-    if(my.open4 > 0)                          { return  P_MAX - 2; }
-    if(my.half4 >= 2)                         { return  P_MAX - 3; }
-    if(my.half4 >= 1 && my.open3 >= 1)        { return  P_MAX - 4; }
-    if(my.open3 >= 2)                         { return  P_MAX - 5; }
+    if(my.five > 0){
+        return P_MAX - 1;
+    }
+    if(my.open4 > 0){
+        return P_MAX - 2;
+    }
+    if(my.half4 >= 2){
+        return P_MAX - 3;
+    }
+    if(my.half4 >= 1 && my.open3 >= 1){
+        return P_MAX - 4;
+    }
+    if(my.open3 >= 2){
+        return P_MAX - 5;
+    }
 
     /* --- OPP decisive threats (STM can't stop) --- */
-    if(opp.five  > 0)                         { return -(P_MAX - 1); }
-    if(opp.open4 > 0)                         { return -(P_MAX - 10); }
-    if(opp.half4 >= 2)                        { return -(P_MAX - 10); }
-    if(opp.half4 >= 1 && opp.open3 >= 1)      { return -(P_MAX - 20); }
-    if(opp.open3 >= 2)                        { return -(P_MAX - 20); }
+    if(opp.five > 0){
+        return -(P_MAX - 1);
+    }
+    if(opp.open4 > 0){
+        return -(P_MAX - 10);
+    }
+    if(opp.half4 >= 2){
+        return -(P_MAX - 10);
+    }
+    if(opp.half4 >= 1 && opp.open3 >= 1){
+        return -(P_MAX - 20);
+    }
+    if(opp.open3 >= 2){
+        return -(P_MAX - 20);
+    }
 
     /* --- OPP has single half-4: STM must block (tempo penalty) --- */
     int score = threat_score(my) - threat_score(opp);
@@ -293,7 +335,7 @@ int State::evaluate(bool /*use_nnue*/, bool /*use_kp*/, bool /*use_mobility*/){
 /*============================================================
  * Render the board as a human-readable string.
  *============================================================*/
-std::string State::encode_output() const {
+std::string State::encode_output() const{
     std::stringstream ss;
     ss << "  ";
     for(int c = 0; c < BOARD_W; c++){
@@ -328,15 +370,21 @@ std::string State::encode_output() const {
 
 
 /* === Board serialization === */
-std::string State::encode_board() const {
+std::string State::encode_board() const{
     std::string s;
     for(int r = 0; r < BOARD_H; r++){
-        if(r > 0){ s += '/'; }
+        if(r > 0){
+            s += '/';
+        }
         for(int c = 0; c < BOARD_W; c++){
             char v = board.board[r][c];
-            if(v == 1){ s += 'X'; }
-            else if(v == 2){ s += 'O'; }
-            else{ s += '.'; }
+            if(v == 1){
+                s += 'X';
+            }else if(v == 2){
+                s += 'O';
+            }else{
+                s += '.';
+            }
         }
     }
     return s;
@@ -354,9 +402,16 @@ void State::decode_board(const std::string& s, int side_to_move){
             c = 0;
             continue;
         }
-        if(r >= BOARD_H || c >= BOARD_W){ break; }
-        if(ch == 'X'){ board.board[r][c] = 1; step++; }
-        else if(ch == 'O'){ board.board[r][c] = 2; step++; }
+        if(r >= BOARD_H || c >= BOARD_W){
+            break;
+        }
+        if(ch == 'X'){
+            board.board[r][c] = 1;
+            step++;
+        }else if(ch == 'O'){
+            board.board[r][c] = 2;
+            step++;
+        }
         c++;
     }
     get_legal_actions();

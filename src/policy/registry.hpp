@@ -40,7 +40,9 @@ inline const std::vector<AlgoEntry>& get_algo_table(){
 
 inline const AlgoEntry* find_algo(const std::string& name){
     for(auto& entry : get_algo_table()){
-        if(entry.name == name){ return &entry; }
+        if(entry.name == name){
+            return &entry;
+        }
     }
     return nullptr;
 }

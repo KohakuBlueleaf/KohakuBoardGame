@@ -27,13 +27,17 @@ struct ParamDef {
 /* === Helpers to read typed values from ParamMap === */
 inline bool param_bool(const ParamMap& m, const std::string& key, bool fallback = false){
     auto it = m.find(key);
-    if(it == m.end()){ return fallback; }
+    if(it == m.end()){
+        return fallback;
+    }
     return (it->second == "true" || it->second == "1");
 }
 
 inline int param_int(const ParamMap& m, const std::string& key, int fallback = 0){
     auto it = m.find(key);
-    if(it == m.end()){ return fallback; }
+    if(it == m.end()){
+        return fallback;
+    }
     return std::atoi(it->second.c_str());
 }
 

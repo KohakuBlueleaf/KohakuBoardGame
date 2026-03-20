@@ -28,7 +28,7 @@ struct TTEntry {
     TTFlag flag = TT_NONE;
     uint8_t from_r = 0, from_c = 0, to_r = 0, to_c = 0;
 
-    Move get_move() const {
+    Move get_move() const{
         return Move(Point(from_r, from_c), Point(to_r, to_c));
     }
     void set_move(const Move& m){

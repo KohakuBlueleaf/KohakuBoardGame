@@ -48,42 +48,58 @@ constexpr int     QAH_QB    = QA_HIDDEN * QB;  // 8128
 // Quantization helpers (called once at load time, scalar is fine)
 // =========================================================================
 
-inline void quantize_ft(const float* src, int16_t* dst, int count) {
-    for (int i = 0; i < count; ++i) {
+inline void quantize_ft(const float* src, int16_t* dst, int count){
+    for(int i = 0; i < count; ++i){
         int v = (int)(src[i] * QA + (src[i] >= 0 ? 0.5f : -0.5f));
-        if (v > 32767) v = 32767;
-        if (v < -32768) v = -32768;
+        if(v > 32767){
+            v = 32767;
+        }
+        if(v < -32768){
+            v = -32768;
+        }
         dst[i] = (int16_t)v;
     }
 }
 
-inline void quantize_dense_weight(const float* src, int8_t* dst, int count) {
-    for (int i = 0; i < count; ++i) {
+inline void quantize_dense_weight(const float* src, int8_t* dst, int count){
+    for(int i = 0; i < count; ++i){
         int v = (int)(src[i] * QB + (src[i] >= 0 ? 0.5f : -0.5f));
-        if (v > 127) v = 127;
-        if (v < -128) v = -128;
+        if(v > 127){
+            v = 127;
+        }
+        if(v < -128){
+            v = -128;
+        }
         dst[i] = (int8_t)v;
     }
 }
 
-inline void quantize_dense_bias(const float* src, int32_t* dst, int count) {
-    for (int i = 0; i < count; ++i)
+inline void quantize_dense_bias(const float* src, int32_t* dst, int count){
+    for(int i = 0; i < count; ++i){
         dst[i] = (int32_t)(src[i] * QAH_QB + (src[i] >= 0 ? 0.5f : -0.5f));
+    }
 }
 
 // Transpose (out_size, in_size) → (in_size, out_size) and quantize to int8
 inline void transpose_and_quantize(
-    const float* src, int8_t* dst,
-    int out_size, int in_size)
-{
-    for (int i = 0; i < in_size; ++i)
-        for (int o = 0; o < out_size; ++o) {
+    const float* src,
+    int8_t* dst,
+    int out_size,
+    int in_size
+){
+    for(int i = 0; i < in_size; ++i){
+        for(int o = 0; o < out_size; ++o){
             float v = src[o * in_size + i];
             int q = (int)(v * QB + (v >= 0 ? 0.5f : -0.5f));
-            if (q > 127) q = 127;
-            if (q < -128) q = -128;
+            if(q > 127){
+                q = 127;
+            }
+            if(q < -128){
+                q = -128;
+            }
             dst[i * out_size + o] = (int8_t)q;
         }
+    }
 }
 
 // =========================================================================
@@ -95,39 +111,42 @@ inline void accumulate_sparse_q(
     const int16_t* __restrict__ weight,
     const int16_t* __restrict__ bias,
     int16_t* __restrict__ output,
-    int accum_size)
-{
+    int accum_size
+){
     std::memcpy(output, bias, accum_size * sizeof(int16_t));
 
 #ifdef NNUE_NEON
-    for (int f = 0; f < num_features; ++f) {
+    for(int f = 0; f < num_features; ++f){
         const int16_t* row = weight + features[f] * accum_size;
         int j = 0;
-        for (; j + 8 <= accum_size; j += 8) {
+        for(; j + 8 <= accum_size; j += 8){
             int16x8_t o = vld1q_s16(output + j);
             int16x8_t w = vld1q_s16(row + j);
             vst1q_s16(output + j, vaddq_s16(o, w));
         }
-        for (; j < accum_size; ++j)
+        for(; j < accum_size; ++j){
             output[j] += row[j];
+        }
     }
 #elif defined(NNUE_AVX2)
-    for (int f = 0; f < num_features; ++f) {
+    for(int f = 0; f < num_features; ++f){
         const int16_t* row = weight + features[f] * accum_size;
         int j = 0;
-        for (; j + 16 <= accum_size; j += 16) {
+        for(; j + 16 <= accum_size; j += 16){
             __m256i o = _mm256_loadu_si256((__m256i*)(output + j));
             __m256i w = _mm256_loadu_si256((__m256i*)(row + j));
             _mm256_storeu_si256((__m256i*)(output + j), _mm256_add_epi16(o, w));
         }
-        for (; j < accum_size; ++j)
+        for(; j < accum_size; ++j){
             output[j] += row[j];
+        }
     }
 #else
-    for (int f = 0; f < num_features; ++f) {
+    for(int f = 0; f < num_features; ++f){
         const int16_t* row = weight + features[f] * accum_size;
-        for (int j = 0; j < accum_size; ++j)
+        for(int j = 0; j < accum_size; ++j){
             output[j] += row[j];
+        }
     }
 #endif
 }
@@ -139,14 +158,14 @@ inline void accumulate_sparse_q(
 inline void screlu_ft_q(
     const int16_t* __restrict__ input,
     uint8_t* __restrict__ output,
-    int size)
-{
+    int size
+){
 #ifdef NNUE_NEON
     const int16x8_t zero = vdupq_n_s16(0);
     const int16x8_t qa = vdupq_n_s16(QA);
     const uint16x8_t max_out = vdupq_n_u16(QA_HIDDEN);
     int i = 0;
-    for (; i + 8 <= size; i += 8) {
+    for(; i + 8 <= size; i += 8){
         int16x8_t x = vld1q_s16(input + i);
         x = vmaxq_s16(x, zero);
         x = vminq_s16(x, qa);
@@ -157,10 +176,14 @@ inline void screlu_ft_q(
         uint8x8_t narrow = vmovn_u16(shifted);
         vst1_u8(output + i, narrow);
     }
-    for (; i < size; ++i) {
+    for(; i < size; ++i){
         int v = input[i];
-        if(v < 0){ v = 0; }
-        if(v > QA){ v = QA; }
+        if(v < 0){
+            v = 0;
+        }
+        if(v > QA){
+            v = QA;
+        }
         int sq = (v * v) >> 9;
         output[i] = (uint8_t)(sq > QA_HIDDEN ? QA_HIDDEN : sq);
     }
@@ -169,7 +192,7 @@ inline void screlu_ft_q(
     const __m256i qa = _mm256_set1_epi16(QA);
     const __m256i max_out = _mm256_set1_epi16(QA_HIDDEN);
     int i = 0;
-    for (; i + 16 <= size; i += 16) {
+    for(; i + 16 <= size; i += 16){
         __m256i x = _mm256_loadu_si256((__m256i*)(input + i));
         x = _mm256_max_epi16(x, zero);
         x = _mm256_min_epi16(x, qa);
@@ -181,18 +204,26 @@ inline void screlu_ft_q(
         _mm_storeu_si128((__m128i*)(output + i),
                          _mm256_castsi256_si128(packed));
     }
-    for (; i < size; ++i) {
+    for(; i < size; ++i){
         int v = input[i];
-        if(v < 0){ v = 0; }
-        if(v > QA){ v = QA; }
+        if(v < 0){
+            v = 0;
+        }
+        if(v > QA){
+            v = QA;
+        }
         int sq = (v * v) >> 9;
         output[i] = (uint8_t)(sq > QA_HIDDEN ? QA_HIDDEN : sq);
     }
 #else
-    for (int i = 0; i < size; ++i) {
+    for(int i = 0; i < size; ++i){
         int v = input[i];
-        if(v < 0){ v = 0; }
-        if(v > QA){ v = QA; }
+        if(v < 0){
+            v = 0;
+        }
+        if(v > QA){
+            v = QA;
+        }
         int sq = (v * v) >> 9;
         output[i] = (uint8_t)(sq > QA_HIDDEN ? QA_HIDDEN : sq);
     }
@@ -209,17 +240,17 @@ inline void linear_q(
     const int32_t* __restrict__ bias,
     int32_t* __restrict__ output,
     int in_size,
-    int out_size)
-{
+    int out_size
+){
     std::memcpy(output, bias, out_size * sizeof(int32_t));
 
 #ifdef NNUE_NEON
-    for (int k = 0; k < in_size; ++k) {
+    for(int k = 0; k < in_size; ++k){
         int16_t val = (int16_t)input[k];
         const int8_t* wk = weight + k * out_size;
         int16x8_t vval = vdupq_n_s16(val);
         int j = 0;
-        for (; j + 8 <= out_size; j += 8) {
+        for(; j + 8 <= out_size; j += 8){
             int8x8_t w8 = vld1_s8(wk + j);
             int16x8_t w16 = vmovl_s8(w8);
             int16x8_t prod = vmulq_s16(vval, w16);
@@ -230,16 +261,17 @@ inline void linear_q(
             vst1q_s32(output + j, lo);
             vst1q_s32(output + j + 4, hi);
         }
-        for (; j < out_size; ++j)
+        for(; j < out_size; ++j){
             output[j] += val * (int16_t)wk[j];
+        }
     }
 #elif defined(NNUE_AVX2)
-    for (int k = 0; k < in_size; ++k) {
+    for(int k = 0; k < in_size; ++k){
         int16_t val = (int16_t)input[k];
         const int8_t* wk = weight + k * out_size;
         __m256i vval = _mm256_set1_epi16(val);
         int j = 0;
-        for (; j + 16 <= out_size; j += 16) {
+        for(; j + 16 <= out_size; j += 16){
             __m128i w8 = _mm_loadu_si128((__m128i*)(wk + j));
             __m256i w16 = _mm256_cvtepi8_epi16(w8);
             __m256i prod = _mm256_mullo_epi16(vval, w16);
@@ -252,15 +284,17 @@ inline void linear_q(
             _mm256_storeu_si256((__m256i*)(output + j), _mm256_add_epi32(o_lo, p32_lo));
             _mm256_storeu_si256((__m256i*)(output + j + 8), _mm256_add_epi32(o_hi, p32_hi));
         }
-        for (; j < out_size; ++j)
+        for(; j < out_size; ++j){
             output[j] += val * (int16_t)wk[j];
+        }
     }
 #else
-    for (int k = 0; k < in_size; ++k) {
+    for(int k = 0; k < in_size; ++k){
         int16_t val = (int16_t)input[k];
         const int8_t* wk = weight + k * out_size;
-        for (int j = 0; j < out_size; ++j)
+        for(int j = 0; j < out_size; ++j){
             output[j] += val * (int16_t)wk[j];
+        }
     }
 #endif
 }
@@ -273,14 +307,20 @@ inline void linear_q(
 inline void screlu_dense_q(
     const int32_t* __restrict__ input,
     uint8_t* __restrict__ output,
-    int size)
-{
-    for (int i = 0; i < size; ++i) {
+    int size
+){
+    for(int i = 0; i < size; ++i){
         int32_t v = input[i];
-        if (v < 0) v = 0;
-        if (v > QAH_QB) v = QAH_QB;
+        if(v < 0){
+            v = 0;
+        }
+        if(v > QAH_QB){
+            v = QAH_QB;
+        }
         int32_t sq = ((int64_t)v * v) >> 19;
-        if (sq > QA_HIDDEN) sq = QA_HIDDEN;
+        if(sq > QA_HIDDEN){
+            sq = QA_HIDDEN;
+        }
         output[i] = (uint8_t)sq;
     }
 }
@@ -288,7 +328,7 @@ inline void screlu_dense_q(
 // =========================================================================
 // Dequantize final output: int32 (scale QAH_QB=8128) → centipawns
 // =========================================================================
-inline int dequant_output(int32_t raw) {
+inline int dequant_output(int32_t raw){
     return (int)(raw / QAH_QB);
 }
 

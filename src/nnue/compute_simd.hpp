@@ -44,8 +44,8 @@ inline void accumulate_sparse_simd(
     const float* __restrict__ weight,
     const float* __restrict__ bias,
     float* __restrict__ output,
-    int accum_size)
-{
+    int accum_size
+){
     #if defined(NNUE_NEON)
     // -- NEON: 4 floats per vector register ----------------------------------
     std::memcpy(output, bias, accum_size * sizeof(float));
@@ -121,8 +121,8 @@ inline void linear_forward_simd(
     const float* __restrict__ bias,
     float* __restrict__ output,
     int in_size,
-    int out_size)
-{
+    int out_size
+){
     #if defined(NNUE_NEON)
     // -- NEON: vectorized dot product per output row -------------------------
     for(int o = 0; o < out_size; ++o){
@@ -263,8 +263,7 @@ inline void linear_forward_simd(
 //
 // x[i] = clamp(x[i], 0, 1) ^ 2
 // =========================================================================
-inline void screlu_simd(float* __restrict__ x, int size)
-{
+inline void screlu_simd(float* __restrict__ x, int size){
     #if defined(NNUE_NEON)
     // -- NEON ----------------------------------------------------------------
     const float32x4_t zero = vdupq_n_f32(0.0f);
@@ -328,8 +327,8 @@ inline void screlu_simd(float* __restrict__ x, int size)
 inline void screlu_copy_simd(
     const float* __restrict__ input,
     float* __restrict__ output,
-    int size)
-{
+    int size
+){
     #if defined(NNUE_NEON)
     // -- NEON ----------------------------------------------------------------
     const float32x4_t zero = vdupq_n_f32(0.0f);

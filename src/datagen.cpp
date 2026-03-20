@@ -63,9 +63,13 @@ static void print_progress(int games_done, int total_games, int total_positions,
 
     char bar[bar_width + 1];
     for(int i = 0; i < bar_width; i++){
-        if(i < filled){ bar[i] = '='; }
-        else if(i == filled){ bar[i] = '>'; }
-        else{ bar[i] = ' '; }
+        if(i < filled){
+            bar[i] = '=';
+        }else if(i == filled){
+            bar[i] = '>';
+        }else{
+            bar[i] = ' ';
+        }
     }
     bar[bar_width] = '\0';
 
@@ -83,7 +87,9 @@ static void print_progress(int games_done, int total_games, int total_positions,
 static unsigned int rng_state;
 
 static void rng_seed(unsigned int seed){
-    if(seed == 0){ seed = 1; }
+    if(seed == 0){
+        seed = 1;
+    }
     rng_state = seed;
 }
 
@@ -219,8 +225,12 @@ static void play_game(
             int score = eval_result.score;
             delete eval_copy;
 
-            if(score > 32767){ score = 32767; }
-            if(score < -32768){ score = -32768; }
+            if(score > 32767){
+                score = 32767;
+            }
+            if(score < -32768){
+                score = -32768;
+            }
 
             DataRecord rec;
             for(int p = 0; p < 2; p++){
@@ -251,7 +261,9 @@ static void play_game(
         game = next;
     }
 
-    if(winner == -1){ winner = 2; }  /* max steps reached -> draw */
+    if(winner == -1){
+        winner = 2;  /* max steps reached -> draw */
+    }
 
     /* Backfill game result for all positions in this game */
     for(size_t i = first_record; i < records.size(); i++){

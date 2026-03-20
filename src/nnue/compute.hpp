@@ -14,12 +14,12 @@ inline void linear_forward(
     const float* __restrict__ bias,
     float* __restrict__ output,
     int in_size,
-    int out_size)
-{
-    for (int o = 0; o < out_size; ++o) {
+    int out_size
+){
+    for(int o = 0; o < out_size; ++o){
         float sum = bias[o];
         const float* row = weight + o * in_size;
-        for (int i = 0; i < in_size; ++i) {
+        for(int i = 0; i < in_size; ++i){
             sum += row[i] * input[i];
         }
         output[o] = sum;
@@ -37,22 +37,21 @@ inline void accumulate_sparse(
     const float* __restrict__ weight,
     const float* __restrict__ bias,
     float* __restrict__ output,
-    int accum_size)
-{
+    int accum_size
+){
     std::memcpy(output, bias, accum_size * sizeof(float));
 
-    for (int f = 0; f < num_features; ++f) {
+    for(int f = 0; f < num_features; ++f){
         const float* row = weight + features[f] * accum_size;
-        for (int j = 0; j < accum_size; ++j) {
+        for(int j = 0; j < accum_size; ++j){
             output[j] += row[j];
         }
     }
 }
 
 // In-place Squared Clipped ReLU: x[i] = clamp(x[i], 0, 1)^2
-inline void screlu(float* __restrict__ x, int size)
-{
-    for (int i = 0; i < size; ++i) {
+inline void screlu(float* __restrict__ x, int size){
+    for(int i = 0; i < size; ++i){
         float v = x[i] < 0.0f ? 0.0f : (x[i] > 1.0f ? 1.0f : x[i]);
         x[i] = v * v;
     }
@@ -62,9 +61,9 @@ inline void screlu(float* __restrict__ x, int size)
 inline void screlu_copy(
     const float* __restrict__ input,
     float* __restrict__ output,
-    int size)
-{
-    for (int i = 0; i < size; ++i) {
+    int size
+){
+    for(int i = 0; i < size; ++i){
         float v = input[i] < 0.0f ? 0.0f : (input[i] > 1.0f ? 1.0f : input[i]);
         output[i] = v * v;
     }
