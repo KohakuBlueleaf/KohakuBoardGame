@@ -81,6 +81,7 @@ def _get_game_module(game_name):
                 PLAYER_COLORS,
                 DROP_PIECE_CHAR,
                 CHAR_TO_DROP_PIECE,
+                PROMOTE_MAP,
             )
             from gui.games.kohaku_shogi_renderer import KohakuShogiRenderer
         except ImportError:
@@ -91,10 +92,12 @@ def _get_game_module(game_name):
                 PLAYER_COLORS,
                 DROP_PIECE_CHAR,
                 CHAR_TO_DROP_PIECE,
+                PROMOTE_MAP,
             )
             from games.kohaku_shogi_renderer import KohakuShogiRenderer
         _cfg.DROP_PIECE_CHAR = DROP_PIECE_CHAR
         _cfg.CHAR_TO_DROP_PIECE = CHAR_TO_DROP_PIECE
+        _cfg.PROMOTE_MAP = PROMOTE_MAP
         return (
             KohakuShogiState,
             format_move,
@@ -867,6 +870,33 @@ class GameApp:
         keep_rect = pygame.Rect(right_x, top_y, box_w, box_h)
         pygame.draw.rect(self.board_renderer.surface, (200, 200, 190), keep_rect, border_radius=6)
         pygame.draw.rect(self.board_renderer.surface, (80, 50, 20), keep_rect, 2, border_radius=6)
+
+        # Draw piece previews inside boxes
+        gr = self.board_renderer.game_renderer
+        player = self.game_state.player
+        if gr is not None and hasattr(gr, "_piece_cache"):
+            fr, fc = dlg["promo_move"][0]
+            bh = _cfg.BOARD_H
+            base_piece = self.game_state.board[player][fr][fc] if fr < bh else fc
+
+            promote_map = getattr(_cfg, "PROMOTE_MAP", {})
+            promoted_piece = promote_map.get(base_piece)
+
+            cache = gr._piece_cache
+            if promoted_piece and (player, promoted_piece) in cache:
+                s = cache[(player, promoted_piece)]
+                self.board_renderer.surface.blit(
+                    s,
+                    (promo_rect.centerx - s.get_width() // 2,
+                     promo_rect.centery - s.get_height() // 2 - 8),
+                )
+            if (player, base_piece) in cache:
+                s = cache[(player, base_piece)]
+                self.board_renderer.surface.blit(
+                    s,
+                    (keep_rect.centerx - s.get_width() // 2,
+                     keep_rect.centery - s.get_height() // 2 - 8),
+                )
 
         # Labels
         try:
