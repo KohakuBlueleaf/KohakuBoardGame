@@ -228,3 +228,5 @@ REQUIREMENTS.md
 # Temp files
 gamelog.txt
 *.png
+temp/
+wandb/
