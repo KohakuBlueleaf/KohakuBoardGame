@@ -221,27 +221,27 @@ def _make_initial_board():
     """Return the starting position as board[2][BOARD_H][BOARD_W].
 
     Sente (player 0) -- bottom of board:
-      Row 6 (rank 1): K  G  S  L  R  B
-      Row 5 (rank 2): N  S  P  P  P  P
+      Row 6 (rank 1): K  N  B  L  S  R
+      Row 5 (rank 2): G  S  P  P  P  P
       Row 4 (rank 3): P  P  .  .  .  .
 
     Gote (player 1) -- top of board (180 degree rotated):
-      Row 0 (rank 7): B  R  L  S  G  K
-      Row 1 (rank 6): P  P  P  P  S  N
+      Row 0 (rank 7): R  S  L  B  N  K
+      Row 1 (rank 6): P  P  P  P  S  G
       Row 2 (rank 5): .  .  .  .  P  P
     """
     board = [[[EMPTY] * BOARD_W for _ in range(BOARD_H)] for _ in range(2)]
 
     # Sente (player 0) -- bottom rows
-    # Row 6: K G S L R B
+    # Row 6: K N B L S R
     board[0][6][0] = KING
-    board[0][6][1] = GOLD
-    board[0][6][2] = SILVER
+    board[0][6][1] = KNIGHT
+    board[0][6][2] = BISHOP
     board[0][6][3] = LANCE
-    board[0][6][4] = ROOK
-    board[0][6][5] = BISHOP
-    # Row 5: N S P P P P
-    board[0][5][0] = KNIGHT
+    board[0][6][4] = SILVER
+    board[0][6][5] = ROOK
+    # Row 5: G S P P P P
+    board[0][5][0] = GOLD
     board[0][5][1] = SILVER
     board[0][5][2] = PAWN
     board[0][5][3] = PAWN
@@ -252,20 +252,20 @@ def _make_initial_board():
     board[0][4][1] = PAWN
 
     # Gote (player 1) -- top rows (180 degree rotation)
-    # Row 0: B R L S G K
-    board[1][0][0] = BISHOP
-    board[1][0][1] = ROOK
+    # Row 0: R S L B N K
+    board[1][0][0] = ROOK
+    board[1][0][1] = SILVER
     board[1][0][2] = LANCE
-    board[1][0][3] = SILVER
-    board[1][0][4] = GOLD
+    board[1][0][3] = BISHOP
+    board[1][0][4] = KNIGHT
     board[1][0][5] = KING
-    # Row 1: P P P P S N
+    # Row 1: P P P P S G
     board[1][1][0] = PAWN
     board[1][1][1] = PAWN
     board[1][1][2] = PAWN
     board[1][1][3] = PAWN
     board[1][1][4] = SILVER
-    board[1][1][5] = KNIGHT
+    board[1][1][5] = GOLD
     # Row 2: . . . . P P
     board[1][2][4] = PAWN
     board[1][2][5] = PAWN

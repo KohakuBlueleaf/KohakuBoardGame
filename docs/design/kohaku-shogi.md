@@ -66,9 +66,9 @@ concentrated strategy.
 ```
      a   b   c   d   e   f
   +---+---+---+---+---+---+
-7 | b | r | l | s | g | k |  <- Gote (White, moves second)
+7 | r | s | l | b | n | k |  <- Gote (White, moves second)
   +---+---+---+---+---+---+
-6 | p | p | p | p | s | n |
+6 | p | p | p | p | s | g |
   +---+---+---+---+---+---+
 5 | . | . | . | . | p | p |
   +---+---+---+---+---+---+
@@ -76,9 +76,9 @@ concentrated strategy.
   +---+---+---+---+---+---+
 3 | P | P | . | . | . | . |
   +---+---+---+---+---+---+
-2 | N | S | P | P | P | P |
+2 | G | S | P | P | P | P |
   +---+---+---+---+---+---+
-1 | K | G | S | L | R | B |  <- Sente (Black, moves first)
+1 | K | N | B | L | S | R |  <- Sente (Black, moves first)
   +---+---+---+---+---+---+
      a   b   c   d   e   f
 ```

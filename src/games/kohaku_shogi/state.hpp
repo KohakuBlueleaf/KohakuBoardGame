@@ -24,13 +24,13 @@ public:
         {0, 0, 0, 0, 0, 0},          /* row 2 (rank 5) */
         {0, 0, 0, 0, 0, 0},          /* row 3 (rank 4) */
         {PAWN, PAWN, 0, 0, 0, 0},    /* row 4 (rank 3): P P . . . . */
-        {KNIGHT, SILVER, PAWN, PAWN, PAWN, PAWN},  /* row 5 (rank 2): N S P P P P */
-        {KING, GOLD, SILVER, LANCE, ROOK, BISHOP},  /* row 6 (rank 1): K G S L R B */
+        {GOLD, SILVER, PAWN, PAWN, PAWN, PAWN},     /* row 5 (rank 2): G S P P P P */
+        {KING, KNIGHT, BISHOP, LANCE, SILVER, ROOK}, /* row 6 (rank 1): K N B L S R */
     }, {
-        /* Player 1 (Gote) — pieces stored at visual position (same coords) */
-        {BISHOP, ROOK, LANCE, SILVER, GOLD, KING},  /* row 0 (rank 7): b r l s g k */
-        {PAWN, PAWN, PAWN, PAWN, SILVER, KNIGHT},   /* row 1 (rank 6): p p p p s n */
-        {0, 0, 0, 0, PAWN, PAWN},                   /* row 2 (rank 5): . . . . p p */
+        /* Player 1 (Gote) — 180° rotated */
+        {ROOK, SILVER, LANCE, BISHOP, KNIGHT, KING}, /* row 0 (rank 7): r s l b n k */
+        {PAWN, PAWN, PAWN, PAWN, SILVER, GOLD},      /* row 1 (rank 6): p p p p s g */
+        {0, 0, 0, 0, PAWN, PAWN},                    /* row 2 (rank 5): . . . . p p */
         {0, 0, 0, 0, 0, 0},          /* row 3 (rank 4) */
         {0, 0, 0, 0, 0, 0},          /* row 4 (rank 3) */
         {0, 0, 0, 0, 0, 0},          /* row 5 (rank 2) */
