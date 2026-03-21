@@ -666,7 +666,9 @@ class GameApp:
                 return
 
         action = self.side_panel.handle_click(x, y)
-        if action == "new_game":
+        if action == "reset":
+            self.reset()
+        elif action == "new_game":
             self.open_new_game_dialog()
         elif action == "settings":
             self.open_settings()
@@ -1150,9 +1152,10 @@ class GameApp:
     def draw(self):
         self.screen.fill(_cfg.COLOR_BG)
 
+        # Only show PV arrows in analyze mode, NOT during gaming
         pv = (
             self.search_info.get("pv")
-            if self.analyze["enabled"] or self.ai_thinking
+            if self.analyze["enabled"] and not self._is_gaming()
             else None
         )
         self.board_renderer.draw(
@@ -1194,8 +1197,8 @@ class GameApp:
     # New game / settings
     # ------------------------------------------------------------------
 
-    def new_game(self):
-        # Kill all engines first (stops any in-flight search instantly)
+    def reset(self):
+        """Reset to initial position, clear history, close engines."""
         self._stop_analysis()
         self._kill_analyze_engine()
         for attr in ("white_uci_engine", "black_uci_engine"):
@@ -1205,6 +1208,7 @@ class GameApp:
         self.selected_piece = None
         self.legal_moves_for_selected = []
         self.last_move = None
+        self._promotion_dialog = None
         self.move_history = []
         self.score_history = []
         self.game_result = None
@@ -1216,8 +1220,12 @@ class GameApp:
         self._last_ai_time = 0.0
         self._paused = False
         self._undo_stack = []
-        self._game_started = True
+        self._game_started = False
 
+    def new_game(self):
+        """Reset + start game (trigger AI if needed)."""
+        self.reset()
+        self._game_started = True
         self._trigger_ai_if_needed()
 
     def open_new_game_dialog(self):

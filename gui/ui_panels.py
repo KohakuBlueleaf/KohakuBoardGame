@@ -94,15 +94,23 @@ class SidePanel:
         btn3_w = (cfg.PANEL_WIDTH - 2 * self._PAD_LEFT - 2 * self._BTN_GAP) // 3
         bx = cfg.PANEL_X + self._PAD_LEFT
 
-        # Bottom row: New Game | Settings
+        # Bottom row: Reset | New Game | Settings
         btn_y2 = cfg.PANEL_Y + cfg.PANEL_H - self._BTN_BOTTOM_MARGIN - self._BTN_HEIGHT
+        self.btn_reset = Button(
+            bx, btn_y2, btn3_w, self._BTN_HEIGHT, "Reset", self.font_btn
+        )
         self.btn_new_game = Button(
-            bx, btn_y2, btn2_w, self._BTN_HEIGHT, "New Game", self.font_btn
+            bx + btn3_w + self._BTN_GAP,
+            btn_y2,
+            btn3_w,
+            self._BTN_HEIGHT,
+            "New Game",
+            self.font_btn,
         )
         self.btn_settings = Button(
-            bx + btn2_w + self._BTN_GAP,
+            bx + 2 * (btn3_w + self._BTN_GAP),
             btn_y2,
-            btn2_w,
+            btn3_w,
             self._BTN_HEIGHT,
             "Settings",
             self.font_btn,
@@ -277,6 +285,7 @@ class SidePanel:
         x2 = cfg.PANEL_X + cfg.PANEL_WIDTH - self._SEPARATOR_INSET
         pygame.draw.line(self.surface, cfg.COLOR_TEXT_DIM, (x1, sep_y), (x2, sep_y), 1)
 
+        self.btn_reset.draw(self.surface, mouse_pos)
         self.btn_new_game.draw(self.surface, mouse_pos)
         self.btn_settings.draw(self.surface, mouse_pos)
 
@@ -502,6 +511,8 @@ class SidePanel:
     # ==================================================================
 
     def handle_click(self, x, y, **_kw):
+        if self.btn_reset.is_clicked(x, y):
+            return "reset"
         if self.btn_new_game.is_clicked(x, y):
             return "new_game"
         if self.btn_settings.is_clicked(x, y):
