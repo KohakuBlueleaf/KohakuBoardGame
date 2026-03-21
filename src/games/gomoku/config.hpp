@@ -2,10 +2,10 @@
 #include "../../config.hpp"
 
 #ifndef BOARD_H
-#define BOARD_H 9
+#define BOARD_H 15
 #endif
 #ifndef BOARD_W
-#define BOARD_W 9
+#define BOARD_W 15
 #endif
 
 #define WIN_LENGTH 5

@@ -53,14 +53,23 @@ class GomokuRenderer:
         for i in range(max_pv):
             uci = pv_moves[i]
 
-            # Parse placement move (2-char like "e5") or board move destination
-            if len(uci) == 2:
+            # Parse placement move (e.g. "e5", "a10") or board move destination
+            # Gomoku placement: letter + digits (variable length)
+            c_idx, r_idx = None, None
+            if len(uci) >= 2 and uci[0].isalpha() and uci[1:].isdigit():
+                # Simple placement move
                 c_idx = col_map.get(uci[0])
-                r_idx = row_map.get(uci[1])
+                r_idx = row_map.get(uci[1:])
             elif len(uci) >= 4:
-                c_idx = col_map.get(uci[2])
-                r_idx = row_map.get(uci[3])
-            else:
+                # Board move: find second square (letter after initial digits)
+                j = 1
+                while j < len(uci) and uci[j].isdigit():
+                    j += 1
+                if j < len(uci) and uci[j].isalpha():
+                    c_idx = col_map.get(uci[j])
+                    rest = uci[j + 1:].rstrip("+")
+                    r_idx = row_map.get(rest)
+            if c_idx is None or r_idx is None:
                 continue
 
             if c_idx is None or r_idx is None:

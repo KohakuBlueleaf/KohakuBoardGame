@@ -1,6 +1,6 @@
 """Gomoku game engine — Python implementation for GUI state tracking."""
 
-BOARD_SIZE = 9  # 9x9 board
+BOARD_SIZE = 15  # 15x15 standard board
 WIN_LENGTH = 5
 EMPTY = 0
 

@@ -41,8 +41,8 @@ GAME_CONFIGS: Dict[str, dict] = {
         "num_hand_types": 5,
     },
     "gomoku": {
-        "board_h": 9,
-        "board_w": 9,
+        "board_h": 15,
+        "board_w": 15,
         "num_piece_types": 2,
         "num_pt_no_king": 2,
         "king_id": None,

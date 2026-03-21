@@ -177,7 +177,7 @@ def check_game_over(state):
     return (None, None)
 
 
-def get_context(board_size=9):
+def get_context(board_size=15):
     """Return the game context dict for Gomoku with the given board size."""
     size = board_size
 

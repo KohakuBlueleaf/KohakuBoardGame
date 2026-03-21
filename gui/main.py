@@ -84,9 +84,9 @@ def _get_game_module(game_name):
 def _configure_board_size(game_name):
     """Set config board dimensions based on game type."""
     if game_name in ("Gomoku", "gomoku"):
-        _cfg.BOARD_H = 9
-        _cfg.BOARD_W = 9
-        _cfg.SQUARE_SIZE = 50  # smaller squares for bigger board
+        _cfg.BOARD_H = 15
+        _cfg.BOARD_W = 15
+        _cfg.SQUARE_SIZE = 36  # smaller squares for 15x15 board
         _cfg.MAX_STEP = _cfg.BOARD_H * _cfg.BOARD_W
         _cfg.SCORE_PLOT_MAX_CP = 10000  # gomoku threats score large
         _cfg.SCORE_DISPLAY_DIV = 2000  # normalize to ±5 range for display

@@ -64,70 +64,78 @@ static int drop_letter_to_type(char ch){
     }
 }
 
+/* Helper: encode a square as column letter + row number string (e.g. "a15") */
+static std::string sq_to_str(size_t row, size_t col){
+    std::string s;
+    s += static_cast<char>('a' + col);
+    s += std::to_string(BOARD_H - static_cast<int>(row));
+    return s;
+}
+
 std::string move_to_str(const Move& m){
     /* Placement move: from == to → output just the destination */
     if(m.first == m.second){
-        char buf[3];
-        buf[0] = 'a' + static_cast<char>(m.second.second);
-        buf[1] = '0' + static_cast<char>(BOARD_H) - static_cast<char>(m.second.first);
-        buf[2] = '\0';
-        return std::string(buf);
+        return sq_to_str(m.second.first, m.second.second);
     }
     /* Drop move: from.first == BOARD_H, from.second == piece_type */
     if(m.first.first == static_cast<size_t>(BOARD_H)){
         int pt = static_cast<int>(m.first.second);
-        char buf[4];
-        buf[0] = (pt >= 1 && pt <= 5) ? DROP_LETTERS[pt] : '?';
-        buf[1] = '*';
-        buf[2] = 'a' + static_cast<char>(m.second.second);
-        buf[3] = '\0';
-        /* Append row digit */
-        std::string s(buf);
-        s += static_cast<char>('0' + BOARD_H - static_cast<int>(m.second.first));
+        std::string s;
+        s += (pt >= 1 && pt <= 5) ? DROP_LETTERS[pt] : '?';
+        s += '*';
+        s += sq_to_str(m.second.first, m.second.second);
         return s;
     }
     /* Board move: from + to (+ promotion if to.first >= BOARD_H) */
     bool promote = (m.second.first >= static_cast<size_t>(BOARD_H));
     size_t to_row = promote ? m.second.first - BOARD_H : m.second.first;
-    char buf[6];
-    buf[0] = 'a' + static_cast<char>(m.first.second);
-    buf[1] = '0' + static_cast<char>(BOARD_H) - static_cast<char>(m.first.first);
-    buf[2] = 'a' + static_cast<char>(m.second.second);
-    buf[3] = '0' + static_cast<char>(BOARD_H) - static_cast<char>(to_row);
+    std::string s = sq_to_str(m.first.first, m.first.second)
+                  + sq_to_str(to_row, m.second.second);
     if(promote){
-        buf[4] = '+';
-        buf[5] = '\0';
-    }else{
-        buf[4] = '\0';
+        s += '+';
     }
-    return std::string(buf);
+    return s;
+}
+
+/* Helper: parse a square from a string starting at position pos.
+ * Returns (row, col) and advances pos past the consumed characters.
+ * Format: column letter + row number (possibly multi-digit), e.g. "a15". */
+static std::pair<size_t, size_t> parse_sq(const std::string& s, size_t& pos){
+    size_t col = static_cast<size_t>(s[pos] - 'a');
+    pos++;
+    /* Parse integer row number (may be multi-digit) */
+    size_t num_start = pos;
+    while(pos < s.size() && s[pos] >= '0' && s[pos] <= '9'){
+        pos++;
+    }
+    int row_num = std::stoi(s.substr(num_start, pos - num_start));
+    size_t row = static_cast<size_t>(BOARD_H - row_num);
+    return {row, col};
 }
 
 Move str_to_move(const std::string& s){
-    if(s.size() <= 2){
-        /* Placement move: just destination */
-        size_t col = static_cast<size_t>(s[0] - 'a');
-        size_t row = static_cast<size_t>(('0' + BOARD_H) - s[1]);
-        return Move(Point(row, col), Point(row, col));
-    }
-    /* Drop move: X*rc (e.g. P*c3) */
+    /* Drop move: X*sq (e.g. P*c3) */
     if(s.size() >= 3 && s[1] == '*'){
         int pt = drop_letter_to_type(s[0]);
-        size_t col = static_cast<size_t>(s[2] - 'a');
-        size_t row = static_cast<size_t>(('0' + BOARD_H) - s[3]);
+        size_t pos = 2;
+        auto [row, col] = parse_sq(s, pos);
         return Move(Point(static_cast<size_t>(BOARD_H), static_cast<size_t>(pt)),
                      Point(row, col));
     }
-    /* Board move: from + to [+promote] */
-    size_t from_col = static_cast<size_t>(s[0] - 'a');
-    size_t from_row = static_cast<size_t>(('0' + BOARD_H) - s[1]);
-    size_t to_col   = static_cast<size_t>(s[2] - 'a');
-    size_t to_row   = static_cast<size_t>(('0' + BOARD_H) - s[3]);
-    bool promote = (s.size() >= 5 && s[4] == '+');
-    if(promote){
-        to_row += BOARD_H;  /* sentinel for promotion */
+    /* Parse first square */
+    size_t pos = 0;
+    auto [fr, fc] = parse_sq(s, pos);
+    /* Placement move: no more squares to parse */
+    if(pos >= s.size() || !std::isalpha(s[pos])){
+        return Move(Point(fr, fc), Point(fr, fc));
     }
-    return Move(Point(from_row, from_col), Point(to_row, to_col));
+    /* Board move: parse second square [+promote] */
+    auto [tr, tc] = parse_sq(s, pos);
+    bool promote = (pos < s.size() && s[pos] == '+');
+    if(promote){
+        tr += BOARD_H;  /* sentinel for promotion */
+    }
+    return Move(Point(fr, fc), Point(tr, tc));
 }
 
 

@@ -43,7 +43,7 @@ def _init_game(game_name, board_size=None):
     elif game_name == "gomoku":
         from cli.games.gomoku import get_context
 
-        _game_ctx.update(get_context(board_size or 9))
+        _game_ctx.update(get_context(board_size or 15))
     elif game_name == "minishogi":
         from cli.games.minishogi import get_context
 
@@ -319,7 +319,7 @@ def run_game(
     # Initialize game state based on game type
     if has_state:
         if "make_state" in _game_ctx:
-            state = _game_ctx["make_state"](_game_ctx.get("board_size", 9))
+            state = _game_ctx["make_state"](_game_ctx.get("board_size", 15))
         else:
             state = _game_ctx["state_class"].initial()
     else:
@@ -683,8 +683,8 @@ def main():
     parser.add_argument(
         "--board-size",
         type=int,
-        default=9,
-        help="Board size for gomoku (default: 9).",
+        default=15,
+        help="Board size for gomoku (default: 15).",
     )
 
     args = parser.parse_args()

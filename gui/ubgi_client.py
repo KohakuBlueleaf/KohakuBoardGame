@@ -562,10 +562,10 @@ class UBGIEngine:
     def move_to_uci(move):
         """Convert ((from_r, from_c), (to_r, to_c)) to UBGI move string.
 
-        Placement move (from == to): returns just 'e5' (2 chars).
-        Drop move (from_r == BOARD_H): returns 'P*c3' (3-4 chars).
-        Board move: returns 'a2a3' (4 chars).
-        Promotion move (to_r >= BOARD_H): returns 'a1b2+' (5 chars).
+        Placement move (from == to): returns e.g. 'e5' or 'a10'.
+        Drop move (from_r == BOARD_H): returns e.g. 'P*c3'.
+        Board move: returns e.g. 'a2a3' or 'a2a10'.
+        Promotion move (to_r >= BOARD_H): returns e.g. 'a1b2+'.
         """
         try:
             import gui.config as _c
@@ -596,10 +596,10 @@ class UBGIEngine:
     def uci_to_move(uci_str):
         """Convert UBGI move string to ((from_r, from_c), (to_r, to_c)).
 
-        2-char string = placement (from == to).
-        X*rc = drop move (from = (BOARD_H, piece_type)).
-        4-char = board move.
-        5-char ending in '+' = promotion (to_r += BOARD_H).
+        Placement: letter + digits (e.g. 'e5', 'a10') → from == to.
+        X*sq = drop move (from = (BOARD_H, piece_type)).
+        Board move: two squares concatenated (e.g. 'a2a3', 'a2a10').
+        Trailing '+' = promotion (to_r += BOARD_H).
         """
         try:
             import gui.config as _c
@@ -622,27 +622,32 @@ class UBGIEngine:
             "r": 5,
         }
 
-        def parse_sq(s, offset):
-            col = ord(s[offset]) - ord("a")
-            row = bh - int(s[offset + 1])
-            return (row, col)
+        def parse_sq(s, pos):
+            """Parse a square at position pos. Returns ((row, col), next_pos)."""
+            col = ord(s[pos]) - ord("a")
+            pos += 1
+            num_start = pos
+            while pos < len(s) and s[pos].isdigit():
+                pos += 1
+            row = bh - int(s[num_start:pos])
+            return (row, col), pos
 
-        # Drop move: X*rc
+        # Drop move: X*sq (e.g. P*c3, P*a10)
         if len(uci_str) >= 3 and uci_str[1] == "*":
             pt = drop_map.get(uci_str[0], 0)
-            col = ord(uci_str[2]) - ord("a")
-            row = bh - int(uci_str[3]) if len(uci_str) > 3 else 0
+            (row, col), _ = parse_sq(uci_str, 2)
             return ((bh, pt), (row, col))
 
-        # Placement
-        if len(uci_str) <= 2:
-            sq = parse_sq(uci_str, 0)
-            return (sq, sq)
+        # Parse first square
+        (fr, fc), pos = parse_sq(uci_str, 0)
+
+        # Placement: no more alpha characters after first square
+        if pos >= len(uci_str) or not uci_str[pos].isalpha():
+            return ((fr, fc), (fr, fc))
 
         # Board move (possibly with promotion)
-        fr, fc = parse_sq(uci_str, 0)
-        tr, tc = parse_sq(uci_str, 2)
-        promote = len(uci_str) >= 5 and uci_str[4] == "+"
+        (tr, tc), pos = parse_sq(uci_str, pos)
+        promote = pos < len(uci_str) and uci_str[pos] == "+"
         if promote:
             tr += bh
         return ((fr, fc), (tr, tc))
