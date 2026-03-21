@@ -850,41 +850,31 @@ int State::evaluate(bool /*use_nnue*/, bool /*use_kp*/, bool /*use_mobility*/){
     ThreatCounts my  = count_threats(board, my_id);
     ThreatCounts opp = count_threats(board, opp_id);
 
-    /* --- Phase 3: STM decisive wins --- */
-    /* STM has five: already won */
-    if(my.five > 0){
-        return P_MAX - 1;
-    }
-    /* STM has open-4 or ANY half-4: play the completing move → five → win */
+    /* --- Phase 3: Decisive threats ---
+     * Only actual five-in-a-row uses P_MAX (terminal).
+     * Near-winning compound threats use large but non-P_MAX scores
+     * so the search keeps deepening to verify. */
+
+    /* STM has open-4 or half-4: one move from five → very strong */
     if(my.open4 > 0 || my.half4 >= 1){
-        return P_MAX - 2;
+        return 50000;
     }
-    /* STM has double open-3: opponent can only block one → wins */
+    /* STM has double open-3: opponent can only block one */
     if(my.open3 >= 2){
-        return P_MAX - 5;
+        return 40000;
     }
 
-    /* --- Phase 3: OPP decisive threats --- */
-    if(opp.five > 0){
-        return -(P_MAX - 1);
-    }
-    /* OPP has open-4: unstoppable (two ends, one move to block) */
+    /* OPP has open-4: unstoppable */
     if(opp.open4 > 0){
-        return -(P_MAX - 2);
+        return -50000;
     }
-    /* OPP has half-4: STM must block this turn or lose.
-     * Not immediately losing (STM can block), but very bad. */
-    if(opp.half4 >= 1){
-        /* If opp also has open-3 or another half-4, blocking one
-         * leaves the other → losing */
-        if(opp.half4 >= 2 || opp.open3 >= 1){
-            return -(P_MAX - 10);
-        }
-        /* Single half-4: must block, lose tempo, very disadvantageous */
+    /* OPP has half-4 + open-3 or double half-4: can't block both */
+    if(opp.half4 >= 1 && (opp.half4 >= 2 || opp.open3 >= 1)){
+        return -40000;
     }
     /* OPP has double open-3: can't block both */
     if(opp.open3 >= 2){
-        return -(P_MAX - 20);
+        return -35000;
     }
 
     /* --- Phase 4: Weighted threat scoring --- */
