@@ -1125,6 +1125,10 @@ class GameApp:
             self.ai_result = {"move": None, "depth": 0, "ready": False}
             self.ai_thinking = False
 
+            # Discard stale results if game was reset/stopped
+            if not self._game_started:
+                return
+
             if move is not None and move in self.game_state.legal_actions:
                 self.ai_depth = depth
                 self.execute_move(move)
@@ -1199,8 +1203,17 @@ class GameApp:
 
     def reset(self):
         """Reset to initial position, clear history, close engines."""
+        # Stop any in-progress search first
+        for attr in ("white_uci_engine", "black_uci_engine"):
+            eng = getattr(self, attr, None)
+            if eng is not None:
+                try:
+                    eng.stop()
+                except Exception:
+                    pass
         self._stop_analysis()
         self._kill_analyze_engine()
+        # Now quit engines
         for attr in ("white_uci_engine", "black_uci_engine"):
             self._quit_engine(attr)
 
