@@ -311,6 +311,7 @@ class KohakuShogiState:
         self.legal_actions = []
         self.last_move = None
         self.hash_counts = {}  # position_key -> count for repetition detection
+        self.check_hash_counts = {}  # position_key -> count when in check
 
     @property
     def current_player(self):
@@ -581,11 +582,23 @@ class KohakuShogiState:
         ns = KohakuShogiState(new_board, new_hand, opp, self.step + 1)
         ns.last_move = move
         ns.hash_counts = dict(self.hash_counts)
+        ns.check_hash_counts = dict(self.check_hash_counts)
         key = self.position_key()
         ns.hash_counts[key] = ns.hash_counts.get(key, 0) + 1
 
         if self.game_state != "win":
             ns.get_legal_actions()
+
+            # Detect if the child position is "in check"
+            if ns.game_state not in ("win", "draw"):
+                probe = KohakuShogiState(new_board, new_hand, self.player, self.step + 1)
+                probe.get_legal_actions()
+                if probe.game_state == "win":
+                    # Child is in check -- record it
+                    child_key = ns.position_key()
+                    ns.check_hash_counts[child_key] = (
+                        ns.check_hash_counts.get(child_key, 0) + 1
+                    )
 
         return ns
 
@@ -605,9 +618,19 @@ class KohakuShogiState:
         if self.game_state == "win":
             return ("win", self.player)
 
-        # 4-fold repetition -> draw
+        # 4-fold repetition -> draw or perpetual check
         key = self.position_key()
         if self.hash_counts.get(key, 0) + 1 >= 4:
+            # Check if perpetual check: all 4 occurrences were "in check"
+            check_count = self.check_hash_counts.get(key, 0)
+            # We also need to check the CURRENT position for check
+            probe = KohakuShogiState(self.board, self.hand, 1 - self.player, self.step)
+            probe.get_legal_actions()
+            if probe.game_state == "win":
+                check_count += 1  # current position is also in check
+            if check_count >= 4:
+                # Perpetual check: the checker (opponent) loses, checked side wins
+                return ("perpetual_check", self.player)
             return ("draw", None)
 
         if self.step > MAX_STEP:
@@ -686,6 +709,7 @@ class KohakuShogiState:
         s.legal_actions = list(self.legal_actions)
         s.last_move = self.last_move
         s.hash_counts = dict(self.hash_counts)
+        s.check_hash_counts = dict(self.check_hash_counts)
         return s
 
     def __repr__(self):

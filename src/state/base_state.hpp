@@ -22,6 +22,7 @@ public:
     GameState game_state = UNKNOWN;
     std::vector<Move> legal_actions;
     std::unordered_map<uint64_t, int> hash_counts;  /* position hash → occurrence count */
+    std::unordered_map<uint64_t, int> check_hash_counts; /* times position appeared while in check */
 
     virtual ~BaseState() = default;
 
@@ -29,6 +30,16 @@ public:
     void inherit_history(const BaseState* parent){
         hash_counts = parent->hash_counts;
         hash_counts[parent->hash()]++;
+        check_hash_counts = parent->check_hash_counts;
+    }
+
+    /* Record whether the current position is "in check" (for perpetual check detection).
+     * Call AFTER get_legal_actions on the new state, passing true if the side-to-move
+     * is in check (opponent is giving check). */
+    void record_check_status(bool in_check){
+        if(in_check){
+            check_hash_counts[hash()]++;
+        }
     }
 
     /* Check if current position has appeared >= limit times (including now). */

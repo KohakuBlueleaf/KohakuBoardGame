@@ -542,6 +542,10 @@ class SidePanel:
             return f"Checkmate! {p0} wins!", (100, 220, 100)
         if game_result in ("p1_checkmate",):
             return f"Checkmate! {p1} wins!", (220, 80, 80)
+        if game_result == "p0_perpetual_check":
+            return f"Perpetual check! {p0} wins!", (100, 220, 100)
+        if game_result == "p1_perpetual_check":
+            return f"Perpetual check! {p1} wins!", (220, 80, 80)
         if game_result in ("white_wins", "p0_wins"):
             return f"{p0} wins!", (100, 220, 100)
         if game_result in ("black_wins", "p1_wins"):
