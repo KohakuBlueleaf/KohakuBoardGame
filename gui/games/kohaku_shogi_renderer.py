@@ -272,8 +272,14 @@ class KohakuShogiRenderer:
                     "?", fgcolor=text_color_alpha
                 )
 
+        # Rotate text 180° for gote (player 1)
+        if player == 1:
+            text_surf = pygame.transform.rotate(text_surf, 180)
+
+        # Position text slightly below center (toward the base of the piece)
         tx = cx - text_rect.width / 2
-        ty = cy - text_rect.height / 2
+        ty = cy - text_rect.height / 2 + h * 0.06  # shift 6% toward base
+
         surf_big.blit(text_surf, (tx, ty))
 
         # Downscale 2x → 1x with smoothing for anti-aliased result
