@@ -230,3 +230,4 @@ gamelog.txt
 *.png
 temp/
 wandb/
+lightning_logs/

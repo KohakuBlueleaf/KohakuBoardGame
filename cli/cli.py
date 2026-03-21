@@ -302,10 +302,14 @@ def run_game(
     total_games=None,
     depth=0,
     params=None,
+    white_params=None,
+    black_params=None,
 ):
     """Run a single game between two players.
 
     Returns "white", "black", or "draw".
+    params: shared params for both sides.
+    white_params/black_params: per-side overrides (merged after shared).
     """
     game_name = _game_ctx.get("name", "generic")
     has_state = game_name != "generic"
@@ -409,8 +413,12 @@ def run_game(
             else:
                 bestmove_uci = get_human_move_generic(uci_moves)
         else:
+            side_params = list(params or [])
+            extra = white_params if is_white else black_params
+            if extra:
+                side_params.extend(extra)
             bestmove_uci, info = get_engine_move(
-                engine_path, algo_name, params, uci_moves, time_limit, depth=depth
+                engine_path, algo_name, side_params, uci_moves, time_limit, depth=depth
             )
 
             if bestmove_uci is None:
@@ -496,6 +504,8 @@ def run_tournament(
     verbose,
     depth=0,
     params=None,
+    engine1_params=None,
+    engine2_params=None,
 ):
     """Run a tournament of N games, alternating colors."""
     engine1_wins = 0
@@ -529,6 +539,12 @@ def run_tournament(
                     flush=True,
                 )
 
+            # Per-side params follow the engine, not the color
+            if engine1_is_white:
+                w_params, b_params = engine1_params, engine2_params
+            else:
+                w_params, b_params = engine2_params, engine1_params
+
             result = run_game(
                 w_path,
                 b_path,
@@ -540,6 +556,8 @@ def run_tournament(
                 total_games=num_games,
                 depth=depth,
                 params=params,
+                white_params=w_params,
+                black_params=b_params,
             )
 
             if result == "white":
@@ -648,7 +666,19 @@ def main():
         "--param",
         action="append",
         default=[],
-        help="Set engine param: --param UseNNUE=false. Can repeat.",
+        help="Set engine param for both sides: --param UseNNUE=true. Can repeat.",
+    )
+    parser.add_argument(
+        "--white-param",
+        action="append",
+        default=[],
+        help="Set engine param for white only: --white-param NNUEFile=models/v2.bin",
+    )
+    parser.add_argument(
+        "--black-param",
+        action="append",
+        default=[],
+        help="Set engine param for black only: --black-param NNUEFile=models/v3.bin",
     )
     parser.add_argument(
         "--board-size",
@@ -681,6 +711,9 @@ def main():
         print("Error: --time must be >= 100ms", file=sys.stderr)
         sys.exit(1)
 
+    wp = args.white_param or None
+    bp = args.black_param or None
+
     if args.games > 1:
         run_tournament(
             args.white,
@@ -692,6 +725,8 @@ def main():
             verbose,
             depth=args.depth,
             params=args.param,
+            engine1_params=wp,
+            engine2_params=bp,
         )
         return
 
@@ -705,6 +740,8 @@ def main():
             verbose=verbose,
             depth=args.depth,
             params=args.param,
+            white_params=wp,
+            black_params=bp,
         )
 
         result_map = {"white": "1-0", "black": "0-1", "draw": "1/2-1/2"}
