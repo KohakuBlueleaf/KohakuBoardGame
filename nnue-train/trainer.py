@@ -225,6 +225,7 @@ class NNUETrainer:
                 {
                     "train/loss": loss,
                     "train/ema_loss": ema_loss,
+                    "lr": self.optimizer.param_groups[0]["lr"],
                 },
                 step=self.global_step,
             )

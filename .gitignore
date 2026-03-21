@@ -1,7 +1,7 @@
 .vscode/
 .claude/
 build/
-models/
+*models/
 ~$*
 *.bin
 *.pt
