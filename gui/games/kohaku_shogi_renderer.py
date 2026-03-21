@@ -131,6 +131,9 @@ def _pentagon_points(cx, cy, w, h, pointing_up):
 class KohakuShogiRenderer:
     """Renders Kohaku Shogi board with kanji pieces in pentagon shapes."""
 
+    # Bundled font path (relative to gui/ directory)
+    _BUNDLED_FONT = None  # set in __init__
+
     _KANJI_FONT_CANDIDATES = (
         "Noto Sans JP",
         "Noto Sans CJK JP",
@@ -168,18 +171,36 @@ class KohakuShogiRenderer:
 
         kanji_size = int(cfg.SQUARE_SIZE * 0.44)
         self._piece_font = None
-        for name in self._KANJI_FONT_CANDIDATES:
+
+        # Try bundled Zen Old Mincho font first
+        import os
+        font_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "fonts")
+        bundled_path = os.path.join(font_dir, "ZenOldMincho-Bold.ttf")
+        if os.path.isfile(bundled_path):
             try:
-                font = pygame.freetype.SysFont(name, kanji_size)
-                if "freesansbold" in getattr(font, "path", ""):
-                    continue
+                font = pygame.freetype.Font(bundled_path, kanji_size)
                 surf, rect = font.render("\u738b", fgcolor=(0, 0, 0))
                 if rect.width > 2 and rect.height > 2:
                     self._piece_font = font
                     self._use_kanji = True
-                    break
+                    self._bundled_font = bundled_path
             except Exception:
-                continue
+                pass
+
+        # Fallback: try system fonts
+        if self._piece_font is None:
+            for name in self._KANJI_FONT_CANDIDATES:
+                try:
+                    font = pygame.freetype.SysFont(name, kanji_size)
+                    if "freesansbold" in getattr(font, "path", ""):
+                        continue
+                    surf, rect = font.render("\u738b", fgcolor=(0, 0, 0))
+                    if rect.width > 2 and rect.height > 2:
+                        self._piece_font = font
+                        self._use_kanji = True
+                        break
+                except Exception:
+                    continue
 
         if self._piece_font is None:
             for name in self._FALLBACK_FONT_CANDIDATES:
@@ -196,7 +217,13 @@ class KohakuShogiRenderer:
 
         hand_size = int(cfg.SQUARE_SIZE * 0.30)
         self._hand_font = None
-        if self._use_kanji and self._piece_font is not None:
+        # Try bundled font for hand pieces too
+        if self._bundled_font:
+            try:
+                self._hand_font = pygame.freetype.Font(self._bundled_font, hand_size)
+            except Exception:
+                pass
+        if self._hand_font is None and self._use_kanji and self._piece_font is not None:
             for name in self._KANJI_FONT_CANDIDATES:
                 try:
                     font = pygame.freetype.SysFont(name, hand_size)
@@ -257,10 +284,13 @@ class KohakuShogiRenderer:
 
         # Render text at 2x size for the big surface
         try:
-            big_font = pygame.freetype.SysFont(
-                self._piece_font.name if hasattr(self._piece_font, 'name') else None,
-                int(self._piece_font.size * scale),
-            )
+            if self._bundled_font:
+                big_font = pygame.freetype.Font(self._bundled_font, int(self._piece_font.size * scale))
+            else:
+                big_font = pygame.freetype.SysFont(
+                    self._piece_font.name if hasattr(self._piece_font, 'name') else None,
+                    int(self._piece_font.size * scale),
+                )
             text_surf, text_rect = big_font.render(char, fgcolor=text_color_alpha)
         except Exception:
             try:
