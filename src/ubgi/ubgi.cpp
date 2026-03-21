@@ -50,18 +50,23 @@ static void send(const std::string& msg){
 
 /* === Move Conversion === */
 
-/* Piece letter for drop encoding (index 1-5 → P S G B R) */
-static const char DROP_LETTERS[] = " PSGBR";
+/* DROP_LETTERS is defined per-game in config.hpp for games with drops.
+ * Maps hand piece index (1..NUM_HAND_TYPES) to a letter for UBGI protocol.
+ * E.g. MiniShogi: " PSGBR", Kohaku Shogi: " PSGLNBR".
+ * Games without drops don't define it — provide a fallback. */
+#if NUM_HAND_TYPES == 0
+static const char DROP_LETTERS[] = " ";
+#endif
 
 static int drop_letter_to_type(char ch){
-    switch(ch){
-        case 'P': case 'p': return 1;
-        case 'S': case 's': return 2;
-        case 'G': case 'g': return 3;
-        case 'B': case 'b': return 4;
-        case 'R': case 'r': return 5;
-        default: return 0;
+    /* Search DROP_LETTERS for the character */
+    for(int i = 1; i <= NUM_HAND_TYPES; i++){
+        if(DROP_LETTERS[i] == ch
+           || DROP_LETTERS[i] == (ch >= 'a' ? ch - 32 : ch + 32)){
+            return i;
+        }
     }
+    return 0;
 }
 
 /* Helper: encode a square as column letter + row number string (e.g. "a15") */
@@ -81,7 +86,7 @@ std::string move_to_str(const Move& m){
     if(m.first.first == static_cast<size_t>(BOARD_H)){
         int pt = static_cast<int>(m.first.second);
         std::string s;
-        s += (pt >= 1 && pt <= 5) ? DROP_LETTERS[pt] : '?';
+        s += (pt >= 1 && pt <= NUM_HAND_TYPES) ? DROP_LETTERS[pt] : '?';
         s += '*';
         s += sq_to_str(m.second.first, m.second.second);
         return s;

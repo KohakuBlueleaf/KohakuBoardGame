@@ -32,7 +32,11 @@
 #define NUM_PIECE_TYPES 15  /* 0-14 */
 #define NUM_PT_NO_KING  14  /* all except king (gap at index 8) */
 #define KING_ID         8
+#undef  NUM_HAND_TYPES
 #define NUM_HAND_TYPES  7   /* pawn, silver, gold, lance, knight, bishop, rook (indices 1-7) */
+
+/* Drop piece letters for UBGI protocol (index 0 unused, 1-7 = P S G L N B R) */
+static const char DROP_LETTERS[] = " PSGLNBR";
 
 /* Default NNUE model path */
 #undef NNUE_FILE

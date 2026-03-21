@@ -13,3 +13,8 @@
 #endif
 #define NNUE_FILE "models/nnue.bin"
 #define USE_NNUE_SIMD
+
+/* === Drop pieces (for games without drops, defaults to 0) === */
+#ifndef NUM_HAND_TYPES
+#define NUM_HAND_TYPES 0
+#endif
