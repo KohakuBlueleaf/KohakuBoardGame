@@ -50,6 +50,30 @@ GAME_CONFIGS: Dict[str, dict] = {
         "has_hand": False,
         "num_hand_types": 0,
     },
+    "kohaku_shogi": {
+        "board_h": 7,
+        "board_w": 6,
+        "num_piece_types": 15,  # 0=empty, 1-8 base, 9-14 promoted
+        "num_pt_no_king": 13,   # piece types 1-7 + 9-14, excluding KING=8
+        "king_id": 8,
+        "piece_names": [
+            ".",
+            "P", "S", "G", "L", "N", "B", "R", "K",
+            "+P", "+S", "+L", "+N", "+B", "+R",
+        ],
+        "has_hand": True,
+        "num_hand_types": 7,
+    },
+    "kohaku_chess": {
+        "board_h": 7,
+        "board_w": 6,
+        "num_piece_types": 6,
+        "num_pt_no_king": 5,
+        "king_id": 6,
+        "piece_names": [".", "P", "R", "N", "B", "Q", "K"],
+        "has_hand": False,
+        "num_hand_types": 0,
+    },
 }
 
 DEFAULT_GAME = "minichess"

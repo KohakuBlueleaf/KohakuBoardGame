@@ -62,6 +62,54 @@ def _get_game_module(game_name):
             PLAYER_LABELS,
             PLAYER_COLORS,
         )
+    if game_name in ("KohakuShogi", "kohaku_shogi"):
+        try:
+            from gui.games.kohaku_shogi_engine import (
+                KohakuShogiState,
+                format_move,
+                PLAYER_LABELS,
+                PLAYER_COLORS,
+            )
+            from gui.games.kohaku_shogi_renderer import KohakuShogiRenderer
+        except ImportError:
+            from games.kohaku_shogi_engine import (
+                KohakuShogiState,
+                format_move,
+                PLAYER_LABELS,
+                PLAYER_COLORS,
+            )
+            from games.kohaku_shogi_renderer import KohakuShogiRenderer
+        return (
+            KohakuShogiState,
+            format_move,
+            KohakuShogiRenderer,
+            PLAYER_LABELS,
+            PLAYER_COLORS,
+        )
+    if game_name in ("KohakuChess", "kohaku_chess"):
+        try:
+            from gui.games.kohaku_chess_engine import (
+                KohakuChessState,
+                format_move,
+                PLAYER_LABELS,
+                PLAYER_COLORS,
+            )
+            from gui.games.kohaku_chess_renderer import KohakuChessRenderer
+        except ImportError:
+            from games.kohaku_chess_engine import (
+                KohakuChessState,
+                format_move,
+                PLAYER_LABELS,
+                PLAYER_COLORS,
+            )
+            from games.kohaku_chess_renderer import KohakuChessRenderer
+        return (
+            KohakuChessState,
+            format_move,
+            KohakuChessRenderer,
+            PLAYER_LABELS,
+            PLAYER_COLORS,
+        )
     try:
         from gui.games.minichess_engine import (
             MiniChessState,
@@ -98,6 +146,21 @@ def _configure_board_size(game_name):
         _cfg.SCORE_PLOT_MAX_CP = 2000
         _cfg.SCORE_DISPLAY_DIV = 100
         _cfg.HAND_ROW_H = 60  # height of each hand row (gote top, sente bottom)
+    elif game_name in ("KohakuShogi", "kohaku_shogi"):
+        _cfg.BOARD_H = 7
+        _cfg.BOARD_W = 6
+        _cfg.SQUARE_SIZE = 64  # medium squares for 7x6 board with kanji
+        _cfg.MAX_STEP = 300
+        _cfg.SCORE_PLOT_MAX_CP = 2000
+        _cfg.SCORE_DISPLAY_DIV = 100
+        _cfg.HAND_ROW_H = 60  # height of each hand row (gote top, sente bottom)
+    elif game_name in ("KohakuChess", "kohaku_chess"):
+        _cfg.BOARD_H = 7
+        _cfg.BOARD_W = 6
+        _cfg.SQUARE_SIZE = 72  # medium squares for 7x6 chess board
+        _cfg.MAX_STEP = 150
+        _cfg.SCORE_PLOT_MAX_CP = 500
+        _cfg.SCORE_DISPLAY_DIV = 100
     else:
         _cfg.BOARD_H = 6
         _cfg.BOARD_W = 5
@@ -1500,7 +1563,7 @@ def main():
     parser.add_argument(
         "--game",
         default="minichess",
-        help="Game type: minichess, gomoku (default: minichess)",
+        help="Game type: minichess, minishogi, gomoku, kohaku_shogi, kohaku_chess (default: minichess)",
     )
     args = parser.parse_args()
 
