@@ -84,7 +84,7 @@ PIECE_SYMBOLS = {
 }
 
 # Drop piece name abbreviations (for UCI-style notation)
-_DROP_PIECE_CHAR = {
+DROP_PIECE_CHAR = {
     PAWN: "P",
     SILVER: "S",
     GOLD: "G",
@@ -93,7 +93,7 @@ _DROP_PIECE_CHAR = {
     BISHOP: "B",
     ROOK: "R",
 }
-_CHAR_TO_DROP_PIECE = {
+CHAR_TO_DROP_PIECE = {
     "P": PAWN,
     "S": SILVER,
     "G": GOLD,
@@ -713,7 +713,7 @@ def format_move(move):
 
     if fr == BOARD_H:
         # Drop move: fc = piece_type
-        piece_char = _DROP_PIECE_CHAR.get(fc, "?")
+        piece_char = DROP_PIECE_CHAR.get(fc, "?")
         return f"{piece_char}*{col_labels[tc]}{row_labels[tr]}"
 
     promoting = tr >= BOARD_H

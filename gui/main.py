@@ -20,6 +20,10 @@ except ImportError:
 
 def _get_game_module(game_name):
     """Return (StateClass, format_move, RendererClass, player_labels, player_colors) for the given game."""
+    # Default: no drops (overridden by shogi games)
+    _cfg.DROP_PIECE_CHAR = {}
+    _cfg.CHAR_TO_DROP_PIECE = {}
+
     if game_name in ("Gomoku", "gomoku"):
         try:
             from gui.games.gomoku_engine import (
@@ -45,6 +49,8 @@ def _get_game_module(game_name):
                 format_move,
                 PLAYER_LABELS,
                 PLAYER_COLORS,
+                DROP_PIECE_CHAR,
+                CHAR_TO_DROP_PIECE,
             )
             from gui.games.minishogi_renderer import MiniShogiRenderer
         except ImportError:
@@ -53,8 +59,12 @@ def _get_game_module(game_name):
                 format_move,
                 PLAYER_LABELS,
                 PLAYER_COLORS,
+                DROP_PIECE_CHAR,
+                CHAR_TO_DROP_PIECE,
             )
             from games.minishogi_renderer import MiniShogiRenderer
+        _cfg.DROP_PIECE_CHAR = DROP_PIECE_CHAR
+        _cfg.CHAR_TO_DROP_PIECE = CHAR_TO_DROP_PIECE
         return (
             MiniShogiState,
             format_move,
@@ -69,6 +79,8 @@ def _get_game_module(game_name):
                 format_move,
                 PLAYER_LABELS,
                 PLAYER_COLORS,
+                DROP_PIECE_CHAR,
+                CHAR_TO_DROP_PIECE,
             )
             from gui.games.kohaku_shogi_renderer import KohakuShogiRenderer
         except ImportError:
@@ -77,8 +89,12 @@ def _get_game_module(game_name):
                 format_move,
                 PLAYER_LABELS,
                 PLAYER_COLORS,
+                DROP_PIECE_CHAR,
+                CHAR_TO_DROP_PIECE,
             )
             from games.kohaku_shogi_renderer import KohakuShogiRenderer
+        _cfg.DROP_PIECE_CHAR = DROP_PIECE_CHAR
+        _cfg.CHAR_TO_DROP_PIECE = CHAR_TO_DROP_PIECE
         return (
             KohakuShogiState,
             format_move,

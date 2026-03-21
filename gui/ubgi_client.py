@@ -579,10 +579,10 @@ class UBGIEngine:
         if (fr, fc) == (tr, tc):
             return col_ch(tc) + row_ch(tr)
         # Drop move: from_r == BOARD_H, from_c == piece_type
-        drop_letters = " PSGBR"
+        drop_char = getattr(_c, "DROP_PIECE_CHAR", {})
         if fr == bh:
             pt = fc
-            ch = drop_letters[pt] if 1 <= pt <= 5 else "?"
+            ch = drop_char.get(pt, "?")
             return ch + "*" + col_ch(tc) + row_ch(tr)
         # Promotion: to_r >= BOARD_H
         promote = tr >= bh
@@ -609,18 +609,13 @@ class UBGIEngine:
         if uci_str is None or len(uci_str) < 2:
             return None
 
-        drop_map = {
-            "P": 1,
-            "S": 2,
-            "G": 3,
-            "B": 4,
-            "R": 5,
-            "p": 1,
-            "s": 2,
-            "g": 3,
-            "b": 4,
-            "r": 5,
-        }
+        # Drop letter mapping from game engine (stored in config)
+        char_to_drop = getattr(_c, "CHAR_TO_DROP_PIECE", {})
+        # Build case-insensitive map
+        drop_map = {}
+        for ch, pt in char_to_drop.items():
+            drop_map[ch.upper()] = pt
+            drop_map[ch.lower()] = pt
 
         def parse_sq(s, pos):
             """Parse a square at position pos. Returns ((row, col), next_pos)."""

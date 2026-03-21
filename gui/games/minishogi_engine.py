@@ -65,8 +65,8 @@ PIECE_SYMBOLS = {
 }
 
 # Drop piece name abbreviations (for UCI-style notation)
-_DROP_PIECE_CHAR = {PAWN: "P", SILVER: "S", GOLD: "G", BISHOP: "B", ROOK: "R"}
-_CHAR_TO_DROP_PIECE = {"P": PAWN, "S": SILVER, "G": GOLD, "B": BISHOP, "R": ROOK}
+DROP_PIECE_CHAR = {PAWN: "P", SILVER: "S", GOLD: "G", BISHOP: "B", ROOK: "R"}
+CHAR_TO_DROP_PIECE = {"P": PAWN, "S": SILVER, "G": GOLD, "B": BISHOP, "R": ROOK}
 
 # Promotable pieces and their promoted forms
 _PROMOTE_MAP = {
@@ -613,7 +613,7 @@ def format_move(move):
 
     if fr == BOARD_SIZE:
         # Drop move: fc = piece_type
-        piece_char = _DROP_PIECE_CHAR.get(fc, "?")
+        piece_char = DROP_PIECE_CHAR.get(fc, "?")
         return f"{piece_char}*{col_labels[tc]}{row_labels[tr]}"
 
     promoting = tr >= BOARD_SIZE
