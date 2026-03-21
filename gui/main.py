@@ -279,6 +279,7 @@ class GameApp:
         self.selected_piece = None
         self.legal_moves_for_selected = []
         self.last_move = None
+        self._promotion_dialog = None
 
         # History
         self.move_history = []
@@ -642,6 +643,11 @@ class GameApp:
 
     def _handle_left_click(self, pos):
         x, y = pos
+
+        # Promotion dialog intercepts all clicks when active
+        if self._handle_promotion_click(x, y):
+            return
+
         board_pos = self.board_renderer.screen_to_board(x, y)
         if board_pos is not None:
             if self._is_human_turn():
@@ -767,15 +773,13 @@ class GameApp:
     def _find_legal_move(self, dest_row, dest_col):
         """Find a legal move to (dest_row, dest_col) from the current selection.
 
-        For games with promotion (e.g. MiniShogi), if both a promotion and
-        non-promotion move exist for the same destination, prefer promotion.
-        The promotion move has to_r >= BOARD_H while the normal move does not.
+        If both promotion and non-promotion moves exist, show a promotion
+        choice dialog instead of auto-promoting.
         """
         bh = _cfg.BOARD_H
         matches = []
         for move in self.legal_moves_for_selected:
             (_, _), (tr, tc) = move
-            # Match destination: actual row is tr if tr < bh, else tr - bh (promotion)
             actual_tr = tr - bh if tr >= bh else tr
             if actual_tr == dest_row and tc == dest_col:
                 matches.append(move)
@@ -785,11 +789,129 @@ class GameApp:
         if len(matches) == 1:
             return matches[0]
 
-        # Multiple matches: prefer the promotion move (to_r >= bh)
+        # Multiple matches: separate promotion and non-promotion
+        promo_move = None
+        normal_move = None
         for m in matches:
             if m[1][0] >= bh:
-                return m
-        return matches[0]
+                promo_move = m
+            else:
+                normal_move = m
+
+        if promo_move and normal_move:
+            # Show promotion choice dialog
+            self._show_promotion_dialog(dest_row, dest_col, promo_move, normal_move)
+            return None  # don't execute yet — dialog handles it
+        return promo_move or normal_move
+
+    def _show_promotion_dialog(self, row, col, promo_move, normal_move):
+        """Show an inline promotion choice overlay on the board."""
+        self._promotion_dialog = {
+            "row": row,
+            "col": col,
+            "promo_move": promo_move,
+            "normal_move": normal_move,
+        }
+
+    def _draw_promotion_dialog(self):
+        """Draw the promotion choice overlay if active."""
+        dlg = getattr(self, "_promotion_dialog", None)
+        if dlg is None:
+            return
+
+        # Semi-transparent overlay
+        overlay = pygame.Surface(
+            (self.board_renderer.surface.get_width(),
+             self.board_renderer.surface.get_height()),
+            pygame.SRCALPHA,
+        )
+        overlay.fill((0, 0, 0, 100))
+        self.board_renderer.surface.blit(overlay, (0, 0))
+
+        row, col = dlg["row"], dlg["col"]
+        sq = _cfg.SQUARE_SIZE
+
+        # Position: two boxes side by side centered on the destination square
+        cx = _cfg.BOARD_X + col * sq + sq // 2
+        cy = _cfg.BOARD_Y + row * sq + sq // 2
+        box_w = int(sq * 1.2)
+        box_h = int(sq * 1.4)
+        gap = 8
+
+        # Promote box (left), Keep box (right)
+        left_x = cx - box_w - gap // 2
+        right_x = cx + gap // 2
+
+        # Clamp to screen bounds
+        if left_x < 4:
+            left_x = 4
+            right_x = left_x + box_w + gap
+        max_x = self.board_renderer.surface.get_width() - box_w - 4
+        if right_x > max_x:
+            right_x = max_x
+            left_x = right_x - box_w - gap
+
+        top_y = cy - box_h // 2
+        if top_y < 4:
+            top_y = 4
+        max_y = self.board_renderer.surface.get_height() - box_h - 4
+        if top_y > max_y:
+            top_y = max_y
+
+        # Draw "Promote" box
+        promo_rect = pygame.Rect(left_x, top_y, box_w, box_h)
+        pygame.draw.rect(self.board_renderer.surface, (220, 180, 120), promo_rect, border_radius=6)
+        pygame.draw.rect(self.board_renderer.surface, (80, 50, 20), promo_rect, 2, border_radius=6)
+
+        # Draw "Keep" box
+        keep_rect = pygame.Rect(right_x, top_y, box_w, box_h)
+        pygame.draw.rect(self.board_renderer.surface, (200, 200, 190), keep_rect, border_radius=6)
+        pygame.draw.rect(self.board_renderer.surface, (80, 50, 20), keep_rect, 2, border_radius=6)
+
+        # Labels
+        try:
+            label_font = pygame.font.SysFont("Arial", 14, bold=True)
+            promo_label = label_font.render("Promote", True, (180, 30, 30))
+            keep_label = label_font.render("Keep", True, (40, 40, 40))
+            self.board_renderer.surface.blit(
+                promo_label,
+                (promo_rect.centerx - promo_label.get_width() // 2,
+                 promo_rect.bottom - promo_label.get_height() - 4),
+            )
+            self.board_renderer.surface.blit(
+                keep_label,
+                (keep_rect.centerx - keep_label.get_width() // 2,
+                 keep_rect.bottom - keep_label.get_height() - 4),
+            )
+        except Exception:
+            pass
+
+        # Store rects for click handling
+        dlg["promo_rect"] = promo_rect
+        dlg["keep_rect"] = keep_rect
+
+    def _handle_promotion_click(self, x, y):
+        """Handle click during promotion dialog. Returns True if handled."""
+        dlg = getattr(self, "_promotion_dialog", None)
+        if dlg is None:
+            return False
+
+        promo_rect = dlg.get("promo_rect")
+        keep_rect = dlg.get("keep_rect")
+
+        if promo_rect and promo_rect.collidepoint(x, y):
+            self._promotion_dialog = None
+            self.execute_move(dlg["promo_move"])
+            return True
+        elif keep_rect and keep_rect.collidepoint(x, y):
+            self._promotion_dialog = None
+            self.execute_move(dlg["normal_move"])
+            return True
+        else:
+            # Click outside — cancel promotion
+            self._promotion_dialog = None
+            self._deselect_piece()
+            return True
 
     # ------------------------------------------------------------------
     # Move execution
@@ -1032,6 +1154,9 @@ class GameApp:
             move_history=self.move_history,
             player_colors=self._player_colors,
         )
+
+        # Draw promotion dialog overlay if active
+        self._draw_promotion_dialog()
 
         pygame.display.flip()
 
