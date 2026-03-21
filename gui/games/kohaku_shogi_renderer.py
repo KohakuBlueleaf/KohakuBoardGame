@@ -92,30 +92,38 @@ _HAND_PIECES = [ROOK, BISHOP, GOLD, SILVER, KNIGHT, LANCE, PAWN]
 
 
 def _pentagon_points(cx, cy, w, h, pointing_up):
-    """Return vertices for a shogi-piece-shaped pentagon."""
-    hw = w / 2
+    """Return vertices for a shogi-piece-shaped pentagon.
+
+    Traditional shogi piece shape: narrow tip (top for sente),
+    wide flat base (bottom for sente). All interior angles > 90°.
+    The base is wider than the shoulders.
+    """
+    # Base (bottom for sente) is the widest part
+    base_hw = w * 0.50       # half-width of base
+    shoulder_hw = w * 0.42   # half-width at shoulder
+    tip_y_frac = 0.0         # tip at the very top
+    shoulder_y_frac = 0.28   # shoulder ~28% from tip
     hh = h / 2
-    shoulder = hw * 0.85
 
     if pointing_up:
         top = cy - hh
         bot = cy + hh
         points = [
-            (cx, top),
-            (cx + shoulder, top + 0.3 * h),
-            (cx + hw * 0.82, bot),
-            (cx - hw * 0.82, bot),
-            (cx - shoulder, top + 0.3 * h),
+            (cx, top),                                     # tip (narrow top)
+            (cx + shoulder_hw, top + shoulder_y_frac * h),  # right shoulder
+            (cx + base_hw, bot),                            # right base (widest)
+            (cx - base_hw, bot),                            # left base (widest)
+            (cx - shoulder_hw, top + shoulder_y_frac * h),  # left shoulder
         ]
     else:
         top = cy - hh
         bot = cy + hh
         points = [
-            (cx, bot),
-            (cx - shoulder, bot - 0.3 * h),
-            (cx - hw * 0.82, top),
-            (cx + hw * 0.82, top),
-            (cx + shoulder, bot - 0.3 * h),
+            (cx, bot),                                     # tip (narrow bottom)
+            (cx - shoulder_hw, bot - shoulder_y_frac * h),  # left shoulder
+            (cx - base_hw, top),                            # left base (widest)
+            (cx + base_hw, top),                            # right base (widest)
+            (cx + shoulder_hw, bot - shoulder_y_frac * h),  # right shoulder
         ]
     return points
 
@@ -221,20 +229,22 @@ class KohakuShogiRenderer:
                 self._piece_cache[(player, pt)] = self._render_piece(player, pt, 255)
 
     def _render_piece(self, player, piece_type, alpha=255):
-        w = self._piece_w
-        h = self._piece_h
-        surf = pygame.Surface((w + 4, h + 4), pygame.SRCALPHA)
-        cx = (w + 4) / 2
-        cy = (h + 4) / 2
+        # Render at 2x then downscale for anti-aliasing
+        scale = 2
+        w = self._piece_w * scale
+        h = self._piece_h * scale
+        surf_big = pygame.Surface((w + 4 * scale, h + 4 * scale), pygame.SRCALPHA)
+        cx = (w + 4 * scale) / 2
+        cy = (h + 4 * scale) / 2
 
         pointing_up = player == 0
         pts = _pentagon_points(cx, cy, w, h, pointing_up)
 
         bg = _SENTE_BG if player == 0 else _GOTE_BG
         bg_alpha = (bg[0], bg[1], bg[2], alpha)
-        pygame.draw.polygon(surf, bg_alpha, pts)
+        pygame.draw.polygon(surf_big, bg_alpha, pts)
         outline_alpha = (_PIECE_OUTLINE[0], _PIECE_OUTLINE[1], _PIECE_OUTLINE[2], alpha)
-        pygame.draw.polygon(surf, outline_alpha, pts, 2)
+        pygame.draw.polygon(surf_big, outline_alpha, pts, max(2, scale))
 
         is_promoted = piece_type in _PROMOTED_TYPES
         text_color = _PROMOTED_TEXT if is_promoted else _NORMAL_TEXT
@@ -245,19 +255,31 @@ class KohakuShogiRenderer:
         else:
             char = PIECE_NAMES.get(piece_type, "?")
 
+        # Render text at 2x size for the big surface
         try:
-            text_surf, text_rect = self._piece_font.render(
-                char, fgcolor=text_color_alpha
+            big_font = pygame.freetype.SysFont(
+                self._piece_font.name if hasattr(self._piece_font, 'name') else None,
+                int(self._piece_font.size * scale),
             )
+            text_surf, text_rect = big_font.render(char, fgcolor=text_color_alpha)
         except Exception:
-            text_surf, text_rect = self._piece_font.render(
-                "?", fgcolor=text_color_alpha
-            )
+            try:
+                text_surf, text_rect = self._piece_font.render(
+                    char, fgcolor=text_color_alpha
+                )
+            except Exception:
+                text_surf, text_rect = self._piece_font.render(
+                    "?", fgcolor=text_color_alpha
+                )
 
         tx = cx - text_rect.width / 2
         ty = cy - text_rect.height / 2
-        surf.blit(text_surf, (tx, ty))
+        surf_big.blit(text_surf, (tx, ty))
 
+        # Downscale 2x → 1x with smoothing for anti-aliased result
+        final_w = self._piece_w + 4
+        final_h = self._piece_h + 4
+        surf = pygame.transform.smoothscale(surf_big, (final_w, final_h))
         return surf
 
     # ------------------------------------------------------------------ #
