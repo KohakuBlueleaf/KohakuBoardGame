@@ -1281,7 +1281,7 @@ class GameApp:
         b_algo_var = tk.StringVar(value=self.black["algo"])
         w_depth_var = tk.IntVar(value=self.white["depth"])
         b_depth_var = tk.IntVar(value=self.black["depth"])
-        time_var = tk.IntVar(value=self.time_limit)
+        time_var = tk.DoubleVar(value=self.time_limit)
         white_params = dict(self.white["params"])
         black_params = dict(self.black["params"])
         applied = [False]
@@ -1347,7 +1347,7 @@ class GameApp:
         ttk.Label(dialog, text="Time limit (s):").grid(
             row=2, column=0, sticky="w", **pad
         )
-        ttk.Spinbox(dialog, from_=1, to=30, textvariable=time_var, width=5).grid(
+        ttk.Spinbox(dialog, from_=0.1, to=30, increment=0.1, textvariable=time_var, width=5).grid(
             row=2, column=1, sticky="w", **pad
         )
 
@@ -1452,7 +1452,7 @@ class GameApp:
                 "depth": max(0, min(20, b_depth_var.get())),
             }
         )
-        self.time_limit = max(1, min(30, time_var.get()))
+        self.time_limit = max(0.1, min(30, time_var.get()))
         self.new_game()
 
     def open_settings(self):
@@ -1496,7 +1496,7 @@ class GameApp:
             )
         )
         analyze_algo_var = tk.StringVar(value=self.analyze["algo"])
-        time_var = tk.IntVar(value=self.time_limit)
+        time_var = tk.DoubleVar(value=self.time_limit)
         analyze_params = dict(self.analyze["params"])
         applied = [False]
 
@@ -1542,7 +1542,7 @@ class GameApp:
         ttk.Label(dialog, text="Time limit (s):").grid(
             row=1, column=0, sticky="w", **pad
         )
-        ttk.Spinbox(dialog, from_=1, to=30, textvariable=time_var, width=5).grid(
+        ttk.Spinbox(dialog, from_=0.1, to=30, increment=0.1, textvariable=time_var, width=5).grid(
             row=1, column=1, sticky="w", **pad
         )
 
@@ -1593,7 +1593,7 @@ class GameApp:
         self.analyze["engine"] = new_analyze_engine
         self.analyze["algo"] = analyze_algo_var.get()
         self.analyze["params"] = analyze_params
-        self.time_limit = max(1, min(30, time_var.get()))
+        self.time_limit = max(0.1, min(30, time_var.get()))
 
         # Restart analysis if it was running
         if self.analyze["enabled"]:
