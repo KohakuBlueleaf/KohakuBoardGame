@@ -220,26 +220,33 @@ static void play_game(
 
         /* Decide which move to play */
         Move chosen_move;
+        int search_score = 0;
         bool jitter = (rng_float() < cfg.epsilon);
 
         if(jitter){
             /* Random legal move */
             int idx = rng_int((int)game->legal_actions.size());
             chosen_move = game->legal_actions[idx];
+            /* Still run a search to get a proper score for this position */
+            SearchContext score_ctx;
+            search_score = PVS::search(game, cfg.depth, score_ctx).score;
         }else{
-            /* PVS best move */
+            /* PVS best move + search score */
             SearchContext search_ctx;
-            chosen_move = PVS::search(game, cfg.depth, search_ctx).best_move;
+            auto result = PVS::search(game, cfg.depth, search_ctx);
+            chosen_move = result.best_move;
+            search_score = result.score;
         }
 
         /* Make the move */
         State* next = game->next_state(chosen_move);
         step++;
 
-        /* Record the position if it's not terminal */
+        /* Record position after the move with search score */
         if(next->game_state != WIN){
-            /* Direct eval — no search. Full eval function for training labels. */
-            int score = next->evaluate(true, true, true);
+            /* search_score is from game->player perspective (before move),
+               negate for next->player perspective (after move) */
+            int score = -search_score;
 
             if(score > 32767){
                 score = 32767;
