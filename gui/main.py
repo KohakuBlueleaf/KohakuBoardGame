@@ -1011,7 +1011,7 @@ class GameApp:
             self._trigger_ai_if_needed()
 
     def _trigger_ai_if_needed(self):
-        if self.game_result is not None or self.ai_thinking or self._paused:
+        if not self._game_started or self.game_result is not None or self.ai_thinking or self._paused:
             return
         player = self.game_state.player
         side = self.white if player == 0 else self.black
