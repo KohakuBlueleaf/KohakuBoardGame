@@ -20,8 +20,8 @@ try:
         P_BISHOP,
         P_ROOK,
         PIECE_NAMES,
-        _DROP_PIECE_CHAR,
-        _CHAR_TO_DROP_PIECE,
+        DROP_PIECE_CHAR,
+        CHAR_TO_DROP_PIECE,
     )
 except ImportError:
     raise ImportError(
@@ -85,7 +85,7 @@ def uci_to_move(uci_str):
     # Drop move: X*rc (e.g. P*c3)
     if len(uci_str) >= 3 and uci_str[1] == "*":
         piece_char = uci_str[0].upper()
-        pt = _CHAR_TO_DROP_PIECE.get(piece_char)
+        pt = CHAR_TO_DROP_PIECE.get(piece_char)
         if pt is None:
             raise ValueError(f"Invalid drop piece: {piece_char}")
         col = ord(uci_str[2].lower()) - ord("a")
@@ -122,7 +122,7 @@ def move_to_uci(move):
 
     # Drop move
     if fr == BOARD_H:
-        piece_char = _DROP_PIECE_CHAR.get(fc, "?")
+        piece_char = DROP_PIECE_CHAR.get(fc, "?")
         col_ch = chr(ord("a") + tc)
         row_ch = str(BOARD_H - tr)
         return f"{piece_char}*{col_ch}{row_ch}"

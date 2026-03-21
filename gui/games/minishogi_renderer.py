@@ -25,7 +25,7 @@ try:
         BOARD_SIZE,
         PIECE_SYMBOLS,
         PIECE_NAMES,
-        _DROP_PIECE_CHAR,
+        DROP_PIECE_CHAR,
     )
 except ImportError:
     from games.minishogi_engine import (
@@ -43,7 +43,7 @@ except ImportError:
         BOARD_SIZE,
         PIECE_SYMBOLS,
         PIECE_NAMES,
-        _DROP_PIECE_CHAR,
+        DROP_PIECE_CHAR,
     )
 
 # Colors for pieces

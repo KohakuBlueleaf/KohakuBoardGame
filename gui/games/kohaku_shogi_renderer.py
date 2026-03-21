@@ -30,8 +30,8 @@ try:
         BOARD_W,
         PIECE_SYMBOLS,
         PIECE_NAMES,
-        _DROP_PIECE_CHAR,
-        _CHAR_TO_DROP_PIECE,
+        DROP_PIECE_CHAR,
+        CHAR_TO_DROP_PIECE,
     )
 except ImportError:
     from games.kohaku_shogi_engine import (
@@ -54,8 +54,8 @@ except ImportError:
         BOARD_W,
         PIECE_SYMBOLS,
         PIECE_NAMES,
-        _DROP_PIECE_CHAR,
-        _CHAR_TO_DROP_PIECE,
+        DROP_PIECE_CHAR,
+        CHAR_TO_DROP_PIECE,
     )
 
 # Colors for pieces
