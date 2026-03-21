@@ -23,8 +23,29 @@ from .loss import dual_loss, nnue_loss, SCORE_SCALE
 from .model import GameNNUE
 
 
+class EMA:
+    """Exponential Moving Average of model parameters."""
+
+    def __init__(self, model: torch.nn.Module, decay: float = 0.999):
+        self.decay = decay
+        self.shadow = {k: v.clone().detach() for k, v in model.state_dict().items()}
+
+    @torch.no_grad()
+    def update(self, model: torch.nn.Module):
+        d = self.decay
+        for k, v in model.state_dict().items():
+            self.shadow[k].mul_(d).add_(v, alpha=1 - d)
+
+    def state_dict(self):
+        return self.shadow
+
+    def apply(self, model: torch.nn.Module):
+        """Load EMA weights into model."""
+        model.load_state_dict(self.shadow)
+
+
 class NNUETrainer:
-    """Step-based NNUE trainer with val, checkpointing, and wandb."""
+    """Step-based NNUE trainer with EMA, val, checkpointing, and wandb."""
 
     def __init__(
         self,
@@ -37,7 +58,8 @@ class NNUETrainer:
         policy_weight: float = 0.1,
         warmup_steps: int = 1000,
         total_steps: int = 100000,
-        val_every_n_steps: int = 1000,
+        val_every_n_steps: int = 5000,
+        ema_decay: float = 0.999,
         output_path: str = "models/nnue.pt",
         device: torch.device = torch.device("cpu"),
         wandb_run=None,
@@ -65,6 +87,7 @@ class NNUETrainer:
             },
         )
 
+        self.ema = EMA(model, decay=ema_decay)
         self.global_step = 0
         self.best_val_loss = float("inf")
         self.best_path = output_path.replace(".pt", "_best.pt")
@@ -98,13 +121,18 @@ class NNUETrainer:
         loss.backward()
         self.optimizer.step()
         self.scheduler.step()
+        self.ema.update(self.model)
         self.global_step += 1
         return loss.item()
 
     @torch.no_grad()
     def validate(self) -> dict:
-        """Run full validation. Returns metrics dict."""
+        """Run validation with EMA weights. Returns metrics dict."""
+        # Swap in EMA weights
+        orig_state = {k: v.clone() for k, v in self.model.state_dict().items()}
+        self.ema.apply(self.model)
         self.model.eval()
+
         total_loss = 0.0
         total_mae = 0.0
         total_correct = 0
@@ -126,6 +154,9 @@ class NNUETrainer:
                 total_decisive += decisive.sum().item()
             n += 1
 
+        # Restore original weights
+        self.model.load_state_dict(orig_state)
+
         metrics = {
             "loss": total_loss / max(n, 1),
             "mae_cp": total_mae / max(n, 1),
@@ -139,10 +170,10 @@ class NNUETrainer:
     # ------------------------------------------------------------------
 
     def save_best(self, val_loss: float):
-        """Save model if val loss improved."""
+        """Save EMA weights if val loss improved."""
         if val_loss < self.best_val_loss:
             self.best_val_loss = val_loss
-            torch.save(self.model.state_dict(), self.best_path)
+            torch.save(self.ema.state_dict(), self.best_path)
             return True
         return False
 
@@ -391,6 +422,7 @@ def train(args) -> None:
         warmup_steps=warmup,
         total_steps=total_steps,
         val_every_n_steps=val_interval,
+        ema_decay=args.ema_decay,
         output_path=args.output,
         device=device,
         wandb_run=wandb_run,
@@ -408,9 +440,11 @@ def train(args) -> None:
     print(f"  MAE (cp):      {metrics['mae_cp']:.1f}")
     print(f"  Params:        {total_params:,}")
 
+    # Export using EMA weights
+    trainer.ema.apply(model)
     torch.save(model.state_dict(), args.output)
-    print(f"  Final model: {args.output}")
-    print(f"  Best model:  {trainer.best_path}")
+    print(f"  Final model (EMA): {args.output}")
+    print(f"  Best model (EMA):  {trainer.best_path}")
 
     export_binary_weights(model, args.export, gcfg)
     quant_path = args.export.replace(".bin", "_quant.bin")

@@ -106,6 +106,12 @@ def main() -> None:
         default=-1,
         help="LR warmup steps (default: -1 = auto 5%% of total, max 2000)",
     )
+    parser.add_argument(
+        "--ema-decay",
+        type=float,
+        default=0.999,
+        help="EMA decay for model weights (default: 0.999)",
+    )
 
     # --- wandb ---
     parser.add_argument(
