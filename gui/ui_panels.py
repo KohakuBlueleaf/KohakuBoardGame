@@ -94,17 +94,17 @@ class SidePanel:
         btn3_w = (cfg.PANEL_WIDTH - 2 * self._PAD_LEFT - 2 * self._BTN_GAP) // 3
         bx = cfg.PANEL_X + self._PAD_LEFT
 
-        # Bottom row: Reset | New Game | Settings
+        # Bottom row: Analyze | Undo | Settings
         btn_y2 = cfg.PANEL_Y + cfg.PANEL_H - self._BTN_BOTTOM_MARGIN - self._BTN_HEIGHT
-        self.btn_reset = Button(
-            bx, btn_y2, btn3_w, self._BTN_HEIGHT, "Reset", self.font_btn
+        self.btn_analyze = Button(
+            bx, btn_y2, btn3_w, self._BTN_HEIGHT, "Analyze", self.font_btn
         )
-        self.btn_new_game = Button(
+        self.btn_undo = Button(
             bx + btn3_w + self._BTN_GAP,
             btn_y2,
             btn3_w,
             self._BTN_HEIGHT,
-            "New Game",
+            "Undo",
             self.font_btn,
         )
         self.btn_settings = Button(
@@ -116,25 +116,25 @@ class SidePanel:
             self.font_btn,
         )
 
-        # Top row: Undo | Analyze | Stop
+        # Top row: New | Stop | Reset
         btn_y1 = btn_y2 - self._BTN_HEIGHT - self._BTN_GAP
-        self.btn_undo = Button(
-            bx, btn_y1, btn3_w, self._BTN_HEIGHT, "Undo", self.font_btn
+        self.btn_new_game = Button(
+            bx, btn_y1, btn3_w, self._BTN_HEIGHT, "New", self.font_btn
         )
-        self.btn_analyze = Button(
+        self.btn_stop = Button(
             bx + btn3_w + self._BTN_GAP,
             btn_y1,
             btn3_w,
             self._BTN_HEIGHT,
-            "Analyze",
+            "Stop",
             self.font_btn,
         )
-        self.btn_stop = Button(
+        self.btn_reset = Button(
             bx + 2 * (btn3_w + self._BTN_GAP),
             btn_y1,
             btn3_w,
             self._BTN_HEIGHT,
-            "Stop",
+            "Reset",
             self.font_btn,
         )
 
@@ -270,23 +270,23 @@ class SidePanel:
         self.btn_undo.enabled = not gaming
         self.btn_undo.draw(self.surface, mouse_pos)
 
-        # Analyze: disabled during gaming, green when active
-        self.btn_analyze.enabled = not gaming
-        self.btn_analyze.active = analyze_enabled
-        self.btn_analyze.draw(self.surface, mouse_pos)
-
-        # Stop: only enabled during gaming
+        # Top row: New | Stop | Reset
+        self.btn_new_game.draw(self.surface, mouse_pos)
         self.btn_stop.enabled = gaming
         self.btn_stop.draw(self.surface, mouse_pos)
+        self.btn_reset.draw(self.surface, mouse_pos)
 
-        top_btn = self.btn_undo
+        top_btn = self.btn_new_game
         sep_y = top_btn.rect.y - self._SECTION_GAP - 2
         x1 = cfg.PANEL_X + self._SEPARATOR_INSET
         x2 = cfg.PANEL_X + cfg.PANEL_WIDTH - self._SEPARATOR_INSET
         pygame.draw.line(self.surface, cfg.COLOR_TEXT_DIM, (x1, sep_y), (x2, sep_y), 1)
 
-        self.btn_reset.draw(self.surface, mouse_pos)
-        self.btn_new_game.draw(self.surface, mouse_pos)
+        # Bottom row: Analyze | Undo | Settings
+        self.btn_analyze.enabled = not gaming
+        self.btn_analyze.active = analyze_enabled
+        self.btn_analyze.draw(self.surface, mouse_pos)
+        self.btn_undo.draw(self.surface, mouse_pos)
         self.btn_settings.draw(self.surface, mouse_pos)
 
     # ==================================================================
