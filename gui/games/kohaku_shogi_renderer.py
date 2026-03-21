@@ -276,9 +276,10 @@ class KohakuShogiRenderer:
         if player == 1:
             text_surf = pygame.transform.rotate(text_surf, 180)
 
-        # Position text slightly below center (toward the base of the piece)
+        # Position text slightly toward base (down for sente, up for gote)
+        base_offset = h * 0.06 if player == 0 else -h * 0.06
         tx = cx - text_rect.width / 2
-        ty = cy - text_rect.height / 2 + h * 0.06  # shift 6% toward base
+        ty = cy - text_rect.height / 2 + base_offset
 
         surf_big.blit(text_surf, (tx, ty))
 
