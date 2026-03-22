@@ -3,6 +3,7 @@
 #include "config.hpp"
 #include "state.hpp"
 #include "./policy/alphabeta.hpp"
+#include "./policy/game_history.hpp"
 #ifdef USE_NNUE
 #include "./nnue/nnue.hpp"
 #endif
@@ -25,6 +26,7 @@ int main(){
     std::cout << std::endl;
 
     int step = 0;
+    GameHistory game_history;
     while(true){
         /* === Player 0's turn === */
         step += 1;
@@ -32,11 +34,12 @@ int main(){
             break;
         }
 
+        game_history.push(game->hash());
         SearchContext ctx_0;
-        auto action_0 = AlphaBeta::search(game, 9, ctx_0).best_move;
+        auto action_0 = AlphaBeta::search(game, 9, game_history, ctx_0).best_move;
         std::cout << "\nstep " << step << " Player 0's turn\n";
         std::cout << action_0.first.first << ", " << action_0.first.second << " -> "
-                  << action_0.second.first << ", " << action_0.second.second << "\n";
+            << action_0.second.first << ", " << action_0.second.second << "\n";
 
         State* prev = game;
         game = game->next_state(action_0);
@@ -50,11 +53,12 @@ int main(){
             break;
         }
 
+        game_history.push(game->hash());
         SearchContext ctx_1;
-        auto action_1 = AlphaBeta::search(game, 9, ctx_1).best_move;
+        auto action_1 = AlphaBeta::search(game, 9, game_history, ctx_1).best_move;
         std::cout << "\nstep " << step << " Player 1's turn\n";
         std::cout << action_1.first.first << ", " << action_1.first.second << " -> "
-                  << action_1.second.first << ", " << action_1.second.second << "\n";
+            << action_1.second.first << ", " << action_1.second.second << "\n";
 
         prev = game;
         game = game->next_state(action_1);
@@ -73,7 +77,7 @@ int main(){
     Move win_action = game->legal_actions.back();
     std::cout << "\nstep " << step << " Player " << game->player << " WIN!\n";
     std::cout << win_action.first.first << ", " << win_action.first.second << " -> "
-              << win_action.second.first << ", " << win_action.second.second << "\n";
+        << win_action.second.first << ", " << win_action.second.second << "\n";
 
     State* prev = game;
     game = game->next_state(win_action);

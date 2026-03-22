@@ -17,11 +17,15 @@
 #define NUM_PT_NO_KING  5
 #define KING_ID         6
 
-/* === MVV-LVA piece values for move ordering === */
-#define NUM_PIECE_VALS 7
-static const int PIECE_VAL[NUM_PIECE_VALS] = {
-    /* EMPTY */ 0, /* PAWN */ 2, /* ROOK */ 6, /* KNIGHT */ 7,
-    /* BISHOP */ 8, /* QUEEN */ 20, /* KING */ 100,
+/* MVV-LVA piece values for move ordering (indexed by piece type) */
+static const int PIECE_VALUES[] = {
+    0,   /* EMPTY=0 */
+    10,  /* PAWN=1 */
+    50,  /* ROOK=2 */
+    30,  /* KNIGHT=3 */
+    30,  /* BISHOP=4 */
+    90,  /* QUEEN=5 */
+    900, /* KING=6 */
 };
 
 /* === Piece display === */

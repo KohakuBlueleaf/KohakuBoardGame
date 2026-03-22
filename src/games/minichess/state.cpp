@@ -5,6 +5,7 @@
 
 #include "./state.hpp"
 #include "config.hpp"
+#include "../../policy/game_history.hpp"
 #ifdef USE_NNUE
 #include "../../nnue/nnue.hpp"
 #endif
@@ -97,7 +98,11 @@ static const int pst[6][BOARD_H][BOARD_W] = {
 // King tropism weights
 static const int tropism_w[7] = {0, 0, 3, 3, 2, 5, 0};
 
-static int king_tropism(int piece_type, int pr, int pc, int ekr, int ekc){
+static int king_tropism(
+    int piece_type,
+    int pr, int pc,
+    int ekr, int ekc
+){
     int dist = std::max(std::abs(pr - ekr), std::abs(pc - ekc));
     if(dist <= 2){
         return tropism_w[piece_type] * (3 - dist);
@@ -109,7 +114,13 @@ static int king_tropism(int piece_type, int pr, int pc, int ekr, int ekc){
 /*============================================================
  * evaluate() — runtime-selectable eval strategy
  *============================================================*/
-int State::evaluate(bool use_nnue, bool use_kp_eval, bool use_mobility){
+int State::evaluate(
+    bool use_nnue,
+    bool use_kp_eval,
+    bool use_mobility,
+    const GameHistory* history
+){
+    (void)history;
     if(this->game_state == WIN){
         score = P_MAX;
         return score;
@@ -216,8 +227,6 @@ State* State::next_state(const Move& move){
     next.board[this->player][to.first][to.second] = moved;
 
     State* next_state = new State(next, 1-this->player);
-    next_state->inherit_history(this);
-
     if(this->game_state != WIN){
         next_state->get_legal_actions();
     }
@@ -621,12 +630,6 @@ void State::get_legal_actions_bitboard(){
  * Dispatcher
  *============================================================*/
 void State::get_legal_actions(){
-    /* 4-fold repetition → draw */
-    if(check_repetition()){
-        game_state = DRAW;
-        legal_actions.clear();
-        return;
-    }
     #ifdef USE_BITBOARD
     get_legal_actions_bitboard();
     #else
@@ -816,4 +819,13 @@ std::string State::cell_display(int row, int col) const{
     }else{
         return " . ";
     }
+}
+
+/* === Repetition: chess 3-fold rule === */
+bool State::check_repetition(const GameHistory& history, int& out_score) const {
+    if(history.count(hash()) >= 3){
+        out_score = 0;  /* draw */
+        return true;
+    }
+    return false;
 }

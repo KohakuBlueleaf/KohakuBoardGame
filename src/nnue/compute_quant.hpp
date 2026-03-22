@@ -201,8 +201,10 @@ inline void screlu_ft_q(
         shifted = _mm256_min_epi16(shifted, max_out);
         __m256i packed = _mm256_packus_epi16(shifted, zero);
         packed = _mm256_permute4x64_epi64(packed, 0xD8);
-        _mm_storeu_si128((__m128i*)(output + i),
-                         _mm256_castsi256_si128(packed));
+        _mm_storeu_si128(
+            (__m128i*)(output + i),
+            _mm256_castsi256_si128(packed)
+        );
     }
     for(; i < size; ++i){
         int v = input[i];

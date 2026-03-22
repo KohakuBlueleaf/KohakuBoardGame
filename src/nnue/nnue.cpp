@@ -89,8 +89,10 @@ bool Model::load(const char* path){
         return true;
     };
 
-    if(!read_i32(version) || !read_i32(feature_size)
-        || !read_i32(accum_size) || !read_i32(l1_size) || !read_i32(l2_size)){
+    if(
+        !read_i32(version) || !read_i32(feature_size)
+        || !read_i32(accum_size) || !read_i32(l1_size) || !read_i32(l2_size)
+    ){
         std::fclose(f);
         return false;
     }
@@ -162,8 +164,10 @@ bool Model::load_from_memory(const unsigned char* data, size_t size){
     copy_floats(out_weight, l2_size);
     copy_floats(out_bias,   1);
 
-    std::fprintf(stderr, "nnue: loaded embedded (v%d, feat=%d, accum=%d)\n",
-                 version, feature_size, accum_size);
+    std::fprintf(
+        stderr, "nnue: loaded embedded (v%d, feat=%d, accum=%d)\n",
+        version, feature_size, accum_size
+    );
     return true;
 }
 

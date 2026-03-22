@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <sstream>
 
 
 /* === Zobrist hashing for Gomoku === */
@@ -502,7 +503,11 @@ static ThreatCounts count_threats(const Board& board, int who){
  * player, as if a stone of `who` were placed there.
  * Used for move ordering — much cheaper than full board scan.
  *------------------------------------------------------------*/
-static ThreatCounts count_threats_at(const Board& board, int r, int c, int who){
+static ThreatCounts count_threats_at(
+    const Board& board,
+    int r, int c,
+    int who
+){
     if(!pattern6_ready) init_pattern6_table();
 
     ThreatCounts t;
@@ -830,7 +835,12 @@ State* State::next_state(const Move& move){
  *   OPP has half-4+open-3-> loses                   -> -(P_MAX-20)
  *   OPP has 2+ open-3    -> loses                   -> -(P_MAX-20)
  *============================================================*/
-int State::evaluate(bool /*use_nnue*/, bool /*use_kp*/, bool /*use_mobility*/){
+int State::evaluate(
+    bool /*use_nnue*/,
+    bool /*use_kp*/,
+    bool /*use_mobility*/,
+    const GameHistory* /*history*/
+){
     if(game_state == WIN){
         return P_MAX;  /* should not happen for gomoku */
     }
@@ -976,4 +986,10 @@ void State::decode_board(const std::string& s, int side_to_move){
         c++;
     }
     get_legal_actions();
+}
+
+
+/* === Repetition: gomoku has no repetition rule === */
+bool State::check_repetition(const GameHistory& /*history*/, int& /*out_score*/) const {
+    return false;
 }

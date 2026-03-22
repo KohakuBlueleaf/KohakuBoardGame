@@ -13,6 +13,7 @@
 #include "config.hpp"
 #include "search_types.hpp"
 #include "../policy/registry.hpp"
+#include "../policy/game_history.hpp"
 #include "../policy/pvs/tt.hpp"
 
 #ifdef USE_NNUE
@@ -27,12 +28,14 @@ namespace ubgi {
 static Board              g_board;
 static int                g_player = 0;
 static int                g_step   = 0;
+static GameHistory        g_history;
 static const AlgoEntry*   g_algo   = nullptr;
 static ParamMap           g_params;
 static SearchContext      g_ctx;
 static std::thread        g_search_thread;
 static std::mutex         g_io_mutex;
 static std::atomic<bool>  g_searching{false};
+static std::atomic<bool>  g_bestmove_sent{true};
 static Move               g_best_move;
 static int                g_multi_pv = 1;
 #ifdef USE_NNUE
@@ -98,8 +101,10 @@ std::string move_to_str(const Move& m){
 #if NUM_HAND_TYPES > 0
         /* Shogi-style promotion: to.first = actual_row + BOARD_H */
         size_t to_row = m.second.first - BOARD_H;
-        std::string s = sq_to_str(m.first.first, m.first.second)
-                      + sq_to_str(to_row, m.second.second);
+        std::string s = (
+            sq_to_str(m.first.first, m.first.second)
+            + sq_to_str(to_row, m.second.second)
+        );
         s += '+';
         return s;
 #else
@@ -107,8 +112,10 @@ std::string move_to_str(const Move& m){
          * promo_idx: 1=Queen, 2=Rook, 3=Bishop, 4=Knight */
         int promo_idx = static_cast<int>(m.second.first / BOARD_H);
         size_t to_row = m.second.first % BOARD_H;
-        std::string s = sq_to_str(m.first.first, m.first.second)
-                      + sq_to_str(to_row, m.second.second);
+        std::string s = (
+            sq_to_str(m.first.first, m.first.second)
+            + sq_to_str(to_row, m.second.second)
+        );
         static const char promo_chars[] = "?qrbn";
         if(promo_idx >= 1 && promo_idx <= 4){
             s += promo_chars[promo_idx];
@@ -116,8 +123,10 @@ std::string move_to_str(const Move& m){
         return s;
 #endif
     }
-    std::string s = sq_to_str(m.first.first, m.first.second)
-                  + sq_to_str(m.second.first, m.second.second);
+    std::string s = (
+        sq_to_str(m.first.first, m.first.second)
+        + sq_to_str(m.second.first, m.second.second)
+    );
     return s;
 }
 
@@ -143,8 +152,10 @@ Move str_to_move(const std::string& s){
         int pt = drop_letter_to_type(s[0]);
         size_t pos = 2;
         auto [row, col] = parse_sq(s, pos);
-        return Move(Point(static_cast<size_t>(BOARD_H), static_cast<size_t>(pt)),
-                     Point(row, col));
+        return Move(
+            Point(static_cast<size_t>(BOARD_H), static_cast<size_t>(pt)),
+            Point(row, col)
+        );
     }
     /* Parse first square */
     size_t pos = 0;
@@ -190,6 +201,8 @@ void set_position(
     std::string token;
     iss >> token; /* "startpos" or "board" */
 
+    g_history.clear();
+
     if(token == "board"){
         /* position board <encoded_board> <side: 0 or 1> [moves ...] */
         std::string board_str;
@@ -208,6 +221,12 @@ void set_position(
         step = 0;
     }
 
+    /* Push the starting position hash */
+    {
+        State start_state(board, player);
+        g_history.push(start_state.hash());
+    }
+
     /* Replay any trailing moves */
     std::string moves_token;
     if(iss >> moves_token && moves_token == "moves"){
@@ -223,6 +242,8 @@ void set_position(
             board = next->board;
             player = next->player;
             step++;
+            /* Push each resulting position hash into history */
+            g_history.push(next->hash());
             delete next;
         }
     }
@@ -254,7 +275,8 @@ static void do_search(
     uint32_t my_gen,
     SearchContext ctx,
     Board board,
-    int player
+    int player,
+    GameHistory history
 ){
     State state(board, player);
     state.get_legal_actions();
@@ -272,6 +294,7 @@ static void do_search(
     if(state.legal_actions.empty()){
         if(alive()){
             send("bestmove 0000");
+            g_bestmove_sent = true;
         }
         g_searching = false;
         return;
@@ -279,6 +302,7 @@ static void do_search(
     if(state.game_state == WIN){
         if(alive()){
             send("bestmove " + move_to_str(state.legal_actions[0]));
+            g_bestmove_sent = true;
         }
         g_searching = false;
         return;
@@ -328,7 +352,7 @@ static void do_search(
         }
 
         auto depth_start = std::chrono::high_resolution_clock::now();
-        SearchResult result = g_algo->search(&state, depth, ctx);
+        SearchResult result = g_algo->search(&state, depth, history, ctx);
 
         if(!alive() && depth > 1){
             break;
@@ -352,14 +376,14 @@ static void do_search(
 
         std::ostringstream info;
         info << "info depth " << depth
-             << " seldepth " << result.seldepth;
+            << " seldepth " << result.seldepth;
         if(multi_pv > 1){
             info << " multipv 1";
         }
         info << " score cp " << result.score
-             << " nodes " << total_nodes
-             << " time " << total_ms
-             << " nps " << nps;
+            << " nodes " << total_nodes
+            << " time " << total_ms
+            << " nps " << nps;
         if(!result.pv.empty()){
             info << " pv " << format_pv(result.pv);
         }
@@ -393,7 +417,7 @@ static void do_search(
 
                 SearchContext sub_ctx;
                 sub_ctx.params = ctx.params;
-                SearchResult sub = g_algo->search(&state, depth, sub_ctx);
+                SearchResult sub = g_algo->search(&state, depth, history, sub_ctx);
 
                 if(!alive()){
                     break;
@@ -407,15 +431,18 @@ static void do_search(
                 ).count();
 
                 std::ostringstream sub_info;
+                uint64_t sub_nps = (
+                    (total_ms2 > 0)
+                    ? (total_nodes * 1000ULL / static_cast<uint64_t>(total_ms2))
+                    : 0
+                );
                 sub_info << "info depth " << depth
-                         << " seldepth " << sub.seldepth
-                         << " multipv " << mpv
-                         << " score cp " << sub.score
-                         << " nodes " << total_nodes
-                         << " time " << total_ms2
-                         << " nps " << (total_ms2 > 0
-                             ? (total_nodes * 1000ULL / static_cast<uint64_t>(total_ms2))
-                             : 0);
+                    << " seldepth " << sub.seldepth
+                    << " multipv " << mpv
+                    << " score cp " << sub.score
+                    << " nodes " << total_nodes
+                    << " time " << total_ms2
+                    << " nps " << sub_nps;
                 if(!sub.pv.empty()){
                     sub_info << " pv " << format_pv(sub.pv);
                 }
@@ -441,6 +468,7 @@ static void do_search(
 
     if(alive()){
         send("bestmove " + move_to_str(best_move));
+        g_bestmove_sent = true;
     }
     g_searching = false;
 }
@@ -477,10 +505,11 @@ static void cmd_go(std::istringstream& iss){
     ctx.params = g_params;
     g_ctx.stop = false;
     g_searching = true;
+    g_bestmove_sent = false;
     uint32_t gen = g_search_gen.load();
     g_best_move = Move();
     g_search_thread = std::thread(
-        do_search, max_depth, movetime_ms, infinite, gen, ctx, g_board, g_player
+        do_search, max_depth, movetime_ms, infinite, gen, ctx, g_board, g_player, g_history
     );
 }
 
@@ -633,8 +662,11 @@ void loop(){
                 if(pd.type == ParamDef::CHECK){
                     send("option name " + pd.name + " type check default " + pd.default_val);
                 }else{
-                    send("option name " + pd.name + " type spin default " + pd.default_val
-                         + " min " + std::to_string(pd.min_val) + " max " + std::to_string(pd.max_val));
+                    send(
+                        "option name " + pd.name + " type spin default " + pd.default_val
+                        + " min " + std::to_string(pd.min_val)
+                        + " max " + std::to_string(pd.max_val)
+                    );
                 }
             }
             send("option name Hash type spin default 18 min 10 max 24");
@@ -671,10 +703,17 @@ void loop(){
             if(g_search_thread.joinable()){
                 g_search_thread.join();
             }
+            /* If the search thread was interrupted before it could emit
+               bestmove, send one now so the GUI/CLI never hangs. */
+            if(!g_bestmove_sent.load()){
+                g_bestmove_sent = true;
+                send("bestmove " + move_to_str(g_best_move));
+            }
         }else if(cmd == "ucinewgame" || cmd == "ubginewgame"){
             g_board = Board();
             g_player = 0;
             g_step = 0;
+            g_history.clear();
         }else if(cmd == "d"){
             cmd_display();
         }else if(cmd == "quit"){

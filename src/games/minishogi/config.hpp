@@ -41,6 +41,21 @@ static const char DROP_LETTERS[] = " PSGBR";
 /* Drop moves use sentinel row = BOARD_H in the from-point */
 #define DROP_ROW BOARD_H
 
+/* MVV-LVA piece values for move ordering (indexed by piece type) */
+static const int PIECE_VALUES[] = {
+    0,    /* EMPTY=0 */
+    10,   /* PAWN=1 */
+    40,   /* SILVER=2 */
+    50,   /* GOLD=3 */
+    70,   /* BISHOP=4 */
+    90,   /* ROOK=5 */
+    900,  /* KING=6 */
+    50,   /* P_PAWN=7 */
+    50,   /* P_SILVER=8 */
+    120,  /* P_BISHOP=9 */
+    130,  /* P_ROOK=10 */
+};
+
 /* Piece display */
 #define PIECE_STR_LEN 3
 const char PIECE_TABLE[2][NUM_PIECE_TYPES][4] = {

@@ -5,6 +5,7 @@
 #include "config.hpp"
 #include "state.hpp"
 #include "./policy/registry.hpp"
+#include "./policy/game_history.hpp"
 #ifdef USE_NNUE
 #include "./nnue/nnue.hpp"
 #endif
@@ -33,8 +34,9 @@ static double time_search(
     state->get_legal_actions();
     SearchContext ctx;
     ctx.params = algo.default_params;
+    GameHistory history;
     auto t0 = std::chrono::high_resolution_clock::now();
-    algo.search(state, depth, ctx);
+    algo.search(state, depth, history, ctx);
     auto t1 = std::chrono::high_resolution_clock::now();
     double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     delete state;
@@ -83,7 +85,7 @@ int main(int argc, char* argv[]) {
     /* Get game name from State */
     State temp_state;
     std::cout << "Game: " << temp_state.game_name() << " ("
-              << BOARD_H << "x" << BOARD_W << ")\n";
+        << BOARD_H << "x" << BOARD_W << ")\n";
 
     /* === Test positions === */
     constexpr int NUM_POS = 3;
@@ -135,7 +137,7 @@ int main(int argc, char* argv[]) {
                     std::cout << " | " << std::setw(9) << "-";
                 } else {
                     std::cout << " | " << std::setw(7) << std::fixed
-                              << std::setprecision(1) << ms << "ms";
+                        << std::setprecision(1) << ms << "ms";
                     prev = ms;
                 }
             }

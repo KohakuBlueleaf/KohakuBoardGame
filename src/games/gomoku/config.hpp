@@ -15,3 +15,10 @@
 #define NUM_PIECE_TYPES 2   /* 1=X, 2=O */
 #define NUM_PT_NO_KING  2   /* no king in gomoku */
 #define KING_ID         0   /* no king */
+
+/* MVV-LVA piece values for move ordering (indexed by piece type) */
+static const int PIECE_VALUES[] = {
+    0,  /* EMPTY=0 */
+    1,  /* X=1 */
+    1,  /* O=2 */
+};

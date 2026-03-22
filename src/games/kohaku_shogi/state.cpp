@@ -7,6 +7,7 @@
 
 #include "./state.hpp"
 #include "config.hpp"
+#include "../../policy/game_history.hpp"
 #ifdef USE_NNUE
 #include "../../nnue/nnue.hpp"
 #endif
@@ -181,7 +182,11 @@ static const int tropism_w[NUM_PIECE_TYPES] = {
     6,  /* P_ROOK (dragon) */
 };
 
-static int king_tropism(int piece_type, int pr, int pc, int ekr, int ekc){
+static int king_tropism(
+    int piece_type,
+    int pr, int pc,
+    int ekr, int ekc
+){
     int dist = std::max(std::abs(pr - ekr), std::abs(pc - ekc));
     if(dist <= 2){
         return tropism_w[piece_type] * (3 - dist);
@@ -665,7 +670,7 @@ void State::gen_board_moves(){
  * gen_drop_moves -- generate all drop moves for current player
  * ================================================================ */
 
-void State::gen_drop_moves(){
+void State::gen_drop_moves(bool skip_uchifuzume){
     auto& self_board = board.board[player];
     auto& oppn_board = board.board[1 - player];
     int p = player;
@@ -739,7 +744,10 @@ void State::gen_drop_moves(){
      * A pawn drop that delivers checkmate is illegal.
      * For each pawn drop, check if it gives check and, if so, whether
      * the opponent has any legal escape.  If no escape exists the drop
-     * is uchifuzume and must be removed. */
+     * is uchifuzume and must be removed.
+     * NOTE: probe states use gen_board_moves/gen_drop_moves(true) directly
+     * to avoid recursive uchifuzume checks. */
+    if(!skip_uchifuzume){
     auto is_uchifuzume = [&](const Move& m) -> bool {
         /* Only pawn drops */
         if(m.first.first != DROP_ROW || (int)m.first.second != PAWN)
@@ -754,10 +762,11 @@ void State::gen_drop_moves(){
         tmp.hand[player][PAWN]--;
 
         /* Check if opponent is in check: create state with dropper to move.
-         * If dropper can capture the opponent's king -> opponent is in check. */
+         * If dropper can capture the opponent's king -> game_state==WIN.
+         * Use gen_board_moves only to avoid recursive uchifuzume. */
         State probe_check(tmp, player);
         probe_check.step = step + 1;
-        probe_check.get_legal_actions();
+        probe_check.gen_board_moves();
         if(probe_check.game_state != WIN){
             return false;  /* not even check, pawn drop is fine */
         }
@@ -767,7 +776,10 @@ void State::gen_drop_moves(){
          * and see if ANY move escapes the check. */
         State probe_opp(tmp, 1 - player);
         probe_opp.step = step + 1;
-        probe_opp.get_legal_actions();
+        probe_opp.gen_board_moves();
+        if(probe_opp.game_state != WIN){
+            probe_opp.gen_drop_moves(true);
+        }
 
         for(auto& opp_move : probe_opp.legal_actions){
             State* child = probe_opp.next_state(opp_move);
@@ -784,6 +796,7 @@ void State::gen_drop_moves(){
 
     auto it = std::remove_if(legal_actions.begin(), legal_actions.end(), is_uchifuzume);
     legal_actions.erase(it, legal_actions.end());
+    } /* !skip_uchifuzume */
 }
 
 
@@ -795,12 +808,6 @@ void State::get_legal_actions(){
     game_state = NONE;
     legal_actions.clear();
     legal_actions.reserve(192);
-
-    /* 4-fold repetition -> draw (may be upgraded to perpetual check WIN in next_state) */
-    if(check_repetition()){
-        game_state = DRAW;
-        return;
-    }
 
     /* Check draw by step limit */
     if(step >= MAX_STEP){
@@ -891,8 +898,6 @@ State* State::next_state(const Move& move){
 
     State* ns = new State(next, opp);
     ns->step = this->step + 1;
-    ns->inherit_history(this);
-
     if(this->game_state != WIN){
         ns->get_legal_actions();
     }
@@ -973,7 +978,13 @@ int State::extract_nnue_features(int perspective, int* features) const{
  * evaluate -- material + PST + mobility
  * ================================================================ */
 
-int State::evaluate(bool use_nnue, bool use_kp_eval, bool use_mobility){
+int State::evaluate(
+    bool use_nnue,
+    bool use_kp_eval,
+    bool use_mobility,
+    const GameHistory* history
+){
+    (void)history;
     if(this->game_state == WIN){
         return P_MAX;
     }
@@ -1474,4 +1485,14 @@ void State::decode_board(const std::string& s, int side_to_move){
     }
 
     get_legal_actions();
+}
+
+
+/* === Repetition: shogi 4-fold rule === */
+bool State::check_repetition(const GameHistory& history, int& out_score) const {
+    if(history.count(hash()) >= 4){
+        out_score = 0;  /* draw (perpetual check handled by GUI) */
+        return true;
+    }
+    return false;
 }

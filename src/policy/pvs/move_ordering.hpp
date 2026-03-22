@@ -11,8 +11,6 @@
  * With TT: TT best move gets highest priority
  * With Killers: killer moves rank below captures, above quiet
  *============================================================*/
-inline const int piece_val[7] = {0, 2, 6, 7, 8, 20, 100};
-
 inline int score_move(
     const State* state,
     const Move& move,
@@ -26,7 +24,7 @@ inline int score_move(
         int from_r = move.first.first;
         int from_c = move.first.second;
         int attacker = state->piece_at(state->player, from_r, from_c);
-        return piece_val[captured] * 100 - piece_val[attacker];
+        return PIECE_VALUES[captured] * 100 - PIECE_VALUES[attacker];
     }
     if(is_killer(ply, move, killer_slots)){
         return 50;

@@ -4,7 +4,9 @@
 #include <utility>
 #include <cstddef>
 #include <cstdint>
-#include <unordered_map>
+
+/* Forward-declare GameHistory so evaluate() can accept an optional pointer. */
+struct GameHistory;
 
 /* === Type aliases === */
 typedef std::pair<size_t, size_t> Point;
@@ -21,43 +23,31 @@ public:
     int player = 0;
     GameState game_state = UNKNOWN;
     std::vector<Move> legal_actions;
-    std::unordered_map<uint64_t, int> hash_counts;  /* position hash → occurrence count */
-    std::unordered_map<uint64_t, int> check_hash_counts; /* times position appeared while in check */
 
     virtual ~BaseState() = default;
-
-    /* Inherit hash history from parent state (call in next_state) */
-    void inherit_history(const BaseState* parent){
-        hash_counts = parent->hash_counts;
-        hash_counts[parent->hash()]++;
-        check_hash_counts = parent->check_hash_counts;
-    }
-
-    /* Record whether the current position is "in check" (for perpetual check detection).
-     * Call AFTER get_legal_actions on the new state, passing true if the side-to-move
-     * is in check (opponent is giving check). */
-    void record_check_status(bool in_check){
-        if(in_check){
-            check_hash_counts[hash()]++;
-        }
-    }
-
-    /* Check if current position has appeared >= limit times (including now). */
-    bool check_repetition(int limit = 4) const {
-        auto it = hash_counts.find(hash());
-        int prev = (it != hash_counts.end()) ? it->second : 0;
-        return (prev + 1) >= limit;
-    }
 
     /* === Core === */
     virtual BaseState* next_state(const Move& m) = 0;
     virtual void get_legal_actions() = 0;
-    virtual int evaluate(bool use_nnue = true, bool use_kp = true, bool use_mobility = true) = 0;
+    virtual int evaluate(
+        bool use_nnue = true,
+        bool use_kp = true,
+        bool use_mobility = true,
+        const GameHistory* history = nullptr
+    ) = 0;
 
     /* === Game description === */
     virtual int board_h() const = 0;
     virtual int board_w() const = 0;
     virtual const char* game_name() const = 0;
+
+    /* === Repetition detection (game-specific) ===
+     * Returns true if the current position triggers a repetition rule.
+     * Sets out_score to the appropriate score (0=draw, -P_MAX=loss, etc.).
+     * Default: no repetition rule. Override per game. */
+    virtual bool check_repetition(const GameHistory& /*history*/, int& /*out_score*/) const {
+        return false;
+    }
 
     /* === Null move: create a state with side-to-move flipped (pass) === */
     virtual BaseState* create_null_state() const { return nullptr; }

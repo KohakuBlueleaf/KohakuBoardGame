@@ -29,6 +29,7 @@
 #include "config.hpp"
 #include "state.hpp"
 #include "./policy/pvs.hpp"
+#include "./policy/game_history.hpp"
 
 #ifdef USE_NNUE
 #include "nnue/nnue.hpp"
@@ -75,7 +76,12 @@ struct DataRecord {
 /*============================================================
  * Progress bar
  *============================================================*/
-static void print_progress(int games_done, int total_games, int total_positions, double elapsed_s){
+static void print_progress(
+    int games_done,
+    int total_games,
+    int total_positions,
+    double elapsed_s
+){
     const int bar_width = 25;
     int filled = (games_done * bar_width) / total_games;
 
@@ -93,8 +99,10 @@ static void print_progress(int games_done, int total_games, int total_positions,
 
     double pos_per_s = (elapsed_s > 0.001) ? (total_positions / elapsed_s) : 0.0;
 
-    std::fprintf(stderr, "\r[%s] %d/%d games | %d positions | %.1f pos/s",
-                 bar, games_done, total_games, total_positions, pos_per_s);
+    std::fprintf(
+        stderr, "\r[%s] %d/%d games | %d positions | %.1f pos/s",
+        bar, games_done, total_games, total_positions, pos_per_s
+    );
     std::fflush(stderr);
 }
 
@@ -205,6 +213,9 @@ static void play_game(
 
     int step = 0;
 
+    /* Game-level repetition tracking */
+    GameHistory game_history;
+
     /* Stockfish-style: scatter random_move_count random plies
      * within [0, random_move_maxply) using Fisher-Yates shuffle. */
     bool random_ply_flag[MAX_STEP] = {};
@@ -227,13 +238,19 @@ static void play_game(
             winner = game->player;
             break;
         }
-        if(game->game_state == DRAW){
-            winner = 2;
-            break;
-        }
         if(game->legal_actions.empty()){
             winner = 2;
             break;
+        }
+
+        /* 4-fold repetition check (game level) */
+        {
+            uint64_t h = game->hash();
+            game_history.push(h);
+            if(game_history.is_repetition(h)){
+                winner = 2;  /* draw by repetition */
+                break;
+            }
         }
 
         /* Decide which move to play.
@@ -243,9 +260,8 @@ static void play_game(
         Move chosen_move;
         int search_score = 0;
 
-        /* Always search for score + best move */
         SearchContext search_ctx;
-        auto result = PVS::search(game, cfg.depth, search_ctx);
+        auto result = PVS::search(game, cfg.depth, game_history, search_ctx);
         search_score = result.score;
 
         if(step < MAX_STEP && random_ply_flag[step]){
@@ -422,8 +438,10 @@ int main(int argc, char* argv[]){
     std::fprintf(stderr, "  Avg pos/game:     %.1f\n", (double)total_positions / cfg.num_games);
     std::fprintf(stderr, "  Total time:       %.1f s\n", total_time);
     std::fprintf(stderr, "  Throughput:       %.1f pos/s\n", total_positions / total_time);
-    std::fprintf(stderr, "  File size:        %.1f KB\n",
-                 (sizeof(DataHeader) + (double)total_positions * sizeof(DataRecord)) / 1024.0);
+    std::fprintf(
+        stderr, "  File size:        %.1f KB\n",
+        (sizeof(DataHeader) + (double)total_positions * sizeof(DataRecord)) / 1024.0
+    );
     std::fprintf(stderr, "  Output:           %s\n", cfg.output);
 
     return 0;
