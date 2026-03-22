@@ -645,10 +645,10 @@ class GameApp:
         self.selected_piece = None
         self.legal_moves_for_selected = []
         self._sync_hand_highlight(None)
-        # Pause after undo so AI doesn't immediately redo
-        self._paused = True
         if self.analyze["enabled"]:
             self._start_analysis()
+        elif self._is_gaming() and not self._paused:
+            self._trigger_ai_if_needed()
 
     # ------------------------------------------------------------------
     # Main loop
@@ -1153,9 +1153,6 @@ class GameApp:
     # ------------------------------------------------------------------
 
     def execute_move(self, move):
-
-        # Unpause when a move is made (after undo-pause)
-        self._paused = False
 
         # Clear "stopped" state so user can keep exploring
         if self.game_result == "stopped":
