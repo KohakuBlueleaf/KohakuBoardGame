@@ -119,11 +119,6 @@ static unsigned int rng_next(){
     return rng_state;
 }
 
-/* Returns a float in [0, 1) */
-static double rng_float(){
-    return (rng_next() & 0x7FFFFFFF) / (double)0x80000000;
-}
-
 /* Returns a random int in [0, n) */
 static int rng_int(int n){
     return (int)(rng_next() % (unsigned int)n);
@@ -137,6 +132,8 @@ struct Config {
     int num_games = 1000;
     int depth = 6;
     double epsilon = 0.15;
+    int random_move_count = 8;   /* max random moves per game */
+    int random_move_maxply = 24; /* only randomize within first N plies */
     const char* output = "data/train.bin";
     const char* nnue_model = nullptr;
     unsigned int seed = 42;
@@ -147,6 +144,8 @@ static void print_usage(const char* prog){
     std::fprintf(stderr, "  -n NUM_GAMES    Number of games (default: 1000)\n");
     std::fprintf(stderr, "  -d DEPTH        Search depth (default: 6)\n");
     std::fprintf(stderr, "  -e EPSILON      Jitter probability (default: 0.15)\n");
+    std::fprintf(stderr, "  -r RANDOM_MOVES Max random moves per game (default: 8)\n");
+    std::fprintf(stderr, "  -p RANDOM_PLY   Only randomize within first N plies (default: 24)\n");
     std::fprintf(stderr, "  -o OUTPUT       Output file (default: data/train.bin)\n");
     std::fprintf(stderr, "  -m MODEL        NNUE model file (default: auto-detect)\n");
     std::fprintf(stderr, "  -s SEED         Random seed (default: 42)\n");
@@ -176,6 +175,8 @@ static Config parse_args(int argc, char* argv[]){
             case 'n': cfg.num_games = std::atoi(val); break;
             case 'd': cfg.depth = std::atoi(val); break;
             case 'e': cfg.epsilon = std::atof(val); break;
+            case 'r': cfg.random_move_count = std::atoi(val); break;
+            case 'p': cfg.random_move_maxply = std::atoi(val); break;
             case 'o': cfg.output = val; break;
             case 'm': cfg.nnue_model = val; break;
             case 's': cfg.seed = (unsigned int)std::atoi(val); break;
@@ -203,6 +204,23 @@ static void play_game(
     int winner = -1;  /* -1=undecided, 0=player0, 1=player1, 2=draw */
 
     int step = 0;
+
+    /* Stockfish-style: scatter random_move_count random plies
+     * within [0, random_move_maxply) using Fisher-Yates shuffle. */
+    bool random_ply_flag[MAX_STEP] = {};
+    {
+        int max_ply = std::min(cfg.random_move_maxply, MAX_STEP);
+        std::vector<int> candidates;
+        for(int i = 0; i < max_ply; i++){
+            candidates.push_back(i);
+        }
+        int count = std::min(cfg.random_move_count, (int)candidates.size());
+        for(int i = 0; i < count; i++){
+            int j = i + rng_int((int)candidates.size() - i);
+            std::swap(candidates[i], candidates[j]);
+            random_ply_flag[candidates[i]] = true;
+        }
+    }
     while(step < MAX_STEP){
         /* Check for terminal state */
         if(game->game_state == WIN){
@@ -218,24 +236,25 @@ static void play_game(
             break;
         }
 
-        /* Decide which move to play */
+        /* Decide which move to play.
+         * Stockfish-style: search ALWAYS runs (for score label).
+         * On flagged plies, play a random legal move instead of
+         * the search best move. Score is always from search. */
         Move chosen_move;
         int search_score = 0;
-        bool jitter = (rng_float() < cfg.epsilon);
 
-        if(jitter){
-            /* Random legal move */
+        /* Always search for score + best move */
+        SearchContext search_ctx;
+        auto result = PVS::search(game, cfg.depth, search_ctx);
+        search_score = result.score;
+
+        if(step < MAX_STEP && random_ply_flag[step]){
+            /* Flagged ply: play random legal move */
             int idx = rng_int((int)game->legal_actions.size());
             chosen_move = game->legal_actions[idx];
-            /* Still run a search to get a proper score for this position */
-            SearchContext score_ctx;
-            search_score = PVS::search(game, cfg.depth, score_ctx).score;
         }else{
-            /* PVS best move + search score */
-            SearchContext search_ctx;
-            auto result = PVS::search(game, cfg.depth, search_ctx);
+            /* Normal ply: play search best move */
             chosen_move = result.best_move;
-            search_score = result.score;
         }
 
         /* Make the move */
@@ -341,7 +360,8 @@ int main(int argc, char* argv[]){
     std::fprintf(stderr, "%s Data Generator\n", gname);
     std::fprintf(stderr, "  Games:   %d\n", cfg.num_games);
     std::fprintf(stderr, "  Depth:   %d\n", cfg.depth);
-    std::fprintf(stderr, "  Epsilon: %.2f\n", cfg.epsilon);
+    std::fprintf(stderr, "  Random:  %d moves in first %d plies\n",
+                 cfg.random_move_count, cfg.random_move_maxply);
     std::fprintf(stderr, "  Output:  %s\n", cfg.output);
     std::fprintf(stderr, "  Seed:    %u\n\n", cfg.seed);
 
