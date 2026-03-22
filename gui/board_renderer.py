@@ -68,8 +68,8 @@ class BoardRenderer:
         if self.game_renderer:
             self.game_renderer.draw_pieces(state)
         if pv_multi:
-            # Always use generic multi-PV renderer (handles single PV too)
-            self._draw_pv_multi(pv_multi)
+            current_player = getattr(state, "player", 0) if state else 0
+            self._draw_pv_multi(pv_multi, current_player)
         elif pv_arrows:
             self._draw_pv_arrows(pv_arrows)
         self._draw_labels()
@@ -297,7 +297,7 @@ class BoardRenderer:
 
         self.surface.blit(overlay, (0, 0))
 
-    def _draw_pv_multi(self, pv_multi):
+    def _draw_pv_multi(self, pv_multi, current_player=0):
         """Draw PV arrows.
 
         - Multi-PV first moves: GREEN arrows, very different sizes per rank
@@ -335,7 +335,7 @@ class BoardRenderer:
                 return None
             return (r, c, pos)
 
-        def _parse_and_draw(uci, color, shaft_w, head_scale):
+        def _parse_and_draw(uci, color, shaft_w, head_scale, player_turn=0):
             # Handle drop moves: X*sq (e.g. P*c3)
             if len(uci) >= 3 and uci[1] == '*':
                 parsed = _parse_sq(uci, 2)
@@ -344,11 +344,41 @@ class BoardRenderer:
                 tr, tc, _ = parsed
                 tx = cfg.BOARD_X + tc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
                 ty = cfg.BOARD_Y + tr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
-                # Draw a circle at destination instead of arrow (no source square)
-                overlay_r = max(6, shaft_w + 2)
-                pygame.draw.circle(overlay, color, (int(tx), int(ty)), overlay_r)
-                px, py = 0.0, -1.0
-                return (tx, ty, tx, ty, px, py)
+                # Arrow from hand area (left side) to destination
+                if player_turn == 0:
+                    fy = cfg.BOARD_Y + cfg.BOARD_H * cfg.SQUARE_SIZE + 20
+                else:
+                    fy = cfg.BOARD_Y - 20
+                fx = tx  # same column as destination
+
+                dx, dy = tx - fx, ty - fy
+                length = math.sqrt(dx * dx + dy * dy)
+                if length < 1:
+                    length = 1
+                ux, uy = dx / length, dy / length
+                head_len = min(16 * head_scale, length * 0.3)
+                head_w = head_len * 0.6
+                sx2 = tx - ux * head_len
+                sy2 = ty - uy * head_len
+                pygame.draw.line(overlay, color, (int(fx), int(fy)), (int(sx2), int(sy2)), shaft_w)
+                px, py = -uy, ux
+                pts = [(tx, ty),
+                       (sx2 + px * head_w, sy2 + py * head_w),
+                       (sx2 - px * head_w, sy2 - py * head_w)]
+                pygame.draw.polygon(overlay, color, pts)
+
+                # Ghost piece: semi-transparent circle + piece letter at destination
+                r = cfg.SQUARE_SIZE // 3
+                ghost_color = (color[0], color[1], color[2], min(color[3], 140))
+                pygame.draw.circle(overlay, ghost_color, (int(tx), int(ty)), r)
+                piece_letter = uci[0].upper()
+                try:
+                    lbl = num_font.render(piece_letter, True, (255, 255, 255))
+                    overlay.blit(lbl, (tx - lbl.get_width() // 2, ty - lbl.get_height() // 2))
+                except Exception:
+                    pass
+
+                return (fx, fy, tx, ty, px, py)
 
             # Board move: parse two squares
             parsed_from = _parse_sq(uci, 0)
@@ -395,23 +425,24 @@ class BoardRenderer:
             shaft_w = max(2, 9 - mpv_idx * 2)
             head_scale = max(0.5, 1.2 - mpv_idx * 0.15)
             color = (60 + mpv_idx * 10, max(120, 230 - mpv_idx * 25), 60, alpha)
-            _parse_and_draw(pv_moves[0], color, shaft_w, head_scale)
+            _parse_and_draw(pv_moves[0], color, shaft_w, head_scale, current_player)
 
         # --- Pass 2: Draw best PV first move (green, largest) ---
         best_pv = pv_multi.get(1, [])
-        if best_pv and len(best_pv[0]) >= 4:
+        if best_pv and len(best_pv[0]) >= 3:
             color = (60, 230, 60, 240)
-            _parse_and_draw(best_pv[0], color, 8, 1.3)
+            _parse_and_draw(best_pv[0], color, 8, 1.3, current_player)
 
         # --- Pass 3: Draw best PV sequence steps 2+ (blue, with numbers) ---
         for i in range(1, len(best_pv)):
             uci = best_pv[i]
-            if len(uci) < 4:
+            if len(uci) < 3:
                 continue
+            player_at_step = (current_player + i) % 2
             alpha = max(80, 200 - i * 30)
             color = (80, 140, 230, alpha)
             shaft_w = max(3, 6 - i)
-            result = _parse_and_draw(uci, color, shaft_w, 1.0)
+            result = _parse_and_draw(uci, color, shaft_w, 1.0, player_at_step)
             if result:
                 fx, fy, tx, ty, px, py = result
                 # Step number
