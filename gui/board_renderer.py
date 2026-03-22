@@ -335,6 +335,9 @@ class BoardRenderer:
                 return None
             return (r, c, pos)
 
+        # Build drop piece char → type mapping from config
+        char_to_drop = getattr(cfg, "CHAR_TO_DROP_PIECE", {})
+
         def _parse_and_draw(uci, color, shaft_w, head_scale, player_turn=0):
             # Handle drop moves: X*sq (e.g. P*c3)
             if len(uci) >= 3 and uci[1] == '*':
@@ -344,12 +347,22 @@ class BoardRenderer:
                 tr, tc, _ = parsed
                 tx = cfg.BOARD_X + tc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
                 ty = cfg.BOARD_Y + tr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
-                # Arrow from hand area (left side) to destination
-                if player_turn == 0:
-                    fy = cfg.BOARD_Y + cfg.BOARD_H * cfg.SQUARE_SIZE + 20
-                else:
-                    fy = cfg.BOARD_Y - 20
-                fx = tx  # same column as destination
+
+                # Try to find hand piece position from game renderer
+                fx, fy = tx, cfg.BOARD_Y + cfg.BOARD_H * cfg.SQUARE_SIZE + 20  # fallback
+                gr = self.game_renderer
+                if gr is not None and hasattr(gr, "_hand_rects"):
+                    drop_pt = char_to_drop.get(uci[0].upper(), char_to_drop.get(uci[0], 0))
+                    hand_rect = gr._hand_rects.get((player_turn, drop_pt))
+                    if hand_rect is not None:
+                        fx = hand_rect.centerx
+                        fy = hand_rect.centery
+                    else:
+                        # Fallback: generic hand area
+                        if player_turn == 0:
+                            fy = cfg.BOARD_Y + cfg.BOARD_H * cfg.SQUARE_SIZE + 25
+                        else:
+                            fy = cfg.BOARD_Y - 25
 
                 dx, dy = tx - fx, ty - fy
                 length = math.sqrt(dx * dx + dy * dy)
