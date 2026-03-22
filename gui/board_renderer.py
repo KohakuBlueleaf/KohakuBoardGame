@@ -67,17 +67,11 @@ class BoardRenderer:
         self._draw_legal_moves(state, selected, legal_moves)
         if self.game_renderer:
             self.game_renderer.draw_pieces(state)
-        if pv_multi and len(pv_multi) > 1:
-            # Multi-PV rendering
-            if self.game_renderer and hasattr(self.game_renderer, "draw_pv_multi"):
-                self.game_renderer.draw_pv_multi(state, pv_multi)
-            else:
-                self._draw_pv_multi(pv_multi)
+        if pv_multi:
+            # Always use generic multi-PV renderer (handles single PV too)
+            self._draw_pv_multi(pv_multi)
         elif pv_arrows:
-            if self.game_renderer and hasattr(self.game_renderer, "draw_pv"):
-                self.game_renderer.draw_pv(state, pv_arrows)
-            else:
-                self._draw_pv_arrows(pv_arrows)
+            self._draw_pv_arrows(pv_arrows)
         self._draw_labels()
 
     def screen_to_board(self, x, y):
