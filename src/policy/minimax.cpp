@@ -20,7 +20,7 @@ int MiniMax::eval_ctx(State *state, int depth, SearchContext& ctx,
 
     /* === Terminal / leaf checks === */
     if(state->game_state == WIN){
-        return P_MAX;
+        return P_MAX - ply;
     }
     if(state->game_state == DRAW){
         return 0;

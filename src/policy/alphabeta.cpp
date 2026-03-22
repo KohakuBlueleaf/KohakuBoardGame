@@ -22,7 +22,7 @@ int AlphaBeta::eval_ctx(State *state, int depth, int alpha, int beta,
     /* === Terminal / leaf checks === */
     GameState now_res = state->game_state;
     if(now_res == WIN){
-        return P_MAX;
+        return P_MAX - ply;
     }
     if(now_res == DRAW){
         return 0;

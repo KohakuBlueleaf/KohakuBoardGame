@@ -38,7 +38,9 @@ int PVS::eval_ctx(
     /* === Terminal checks === */
     if(state->game_state == WIN){
         delete state;
-        return P_MAX;
+        /* Prefer faster wins (higher ply = found deeper = less urgent).
+         * Also makes the losing side prefer slower losses. */
+        return P_MAX - ply;
     }
     if(state->game_state == DRAW){
         delete state;
