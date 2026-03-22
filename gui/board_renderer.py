@@ -304,10 +304,11 @@ class BoardRenderer:
         self.surface.blit(overlay, (0, 0))
 
     def _draw_pv_multi(self, pv_multi):
-        """Draw PV arrows: all green with varying width/alpha.
+        """Draw PV arrows.
 
-        - Best PV (multipv 1): full sequence with step numbers
-        - Other PVs: first move only, no numbers, thinner/fainter
+        - Multi-PV first moves: GREEN arrows, very different sizes per rank
+        - Best PV sequence (steps 2+): BLUE arrows with step numbers
+        - No rank numbers on any arrow
         """
         import math
 
@@ -324,95 +325,85 @@ class BoardRenderer:
 
         num_font = self._num_font
 
-        # Draw secondary PVs first (behind best PV)
+        def _parse_and_draw(uci, color, shaft_w, head_scale):
+            fc = col_map.get(uci[0])
+            fr = row_map.get(uci[1])
+            tc = col_map.get(uci[2])
+            tr = row_map.get(uci[3])
+            if any(v is None for v in (fc, fr, tc, tr)):
+                return None
+            fx, fy = self.board_to_screen(fr, fc)
+            tx, ty = self.board_to_screen(tr, tc)
+            fx += cfg.SQUARE_SIZE // 2
+            fy += cfg.SQUARE_SIZE // 2
+            tx += cfg.SQUARE_SIZE // 2
+            ty += cfg.SQUARE_SIZE // 2
+            dx, dy = tx - fx, ty - fy
+            length = math.sqrt(dx * dx + dy * dy)
+            if length < 1:
+                return None
+            ux, uy = dx / length, dy / length
+            head_len = min(20 * head_scale, length * 0.3)
+            head_w = head_len * 0.65
+            sx2 = tx - ux * head_len
+            sy2 = ty - uy * head_len
+            pygame.draw.line(overlay, color, (fx, fy), (sx2, sy2), shaft_w)
+            px, py = -uy, ux
+            pts = [(tx, ty),
+                   (sx2 + px * head_w, sy2 + py * head_w),
+                   (sx2 - px * head_w, sy2 - py * head_w)]
+            pygame.draw.polygon(overlay, color, pts)
+            return (fx, fy, tx, ty, px, py)
+
+        # --- Pass 1: Draw secondary PV first moves (behind best) ---
         for mpv_idx in sorted(pv_multi.keys(), reverse=True):
-            pv_moves = pv_multi[mpv_idx]
-            if not pv_moves:
-                continue
-
-            # Style: all green, decreasing width/alpha by rank
             if mpv_idx == 1:
-                base_alpha = 220
-                shaft_w = 6
-            elif mpv_idx == 2:
-                base_alpha = 150
-                shaft_w = 4
-            elif mpv_idx == 3:
-                base_alpha = 110
-                shaft_w = 3
-            else:
-                base_alpha = 80
-                shaft_w = 2
+                continue  # draw best PV last (on top)
+            pv_moves = pv_multi[mpv_idx]
+            if not pv_moves or len(pv_moves[0]) < 4:
+                continue
+            # Green with very distinct sizes per rank
+            # PV2: bright green, thick. PV5+: dim green, thin.
+            alpha = max(40, 240 - mpv_idx * 50)
+            shaft_w = max(2, 9 - mpv_idx * 2)
+            head_scale = max(0.5, 1.2 - mpv_idx * 0.15)
+            color = (60 + mpv_idx * 10, max(120, 230 - mpv_idx * 25), 60, alpha)
+            _parse_and_draw(pv_moves[0], color, shaft_w, head_scale)
 
-            # Best PV: show full sequence. Others: first move only.
-            max_moves = len(pv_moves) if mpv_idx == 1 else 1
+        # --- Pass 2: Draw best PV first move (green, largest) ---
+        best_pv = pv_multi.get(1, [])
+        if best_pv and len(best_pv[0]) >= 4:
+            color = (60, 230, 60, 240)
+            _parse_and_draw(best_pv[0], color, 8, 1.3)
 
-            for i in range(min(max_moves, len(pv_moves))):
-                uci = pv_moves[i]
-                if len(uci) < 4:
-                    continue
-
-                fc = col_map.get(uci[0])
-                fr = row_map.get(uci[1])
-                tc = col_map.get(uci[2])
-                tr = row_map.get(uci[3])
-                if any(v is None for v in (fc, fr, tc, tr)):
-                    continue
-
-                alpha = max(40, base_alpha - i * 25)
-                color = (80, 220, 80, alpha)
-
-                fx, fy = self.board_to_screen(fr, fc)
-                tx, ty = self.board_to_screen(tr, tc)
-                fx += cfg.SQUARE_SIZE // 2
-                fy += cfg.SQUARE_SIZE // 2
-                tx += cfg.SQUARE_SIZE // 2
-                ty += cfg.SQUARE_SIZE // 2
-
-                dx = tx - fx
-                dy = ty - fy
-                length = math.sqrt(dx * dx + dy * dy)
-                if length < 1:
-                    continue
-                ux, uy = dx / length, dy / length
-
-                cur_shaft_w = max(2, shaft_w - i)
-                head_len = min(20, length * 0.3)
-                head_w = head_len * 0.65
-
-                sx2 = tx - ux * head_len
-                sy2 = ty - uy * head_len
-                pygame.draw.line(overlay, color, (fx, fy), (sx2, sy2), cur_shaft_w)
-
-                px, py = -uy, ux
-                points = [
-                    (tx, ty),
-                    (sx2 + px * head_w, sy2 + py * head_w),
-                    (sx2 - px * head_w, sy2 - py * head_w),
-                ]
-                pygame.draw.polygon(overlay, color, points)
-
-                # Step numbers only on best PV sequence (not on multi-PV first moves)
-                if mpv_idx == 1 and i > 0:
-                    mid_x = (fx + tx) / 2
-                    mid_y = (fy + ty) / 2
-                    off = 10
-                    num_x = mid_x + px * off
-                    num_y = mid_y + py * off
-                    label = str(i + 1)
-                    num_surf = num_font.render(label, True, (255, 255, 255))
-                    nr = max(num_surf.get_width(), num_surf.get_height()) // 2 + 3
-                    pygame.draw.circle(
-                        overlay,
-                        (0, 0, 0, min(200, alpha)),
-                        (int(num_x), int(num_y)),
-                        nr,
-                    )
-                    overlay.blit(
-                        num_surf,
-                        (num_x - num_surf.get_width() / 2,
-                         num_y - num_surf.get_height() / 2),
-                    )
+        # --- Pass 3: Draw best PV sequence steps 2+ (blue, with numbers) ---
+        for i in range(1, len(best_pv)):
+            uci = best_pv[i]
+            if len(uci) < 4:
+                continue
+            alpha = max(80, 200 - i * 30)
+            color = (80, 140, 230, alpha)
+            shaft_w = max(3, 6 - i)
+            result = _parse_and_draw(uci, color, shaft_w, 1.0)
+            if result:
+                fx, fy, tx, ty, px, py = result
+                # Step number
+                mid_x = (fx + tx) / 2
+                mid_y = (fy + ty) / 2
+                num_x = mid_x + px * 10
+                num_y = mid_y + py * 10
+                label = str(i + 1)
+                num_surf = num_font.render(label, True, (255, 255, 255))
+                nr = max(num_surf.get_width(), num_surf.get_height()) // 2 + 3
+                pygame.draw.circle(
+                    overlay, (0, 0, 0, min(200, alpha)),
+                    (int(num_x), int(num_y)), nr,
+                )
+                overlay.blit(
+                    num_surf,
+                    (num_x - num_surf.get_width() / 2,
+                     num_y - num_surf.get_height() / 2),
+                )
 
         self.surface.blit(overlay, (0, 0))
 

@@ -556,6 +556,11 @@ class GameApp:
         if "pv" in info_dict:
             pv_multi[mpv_idx] = info_dict["pv"]
 
+        # Store per-PV score
+        if "score_cp" in info_dict:
+            score_key = f"score_mpv_{mpv_idx}"
+            info_dict[score_key] = info_dict["score_cp"]
+
         # For multipv 1 (the best line), update the main search_info
         if mpv_idx == 1:
             # Preserve last known PV if new info doesn't have one
@@ -564,8 +569,10 @@ class GameApp:
             info_dict["pv_multi"] = pv_multi
             self.search_info = info_dict
         else:
-            # For secondary PVs, just update pv_multi in existing search_info
+            # For secondary PVs, update pv_multi and per-PV score
             self.search_info["pv_multi"] = pv_multi
+            if "score_cp" in info_dict:
+                self.search_info[f"score_mpv_{mpv_idx}"] = info_dict["score_cp"]
 
     def _on_analyze_done(self, bestmove_str):
         # Engine stopped (either by our stop or by completing depth limit).

@@ -263,7 +263,17 @@ class SidePanel:
 
         cy = self._draw_search_stats(cx, cy, search_info, ai_depth, time_limit)
 
-        if search_info.get("pv"):
+        pv_multi = search_info.get("pv_multi", {})
+        if pv_multi:
+            for mpv_idx in sorted(pv_multi.keys()):
+                pv_moves = pv_multi[mpv_idx]
+                if pv_moves:
+                    score = search_info.get(f"score_mpv_{mpv_idx}")
+                    prefix = f"PV{mpv_idx}: "
+                    if score is not None:
+                        prefix = f"PV{mpv_idx}({score:+d}): "
+                    cy = self._draw_pv_line(cx, cy, prefix, pv_moves)
+        elif search_info.get("pv"):
             cy = self._draw_pv(cx, cy, search_info["pv"])
 
         # Undo: disabled during gaming
@@ -595,12 +605,15 @@ class SidePanel:
         return cy
 
     def _draw_pv(self, cx, cy, pv_moves):
+        return self._draw_pv_line(cx, cy, "PV: ", pv_moves)
+
+    def _draw_pv_line(self, cx, cy, prefix, pv_moves):
         max_text_w = cfg.PANEL_WIDTH - 2 * self._PAD_LEFT
-        pv_str = "PV: " + " ".join(pv_moves)
+        pv_str = prefix + " ".join(pv_moves)
         surf = self.font_normal.render(pv_str, True, cfg.COLOR_TEXT_DIM)
         if surf.get_width() > max_text_w:
             for n in range(len(pv_moves), 0, -1):
-                pv_str = "PV: " + " ".join(pv_moves[:n]) + " ..."
+                pv_str = prefix + " ".join(pv_moves[:n]) + " ..."
                 surf = self.font_normal.render(pv_str, True, cfg.COLOR_TEXT_DIM)
                 if surf.get_width() <= max_text_w:
                     break
