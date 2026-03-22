@@ -1393,12 +1393,12 @@ class GameApp:
         if self.analyze["enabled"] and not self._is_gaming():
             pv = self.search_info.get("pv")
             pv_multi_raw = self.search_info.get("pv_multi")
-            if pv_multi_raw and self.multi_pv > 1:
-                # Truncate each PV line to pv_display_steps moves
+            if pv_multi_raw:
+                # Always use pv_multi (handles drops correctly)
                 pv_multi = {}
                 for idx, moves in pv_multi_raw.items():
                     pv_multi[idx] = moves[:self.pv_display_steps] if moves else []
-            # Also truncate main PV
+            # Also truncate main PV as fallback
             if pv:
                 pv = pv[:self.pv_display_steps]
         self.board_renderer.draw(

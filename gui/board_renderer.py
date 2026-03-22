@@ -367,17 +367,6 @@ class BoardRenderer:
                        (sx2 - px * head_w, sy2 - py * head_w)]
                 pygame.draw.polygon(overlay, color, pts)
 
-                # Ghost piece: semi-transparent circle + piece letter at destination
-                r = cfg.SQUARE_SIZE // 3
-                ghost_color = (color[0], color[1], color[2], min(color[3], 140))
-                pygame.draw.circle(overlay, ghost_color, (int(tx), int(ty)), r)
-                piece_letter = uci[0].upper()
-                try:
-                    lbl = num_font.render(piece_letter, True, (255, 255, 255))
-                    overlay.blit(lbl, (tx - lbl.get_width() // 2, ty - lbl.get_height() // 2))
-                except Exception:
-                    pass
-
                 return (fx, fy, tx, ty, px, py)
 
             # Board move: parse two squares
