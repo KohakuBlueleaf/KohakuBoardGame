@@ -154,12 +154,15 @@ while true; do
   NOW=$(date +%s)
   ELAPSED=$((NOW - START_TIME))
   if [ $ELAPSED -gt 0 ] && [ $GAMES_EST -gt 0 ]; then
-    GAMES_SEC=$((GAMES_EST / ELAPSED))
-    REMAINING=$(( (TOTAL_GAMES - GAMES_EST) / (GAMES_SEC > 0 ? GAMES_SEC : 1) ))
+    # Use awk for float division
+    GAMES_SEC_STR=$(awk "BEGIN{printf \"%.1f\", $GAMES_EST / $ELAPSED}")
+    POS_SEC_STR=$(awk "BEGIN{printf \"%.0f\", $POS_EST / $ELAPSED}")
+    GAMES_SEC_RAW=$(awk "BEGIN{printf \"%.6f\", $GAMES_EST / $ELAPSED}")
+    REMAINING=$(awk "BEGIN{r=($TOTAL_GAMES - $GAMES_EST) / ($GAMES_SEC_RAW > 0 ? $GAMES_SEC_RAW : 0.001); printf \"%d\", r}")
     ETA_MIN=$((REMAINING / 60))
     ETA_SEC=$((REMAINING % 60))
-    printf "\r  [%d/%d workers done] ~%d/%d games (%d%%) %d pos | %d g/s | ETA %dm%02ds   " \
-      $DONE $NUM_WORKERS $GAMES_EST $TOTAL_GAMES $PCT $POS_EST $GAMES_SEC $ETA_MIN $ETA_SEC
+    printf "\r  [%d/%d workers done] ~%d/%d games (%d%%) %d pos | %s g/s %s pos/s | ETA %dm%02ds   " \
+      $DONE $NUM_WORKERS $GAMES_EST $TOTAL_GAMES $PCT $POS_EST "$GAMES_SEC_STR" "$POS_SEC_STR" $ETA_MIN $ETA_SEC
   else
     printf "\r  [%d/%d workers done] ~%d/%d games (%d%%) | starting...   " \
       $DONE $NUM_WORKERS $GAMES_EST $TOTAL_GAMES $PCT
@@ -195,6 +198,6 @@ echo "  Games:      ~${TOTAL_GAMES_EST}"
 echo "  Positions:  ${TOTAL_RECORDS}"
 echo "  Total size: $(( TOTAL_SIZE / 1024 / 1024 )) MB"
 echo "  Wall time:  $((WALL_TIME / 60))m$((WALL_TIME % 60))s"
-echo "  Throughput: $(( TOTAL_GAMES_EST / (WALL_TIME > 0 ? WALL_TIME : 1) )) games/s"
+echo "  Throughput: $(awk "BEGIN{printf \"%.1f\", $TOTAL_GAMES_EST / ($WALL_TIME > 0 ? $WALL_TIME : 1)}") games/s"
 echo ""
 echo "To inspect: python3 scripts/read_data.py --game ${GAME} ${OUTPUT_DIR}/train_*.bin"
