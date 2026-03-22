@@ -1107,6 +1107,26 @@ class GameApp:
             return
 
         move = UBGIEngine.uci_to_move(bestmove_str)
+
+        # If move not in legal actions, try auto-promotion (chess pawn to last rank)
+        if move is not None and move not in self.game_state.legal_actions:
+            (fr, fc), (tr, tc) = move
+            bh = _cfg.BOARD_H
+            # Check if this is a pawn reaching last rank without promotion encoding
+            if tr < bh:
+                player = self.game_state.player
+                try:
+                    piece = self.game_state.board[player][fr][fc]
+                except (TypeError, IndexError):
+                    piece = 0
+                is_pawn = (piece == 1)  # PAWN = 1 in both chess variants
+                is_last_rank = (tr == 0 and player == 0) or (tr == bh - 1 and player == 1)
+                if is_pawn and is_last_rank:
+                    # Try queen promotion (promo_idx=1 → to_r + BOARD_H)
+                    promo_move = ((fr, fc), (tr + bh, tc))
+                    if promo_move in self.game_state.legal_actions:
+                        move = promo_move
+
         depth = self.search_info.get("depth", 0)
         self.ai_result = {"move": move, "depth": depth, "ready": True}
 
