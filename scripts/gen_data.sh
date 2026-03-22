@@ -18,22 +18,24 @@ GAME="minichess"
 TOTAL_GAMES=30000
 NUM_WORKERS=64
 DEPTH=6
-EPSILON=0.15
+RANDOM_MOVES=8
+RANDOM_MAXPLY=24
 OUTPUT_DIR="data"
 NNUE_MODEL=""
 
 # Parse args
-while getopts "g:n:w:d:e:o:m:h" opt; do
+while getopts "g:n:w:d:r:p:o:m:h" opt; do
   case $opt in
     g) GAME=$OPTARG ;;
     n) TOTAL_GAMES=$OPTARG ;;
     w) NUM_WORKERS=$OPTARG ;;
     d) DEPTH=$OPTARG ;;
-    e) EPSILON=$OPTARG ;;
+    r) RANDOM_MOVES=$OPTARG ;;
+    p) RANDOM_MAXPLY=$OPTARG ;;
     o) OUTPUT_DIR=$OPTARG ;;
     m) NNUE_MODEL=$OPTARG ;;
-    h) echo "Usage: $0 [-g game] [-n games] [-w workers] [-d depth] [-e epsilon] [-m model] [-o output_dir]"
-       echo "  Games: minichess (6x5), minishogi (5x5), gomoku (9x9)"
+    h) echo "Usage: $0 [-g game] [-n games] [-w workers] [-d depth] [-r random_moves] [-p random_maxply] [-m model] [-o output_dir]"
+       echo "  Games: minichess, minishogi, gomoku, kohaku_shogi, kohaku_chess"
        exit 0 ;;
     *) exit 1 ;;
   esac
@@ -90,7 +92,7 @@ echo "  Target:     ${TOTAL_GAMES} games"
 echo "  Games:      ${TOTAL_GAMES} total (${GAMES_PER_WORKER} per worker)"
 echo "  Workers:    ${NUM_WORKERS}"
 echo "  Depth:      ${DEPTH}"
-echo "  Epsilon:    ${EPSILON}"
+echo "  Random:     ${RANDOM_MOVES} moves in first ${RANDOM_MAXPLY} plies"
 if [ -n "$NNUE_MODEL" ]; then
 echo "  NNUE:       ${NNUE_MODEL}"
 fi
@@ -114,7 +116,7 @@ for i in $(seq 0 $((NUM_WORKERS - 1))); do
   if [ -n "$NNUE_MODEL" ]; then
     NNUE_FLAG="-m $NNUE_MODEL"
   fi
-  $BIN -n $GAMES_PER_WORKER -d $DEPTH -e $EPSILON \
+  $BIN -n $GAMES_PER_WORKER -d $DEPTH -r $RANDOM_MOVES -p $RANDOM_MAXPLY \
        $NNUE_FLAG -s $i -o "${OUTPUT_DIR}/train_${i}.bin" 2>/dev/null &
   PIDS+=($!)
 done
