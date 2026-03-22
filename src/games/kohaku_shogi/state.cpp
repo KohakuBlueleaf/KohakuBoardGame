@@ -734,6 +734,56 @@ void State::gen_drop_moves(){
             }
         }
     }
+
+    /* === Uchifuzume (打ち歩詰め) filter ===
+     * A pawn drop that delivers checkmate is illegal.
+     * For each pawn drop, check if it gives check and, if so, whether
+     * the opponent has any legal escape.  If no escape exists the drop
+     * is uchifuzume and must be removed. */
+    auto is_uchifuzume = [&](const Move& m) -> bool {
+        /* Only pawn drops */
+        if(m.first.first != DROP_ROW || (int)m.first.second != PAWN)
+            return false;
+
+        int tr = (int)m.second.first;
+        int tc = (int)m.second.second;
+
+        /* Temporarily place the pawn on the board */
+        Board tmp = board;
+        tmp.board[player][tr][tc] = PAWN;
+        tmp.hand[player][PAWN]--;
+
+        /* Check if opponent is in check: create state with dropper to move.
+         * If dropper can capture the opponent's king -> opponent is in check. */
+        State probe_check(tmp, player);
+        probe_check.step = step + 1;
+        probe_check.get_legal_actions();
+        if(probe_check.game_state != WIN){
+            return false;  /* not even check, pawn drop is fine */
+        }
+
+        /* Opponent is in check.  Check if it's checkmate:
+         * create state with opponent to move, enumerate their moves,
+         * and see if ANY move escapes the check. */
+        State probe_opp(tmp, 1 - player);
+        probe_opp.step = step + 1;
+        probe_opp.get_legal_actions();
+
+        for(auto& opp_move : probe_opp.legal_actions){
+            State* child = probe_opp.next_state(opp_move);
+            bool still_captured = (child->game_state == WIN);
+            delete child;
+            if(!still_captured){
+                return false;  /* opponent can escape, not checkmate */
+            }
+        }
+
+        /* No escape: this is uchifuzume -> illegal */
+        return true;
+    };
+
+    auto it = std::remove_if(legal_actions.begin(), legal_actions.end(), is_uchifuzume);
+    legal_actions.erase(it, legal_actions.end());
 }
 
 

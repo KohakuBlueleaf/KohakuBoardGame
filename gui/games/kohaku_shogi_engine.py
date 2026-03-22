@@ -519,6 +519,47 @@ class KohakuShogiState:
                             continue
                     actions.append(((BOARD_H, pt), (r, c)))
 
+        # === Uchifuzume filter ===
+        # A pawn drop that delivers checkmate is illegal.
+        filtered = []
+        for move in actions:
+            fr, fc = move[0]
+            if fr != BOARD_H or fc != PAWN:
+                filtered.append(move)
+                continue
+
+            tr, tc = move[1]
+
+            # Temporarily create the board after the pawn drop
+            tmp_board = _deep_copy_board(self.board)
+            tmp_hand = _deep_copy_hand(self.hand)
+            tmp_board[me][tr][tc] = PAWN
+            tmp_hand[me][PAWN] -= 1
+
+            # Check if opponent is in check (can dropper capture their king?)
+            probe_check = KohakuShogiState(tmp_board, tmp_hand, me, self.step + 1)
+            probe_check.get_legal_actions()
+            if probe_check.game_state != "win":
+                filtered.append(move)  # not even check
+                continue
+
+            # Opponent is in check. Check if it's checkmate.
+            probe_opp = KohakuShogiState(tmp_board, tmp_hand, opp, self.step + 1)
+            probe_opp.get_legal_actions()
+
+            is_mate = True
+            for opp_move in probe_opp.legal_actions:
+                child = probe_opp.next_state(opp_move)
+                if child.game_state != "win":
+                    is_mate = False
+                    break
+
+            if not is_mate:
+                filtered.append(move)  # opponent can escape
+            # else: uchifuzume, drop is illegal
+
+        actions = filtered
+
         self.legal_actions = actions
 
     def position_key(self):
