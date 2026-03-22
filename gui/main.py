@@ -723,7 +723,10 @@ class GameApp:
         elif action == "analyze":
             self.toggle_analyze()
         elif action == "stop":
-            self.stop_game()
+            if self._is_gaming():
+                self._paused = not self._paused
+                if not self._paused:
+                    self._trigger_ai_if_needed()
 
     def _handle_keydown(self, key):
         if key == pygame.K_n:

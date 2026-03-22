@@ -280,9 +280,10 @@ class SidePanel:
         self.btn_undo.enabled = True  # always enabled (undo works during games too)
         self.btn_undo.draw(self.surface, mouse_pos)
 
-        # Top row: New | Stop | Reset
+        # Top row: New | Pause/Resume | Reset
         self.btn_new_game.draw(self.surface, mouse_pos)
         self.btn_stop.enabled = gaming
+        self.btn_stop.text = "Resume" if paused else "Pause"
         self.btn_stop.draw(self.surface, mouse_pos)
         self.btn_reset.draw(self.surface, mouse_pos)
 
