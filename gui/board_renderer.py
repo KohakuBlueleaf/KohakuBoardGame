@@ -319,13 +319,46 @@ class BoardRenderer:
 
         num_font = self._num_font
 
-        def _parse_and_draw(uci, color, shaft_w, head_scale):
-            fc = col_map.get(uci[0])
-            fr = row_map.get(uci[1])
-            tc = col_map.get(uci[2])
-            tr = row_map.get(uci[3])
-            if any(v is None for v in (fc, fr, tc, tr)):
+        def _parse_sq(s, pos):
+            """Parse a square at position pos. Returns (row, col, next_pos) or None."""
+            if pos >= len(s) or s[pos] not in col_map:
                 return None
+            c = col_map[s[pos]]
+            pos += 1
+            num_start = pos
+            while pos < len(s) and s[pos].isdigit():
+                pos += 1
+            if num_start == pos:
+                return None
+            r = row_map.get(s[num_start:pos])
+            if r is None:
+                return None
+            return (r, c, pos)
+
+        def _parse_and_draw(uci, color, shaft_w, head_scale):
+            # Handle drop moves: X*sq (e.g. P*c3)
+            if len(uci) >= 3 and uci[1] == '*':
+                parsed = _parse_sq(uci, 2)
+                if parsed is None:
+                    return None
+                tr, tc, _ = parsed
+                tx = cfg.BOARD_X + tc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
+                ty = cfg.BOARD_Y + tr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
+                # Draw a circle at destination instead of arrow (no source square)
+                overlay_r = max(6, shaft_w + 2)
+                pygame.draw.circle(overlay, color, (int(tx), int(ty)), overlay_r)
+                px, py = 0.0, -1.0
+                return (tx, ty, tx, ty, px, py)
+
+            # Board move: parse two squares
+            parsed_from = _parse_sq(uci, 0)
+            if parsed_from is None:
+                return None
+            fr, fc, pos = parsed_from
+            parsed_to = _parse_sq(uci, pos)
+            if parsed_to is None:
+                return None
+            tr, tc, _ = parsed_to
             fx, fy = self.board_to_screen(fr, fc)
             tx, ty = self.board_to_screen(tr, tc)
             fx += cfg.SQUARE_SIZE // 2
@@ -354,7 +387,7 @@ class BoardRenderer:
             if mpv_idx == 1:
                 continue  # draw best PV last (on top)
             pv_moves = pv_multi[mpv_idx]
-            if not pv_moves or len(pv_moves[0]) < 4:
+            if not pv_moves or len(pv_moves[0]) < 3:
                 continue
             # Green with very distinct sizes per rank
             # PV2: bright green, thick. PV5+: dim green, thin.
