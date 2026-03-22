@@ -546,35 +546,37 @@ class KohakuShogiRenderer:
             "L": LANCE, "N": KNIGHT, "B": BISHOP, "R": ROOK,
         }
 
-        for mpv_idx in sorted(pv_multi.keys()):
+        # Draw secondary PVs first (behind best), then best PV on top
+        for mpv_idx in sorted(pv_multi.keys(), reverse=True):
             pv_moves = pv_multi[mpv_idx]
             if not pv_moves:
                 continue
 
-            # Style per PV line
+            # All green, different width/alpha
             if mpv_idx == 1:
                 base_alpha = 220
                 shaft_base = 6
             elif mpv_idx == 2:
-                base_alpha = 178
+                base_alpha = 150
                 shaft_base = 4
-            else:
-                base_alpha = 128
+            elif mpv_idx == 3:
+                base_alpha = 110
                 shaft_base = 3
+            else:
+                base_alpha = 80
+                shaft_base = 2
 
-            for i, uci in enumerate(pv_moves):
+            # Best PV: show full sequence. Others: first move only.
+            max_moves = len(pv_moves) if mpv_idx == 1 else 1
+
+            for i in range(min(max_moves, len(pv_moves))):
+                uci = pv_moves[i]
                 if not uci:
                     continue
 
                 player_turn = (current_player + i) % 2
-                alpha = max(60, base_alpha - i * 25)
-
-                if mpv_idx == 1:
-                    color = (80, 220, 80, alpha)
-                elif mpv_idx == 2:
-                    color = (80, 160, 230, alpha)
-                else:
-                    color = (120, 180, 240, alpha)
+                alpha = max(40, base_alpha - i * 25)
+                color = (80, 220, 80, alpha)
 
                 if len(uci) >= 3 and uci[1] == "*":
                     tc = col_map.get(uci[2])
@@ -591,8 +593,9 @@ class KohakuShogiRenderer:
                     tx = cfg.BOARD_X + tc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
                     ty = cfg.BOARD_Y + tr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
                     self._draw_arrow(fx, fy, tx, ty, color, i)
-                    if i == 0:
-                        self._draw_pv_number(tx, ty, mpv_idx, player_turn, alpha)
+                    # Step numbers only on best PV sequence (skip first move)
+                    if mpv_idx == 1 and i > 0:
+                        self._draw_pv_number(tx, ty, i + 1, player_turn, alpha)
 
                 elif len(uci) >= 4:
                     fc = col_map.get(uci[0])
@@ -606,10 +609,10 @@ class KohakuShogiRenderer:
                     tx = cfg.BOARD_X + tc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
                     ty = cfg.BOARD_Y + tr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
                     self._draw_arrow(fx, fy, tx, ty, color, i)
-                    if i == 0:
+                    if mpv_idx == 1 and i > 0:
                         mid_x = (fx + tx) // 2
                         mid_y = (fy + ty) // 2
-                        self._draw_pv_number(mid_x, mid_y, mpv_idx, player_turn, alpha)
+                        self._draw_pv_number(mid_x, mid_y, i + 1, player_turn, alpha)
 
     def _draw_arrow(self, fx, fy, tx, ty, color, idx):
         dx = tx - fx

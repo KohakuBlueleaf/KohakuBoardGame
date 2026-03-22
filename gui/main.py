@@ -308,7 +308,7 @@ class GameApp:
 
         # MultiPV and PV display settings
         self.multi_pv = 1          # Number of PVs to search (1-10)
-        self.pv_display_steps = 6  # How many moves to show per PV line
+        self.pv_display_steps = 3  # How many moves to show per PV line
 
         # AI vs AI pacing
         self._last_ai_time = 0.0

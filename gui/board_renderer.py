@@ -304,10 +304,10 @@ class BoardRenderer:
         self.surface.blit(overlay, (0, 0))
 
     def _draw_pv_multi(self, pv_multi):
-        """Draw numbered arrows for multiple PV lines with distinct colors.
+        """Draw PV arrows: all green with varying width/alpha.
 
-        Args:
-            pv_multi: dict mapping multipv index (1, 2, ...) to list of UCI move strings.
+        - Best PV (multipv 1): full sequence with step numbers
+        - Other PVs: first move only, no numbers, thinner/fainter
         """
         import math
 
@@ -324,29 +324,31 @@ class BoardRenderer:
 
         num_font = self._num_font
 
-        # PV style per multipv index:
-        # PV 1: green, wide shaft
-        # PV 2: blue, medium shaft
-        # PV 3+: lighter blue, thin shaft
-        for mpv_idx in sorted(pv_multi.keys()):
+        # Draw secondary PVs first (behind best PV)
+        for mpv_idx in sorted(pv_multi.keys(), reverse=True):
             pv_moves = pv_multi[mpv_idx]
             if not pv_moves:
                 continue
 
+            # Style: all green, decreasing width/alpha by rank
             if mpv_idx == 1:
-                base_color = (80, 220, 80)
                 base_alpha = 220
                 shaft_w = 6
             elif mpv_idx == 2:
-                base_color = (80, 160, 230)
-                base_alpha = 178  # ~70%
+                base_alpha = 150
                 shaft_w = 4
-            else:
-                base_color = (120, 180, 240)
-                base_alpha = 128  # ~50%
+            elif mpv_idx == 3:
+                base_alpha = 110
                 shaft_w = 3
+            else:
+                base_alpha = 80
+                shaft_w = 2
 
-            for i, uci in enumerate(pv_moves):
+            # Best PV: show full sequence. Others: first move only.
+            max_moves = len(pv_moves) if mpv_idx == 1 else 1
+
+            for i in range(min(max_moves, len(pv_moves))):
+                uci = pv_moves[i]
                 if len(uci) < 4:
                     continue
 
@@ -357,8 +359,8 @@ class BoardRenderer:
                 if any(v is None for v in (fc, fr, tc, tr)):
                     continue
 
-                alpha = max(60, base_alpha - i * 25)
-                color = (base_color[0], base_color[1], base_color[2], alpha)
+                alpha = max(40, base_alpha - i * 25)
+                color = (80, 220, 80, alpha)
 
                 fx, fy = self.board_to_screen(fr, fc)
                 tx, ty = self.board_to_screen(tr, tc)
@@ -390,14 +392,14 @@ class BoardRenderer:
                 ]
                 pygame.draw.polygon(overlay, color, points)
 
-                # Draw numbered circle on the first move of each PV line
-                if i == 0:
+                # Step numbers only on best PV sequence (not on multi-PV first moves)
+                if mpv_idx == 1 and i > 0:
                     mid_x = (fx + tx) / 2
                     mid_y = (fy + ty) / 2
                     off = 10
                     num_x = mid_x + px * off
                     num_y = mid_y + py * off
-                    label = str(mpv_idx)
+                    label = str(i + 1)
                     num_surf = num_font.render(label, True, (255, 255, 255))
                     nr = max(num_surf.get_width(), num_surf.get_height()) // 2 + 3
                     pygame.draw.circle(
