@@ -1,6 +1,6 @@
 #!/bin/bash
 # Generate training positions using parallel workers.
-# Supports: minichess, minishogi, gomoku
+# Supports: minichess, minishogi, gomoku, kohaku_shogi, kohaku_chess
 #
 # Usage: bash scripts/gen_data.sh [options]
 #   -g GAME         Game type: minichess, minishogi, gomoku (default: minichess)
@@ -48,20 +48,32 @@ case "$GAME" in
     ;;
   minishogi)
     BOARD_CELLS=$((2 * 5 * 5))   # 50
+    HAND_CELLS=$((2 * 5))        # 10 (5 hand types per player)
     POS_PER_GAME=40
     ;;
   gomoku)
-    BOARD_CELLS=$((2 * 9 * 9))   # 162
+    BOARD_CELLS=$((2 * 15 * 15))  # 450
     POS_PER_GAME=40
     ;;
+  kohaku_shogi)
+    BOARD_CELLS=$((2 * 7 * 6))   # 84
+    HAND_CELLS=$((2 * 7))        # 14 (7 hand types per player)
+    POS_PER_GAME=70
+    ;;
+  kohaku_chess)
+    BOARD_CELLS=$((2 * 7 * 6))   # 84
+    POS_PER_GAME=50
+    ;;
   *)
-    echo "Error: unknown game '$GAME'. Use: minichess, minishogi, gomoku"
+    echo "Error: unknown game '$GAME'. Use: minichess, minishogi, gomoku, kohaku_shogi, kohaku_chess"
     exit 1
     ;;
 esac
 
-RECORD_SIZE=$((BOARD_CELLS + 8))
-HEADER_SIZE=12
+# v5 record: board(BOARD_CELLS) + hand(HAND_CELLS) + player(1) + score(2) + result(1) + ply(2) + best_move(2)
+HAND_CELLS=${HAND_CELLS:-2}  # default 2 (min 1 per player in C struct for games without hand)
+RECORD_SIZE=$((BOARD_CELLS + HAND_CELLS + 8))
+HEADER_SIZE=36  # v5 header size
 
 GAMES_PER_WORKER=$(( (TOTAL_GAMES + NUM_WORKERS - 1) / NUM_WORKERS ))
 
