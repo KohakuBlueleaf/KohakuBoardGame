@@ -528,6 +528,89 @@ class KohakuShogiRenderer:
                 mid_y = (fy + ty) // 2
                 self._draw_pv_number(mid_x, mid_y, i + 1, player_turn, alpha)
 
+    def draw_pv_multi(self, state, pv_multi):
+        """Draw multiple PV lines with distinct colors and numbered markers.
+
+        Args:
+            state: Current game state.
+            pv_multi: dict mapping multipv index (1, 2, ...) to list of UCI move strings.
+        """
+        if not pv_multi:
+            return
+
+        col_map = {chr(ord("a") + i): i for i in range(BOARD_W)}
+        row_map = {str(BOARD_H - i): i for i in range(BOARD_H)}
+        current_player = state.current_player
+        drop_map = {
+            "P": PAWN, "S": SILVER, "G": GOLD,
+            "L": LANCE, "N": KNIGHT, "B": BISHOP, "R": ROOK,
+        }
+
+        for mpv_idx in sorted(pv_multi.keys()):
+            pv_moves = pv_multi[mpv_idx]
+            if not pv_moves:
+                continue
+
+            # Style per PV line
+            if mpv_idx == 1:
+                base_alpha = 220
+                shaft_base = 6
+            elif mpv_idx == 2:
+                base_alpha = 178
+                shaft_base = 4
+            else:
+                base_alpha = 128
+                shaft_base = 3
+
+            for i, uci in enumerate(pv_moves):
+                if not uci:
+                    continue
+
+                player_turn = (current_player + i) % 2
+                alpha = max(60, base_alpha - i * 25)
+
+                if mpv_idx == 1:
+                    color = (80, 220, 80, alpha)
+                elif mpv_idx == 2:
+                    color = (80, 160, 230, alpha)
+                else:
+                    color = (120, 180, 240, alpha)
+
+                if len(uci) >= 3 and uci[1] == "*":
+                    tc = col_map.get(uci[2])
+                    tr = row_map.get(uci[3]) if len(uci) > 3 else None
+                    if tc is None or tr is None:
+                        continue
+                    drop_pt = drop_map.get(uci[0].upper(), PAWN)
+                    hand_rect = self._hand_rects.get((player_turn, drop_pt))
+                    if hand_rect is not None:
+                        fx, fy = hand_rect.centerx, hand_rect.centery
+                    else:
+                        fx = cfg.BOARD_X - 20
+                        fy = cfg.BOARD_Y + cfg.BOARD_PIXEL_H // 2
+                    tx = cfg.BOARD_X + tc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
+                    ty = cfg.BOARD_Y + tr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
+                    self._draw_arrow(fx, fy, tx, ty, color, i)
+                    if i == 0:
+                        self._draw_pv_number(tx, ty, mpv_idx, player_turn, alpha)
+
+                elif len(uci) >= 4:
+                    fc = col_map.get(uci[0])
+                    fr = row_map.get(uci[1])
+                    tc = col_map.get(uci[2])
+                    tr = row_map.get(uci[3])
+                    if any(v is None for v in (fc, fr, tc, tr)):
+                        continue
+                    fx = cfg.BOARD_X + fc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
+                    fy = cfg.BOARD_Y + fr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
+                    tx = cfg.BOARD_X + tc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
+                    ty = cfg.BOARD_Y + tr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
+                    self._draw_arrow(fx, fy, tx, ty, color, i)
+                    if i == 0:
+                        mid_x = (fx + tx) // 2
+                        mid_y = (fy + ty) // 2
+                        self._draw_pv_number(mid_x, mid_y, mpv_idx, player_turn, alpha)
+
     def _draw_arrow(self, fx, fy, tx, ty, color, idx):
         dx = tx - fx
         dy = ty - fy

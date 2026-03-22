@@ -306,6 +306,10 @@ class GameApp:
         self._analyze_active = False  # True when we expect info lines
         self._undo_stack = []
 
+        # MultiPV and PV display settings
+        self.multi_pv = 1          # Number of PVs to search (1-10)
+        self.pv_display_steps = 6  # How many moves to show per PV line
+
         # AI vs AI pacing
         self._last_ai_time = 0.0
         self._paused = False
@@ -509,6 +513,9 @@ class GameApp:
         if engine is None:
             return
         self.search_info = {}
+        # Send MultiPV setting before starting search
+        if self.multi_pv > 1:
+            engine.set_option("MultiPV", str(self.multi_pv))
         if self.uci_moves:
             engine.set_position(moves=list(self.uci_moves))
         else:
@@ -537,10 +544,28 @@ class GameApp:
         """Normalize score to White-labeled player's perspective for the score bar."""
         if "score_cp" in info_dict and self.game_state.player == 1:
             info_dict["score_cp"] = -info_dict["score_cp"]
-        # Preserve last known PV if new info doesn't have one
-        if "pv" not in info_dict and "pv" in self.search_info:
-            info_dict["pv"] = self.search_info["pv"]
-        self.search_info = info_dict
+
+        mpv_idx = info_dict.get("multipv", 1)
+
+        # Maintain pv_multi dict across info updates
+        if "pv_multi" not in self.search_info:
+            self.search_info["pv_multi"] = {}
+
+        pv_multi = dict(self.search_info.get("pv_multi", {}))
+
+        if "pv" in info_dict:
+            pv_multi[mpv_idx] = info_dict["pv"]
+
+        # For multipv 1 (the best line), update the main search_info
+        if mpv_idx == 1:
+            # Preserve last known PV if new info doesn't have one
+            if "pv" not in info_dict and "pv" in self.search_info:
+                info_dict["pv"] = self.search_info["pv"]
+            info_dict["pv_multi"] = pv_multi
+            self.search_info = info_dict
+        else:
+            # For secondary PVs, just update pv_multi in existing search_info
+            self.search_info["pv_multi"] = pv_multi
 
     def _on_analyze_done(self, bestmove_str):
         # Engine stopped (either by our stop or by completing depth limit).
@@ -1337,17 +1362,26 @@ class GameApp:
         self.screen.fill(_cfg.COLOR_BG)
 
         # Only show PV arrows in analyze mode, NOT during gaming
-        pv = (
-            self.search_info.get("pv")
-            if self.analyze["enabled"] and not self._is_gaming()
-            else None
-        )
+        pv = None
+        pv_multi = None
+        if self.analyze["enabled"] and not self._is_gaming():
+            pv = self.search_info.get("pv")
+            pv_multi_raw = self.search_info.get("pv_multi")
+            if pv_multi_raw and self.multi_pv > 1:
+                # Truncate each PV line to pv_display_steps moves
+                pv_multi = {}
+                for idx, moves in pv_multi_raw.items():
+                    pv_multi[idx] = moves[:self.pv_display_steps] if moves else []
+            # Also truncate main PV
+            if pv:
+                pv = pv[:self.pv_display_steps]
         self.board_renderer.draw(
             self.game_state,
             selected=self.selected_piece,
             legal_moves=self.legal_moves_for_selected,
             last_move=self.last_move,
             pv_arrows=pv,
+            pv_multi=pv_multi,
         )
 
         self.side_panel.draw(
@@ -1726,9 +1760,31 @@ class GameApp:
             row=1, column=1, sticky="w", **pad
         )
 
+        # MultiPV and PV display settings
+        pv_frame = ttk.LabelFrame(dialog, text="PV Display")
+        pv_frame.grid(row=2, column=0, columnspan=2, sticky="ew", **pad)
+
+        multi_pv_var = tk.IntVar(value=self.multi_pv)
+        ttk.Label(pv_frame, text="MultiPV:").grid(
+            row=0, column=0, sticky="w", padx=4, pady=2
+        )
+        ttk.Spinbox(pv_frame, from_=1, to=10, increment=1,
+                     textvariable=multi_pv_var, width=5).grid(
+            row=0, column=1, sticky="w", padx=4, pady=2
+        )
+
+        pv_steps_var = tk.IntVar(value=self.pv_display_steps)
+        ttk.Label(pv_frame, text="PV Steps:").grid(
+            row=1, column=0, sticky="w", padx=4, pady=2
+        )
+        ttk.Spinbox(pv_frame, from_=1, to=20, increment=1,
+                     textvariable=pv_steps_var, width=5).grid(
+            row=1, column=1, sticky="w", padx=4, pady=2
+        )
+
         # Buttons
         bf = ttk.Frame(dialog)
-        bf.grid(row=2, column=0, columnspan=2, pady=10)
+        bf.grid(row=3, column=0, columnspan=2, pady=10)
         ttk.Button(
             bf,
             text="Save",
@@ -1774,6 +1830,16 @@ class GameApp:
         self.analyze["algo"] = analyze_algo_var.get()
         self.analyze["params"] = analyze_params
         self.time_limit = max(0.1, min(30, time_var.get()))
+
+        # Update MultiPV and PV display steps
+        new_multi_pv = max(1, min(10, multi_pv_var.get()))
+        self.pv_display_steps = max(1, min(20, pv_steps_var.get()))
+        multi_pv_changed = new_multi_pv != self.multi_pv
+        self.multi_pv = new_multi_pv
+
+        # Send MultiPV option to running analyze engine if changed
+        if multi_pv_changed and self._analyze_engine is not None and self._analyze_engine.is_alive():
+            self._analyze_engine.set_option("MultiPV", str(self.multi_pv))
 
         # Restart analysis if it was running
         if self.analyze["enabled"]:

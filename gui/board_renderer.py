@@ -58,7 +58,8 @@ class BoardRenderer:
     # -----------------------------------------------------------------
 
     def draw(
-        self, state, selected=None, legal_moves=None, last_move=None, pv_arrows=None
+        self, state, selected=None, legal_moves=None, last_move=None,
+        pv_arrows=None, pv_multi=None,
     ):
         self._draw_squares()
         self._draw_last_move(last_move)
@@ -66,7 +67,13 @@ class BoardRenderer:
         self._draw_legal_moves(state, selected, legal_moves)
         if self.game_renderer:
             self.game_renderer.draw_pieces(state)
-        if pv_arrows:
+        if pv_multi and len(pv_multi) > 1:
+            # Multi-PV rendering
+            if self.game_renderer and hasattr(self.game_renderer, "draw_pv_multi"):
+                self.game_renderer.draw_pv_multi(state, pv_multi)
+            else:
+                self._draw_pv_multi(pv_multi)
+        elif pv_arrows:
             if self.game_renderer and hasattr(self.game_renderer, "draw_pv"):
                 self.game_renderer.draw_pv(state, pv_arrows)
             else:
@@ -293,6 +300,117 @@ class BoardRenderer:
                 num_surf,
                 (num_x - num_surf.get_width() / 2, num_y - num_surf.get_height() / 2),
             )
+
+        self.surface.blit(overlay, (0, 0))
+
+    def _draw_pv_multi(self, pv_multi):
+        """Draw numbered arrows for multiple PV lines with distinct colors.
+
+        Args:
+            pv_multi: dict mapping multipv index (1, 2, ...) to list of UCI move strings.
+        """
+        import math
+
+        if not pv_multi:
+            return
+
+        col_map = {chr(ord("a") + i): i for i in range(cfg.BOARD_W)}
+        row_map = {str(cfg.BOARD_H - i): i for i in range(cfg.BOARD_H)}
+
+        overlay = pygame.Surface(
+            (cfg.WINDOW_W, cfg.WINDOW_H),
+            pygame.SRCALPHA,
+        )
+
+        num_font = self._num_font
+
+        # PV style per multipv index:
+        # PV 1: green, wide shaft
+        # PV 2: blue, medium shaft
+        # PV 3+: lighter blue, thin shaft
+        for mpv_idx in sorted(pv_multi.keys()):
+            pv_moves = pv_multi[mpv_idx]
+            if not pv_moves:
+                continue
+
+            if mpv_idx == 1:
+                base_color = (80, 220, 80)
+                base_alpha = 220
+                shaft_w = 6
+            elif mpv_idx == 2:
+                base_color = (80, 160, 230)
+                base_alpha = 178  # ~70%
+                shaft_w = 4
+            else:
+                base_color = (120, 180, 240)
+                base_alpha = 128  # ~50%
+                shaft_w = 3
+
+            for i, uci in enumerate(pv_moves):
+                if len(uci) < 4:
+                    continue
+
+                fc = col_map.get(uci[0])
+                fr = row_map.get(uci[1])
+                tc = col_map.get(uci[2])
+                tr = row_map.get(uci[3])
+                if any(v is None for v in (fc, fr, tc, tr)):
+                    continue
+
+                alpha = max(60, base_alpha - i * 25)
+                color = (base_color[0], base_color[1], base_color[2], alpha)
+
+                fx, fy = self.board_to_screen(fr, fc)
+                tx, ty = self.board_to_screen(tr, tc)
+                fx += cfg.SQUARE_SIZE // 2
+                fy += cfg.SQUARE_SIZE // 2
+                tx += cfg.SQUARE_SIZE // 2
+                ty += cfg.SQUARE_SIZE // 2
+
+                dx = tx - fx
+                dy = ty - fy
+                length = math.sqrt(dx * dx + dy * dy)
+                if length < 1:
+                    continue
+                ux, uy = dx / length, dy / length
+
+                cur_shaft_w = max(2, shaft_w - i)
+                head_len = min(20, length * 0.3)
+                head_w = head_len * 0.65
+
+                sx2 = tx - ux * head_len
+                sy2 = ty - uy * head_len
+                pygame.draw.line(overlay, color, (fx, fy), (sx2, sy2), cur_shaft_w)
+
+                px, py = -uy, ux
+                points = [
+                    (tx, ty),
+                    (sx2 + px * head_w, sy2 + py * head_w),
+                    (sx2 - px * head_w, sy2 - py * head_w),
+                ]
+                pygame.draw.polygon(overlay, color, points)
+
+                # Draw numbered circle on the first move of each PV line
+                if i == 0:
+                    mid_x = (fx + tx) / 2
+                    mid_y = (fy + ty) / 2
+                    off = 10
+                    num_x = mid_x + px * off
+                    num_y = mid_y + py * off
+                    label = str(mpv_idx)
+                    num_surf = num_font.render(label, True, (255, 255, 255))
+                    nr = max(num_surf.get_width(), num_surf.get_height()) // 2 + 3
+                    pygame.draw.circle(
+                        overlay,
+                        (0, 0, 0, min(200, alpha)),
+                        (int(num_x), int(num_y)),
+                        nr,
+                    )
+                    overlay.blit(
+                        num_surf,
+                        (num_x - num_surf.get_width() / 2,
+                         num_y - num_surf.get_height() / 2),
+                    )
 
         self.surface.blit(overlay, (0, 0))
 

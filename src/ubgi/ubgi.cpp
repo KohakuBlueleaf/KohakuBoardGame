@@ -34,6 +34,7 @@ static std::thread        g_search_thread;
 static std::mutex         g_io_mutex;
 static std::atomic<bool>  g_searching{false};
 static Move               g_best_move;
+static int                g_multi_pv = 1;
 #ifdef USE_NNUE
 static std::string        g_nnue_file = NNUE_FILE;
 static bool               g_nnue_dirty = true;  /* need to (re)load on isready */
@@ -319,6 +320,8 @@ static void do_search(
         send(oss.str());
     };
 
+    int multi_pv = g_multi_pv;
+
     for(int depth = 1; depth <= depth_limit; depth++){
         if(!alive()){
             break;
@@ -349,8 +352,11 @@ static void do_search(
 
         std::ostringstream info;
         info << "info depth " << depth
-             << " seldepth " << result.seldepth
-             << " score cp " << result.score
+             << " seldepth " << result.seldepth;
+        if(multi_pv > 1){
+            info << " multipv 1";
+        }
+        info << " score cp " << result.score
              << " nodes " << total_nodes
              << " time " << total_ms
              << " nps " << nps;
@@ -360,6 +366,66 @@ static void do_search(
 
         if(alive()){
             send(info.str());
+        }
+
+        /* === MultiPV: search for additional PVs === */
+        if(multi_pv > 1 && alive()){
+            std::vector<Move> excluded;
+            excluded.push_back(result.best_move);
+            auto saved_actions = state.legal_actions;
+
+            for(int mpv = 2; mpv <= multi_pv; mpv++){
+                /* Remove excluded moves from legal_actions */
+                state.legal_actions = saved_actions;
+                state.legal_actions.erase(
+                    std::remove_if(state.legal_actions.begin(), state.legal_actions.end(),
+                        [&](const Move& m){
+                            return std::find(excluded.begin(), excluded.end(), m) != excluded.end();
+                        }),
+                    state.legal_actions.end()
+                );
+                if(state.legal_actions.empty()){
+                    break;
+                }
+                if(!alive()){
+                    break;
+                }
+
+                SearchContext sub_ctx;
+                sub_ctx.params = ctx.params;
+                SearchResult sub = g_algo->search(&state, depth, sub_ctx);
+
+                if(!alive()){
+                    break;
+                }
+
+                total_nodes += sub.nodes;
+
+                auto now2 = std::chrono::high_resolution_clock::now();
+                int64_t total_ms2 = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    now2 - search_start
+                ).count();
+
+                std::ostringstream sub_info;
+                sub_info << "info depth " << depth
+                         << " seldepth " << sub.seldepth
+                         << " multipv " << mpv
+                         << " score cp " << sub.score
+                         << " nodes " << total_nodes
+                         << " time " << total_ms2
+                         << " nps " << (total_ms2 > 0
+                             ? (total_nodes * 1000ULL / static_cast<uint64_t>(total_ms2))
+                             : 0);
+                if(!sub.pv.empty()){
+                    sub_info << " pv " << format_pv(sub.pv);
+                }
+
+                send(sub_info.str());
+
+                excluded.push_back(sub.best_move);
+            }
+
+            state.legal_actions = saved_actions;  /* restore */
         }
 
         if(!alive()){
@@ -465,6 +531,11 @@ static void cmd_setoption(std::istringstream& iss){
         #else
         send("info string ERROR: NNUE not compiled in");
         #endif
+    }else if(name == "MultiPV"){
+        int mpv = std::atoi(value.c_str());
+        if(mpv >= 1 && mpv <= 10){
+            g_multi_pv = mpv;
+        }
     }else if(name == "UseNNUE"){
         bool want = (value == "true" || value == "1");
         if(want && !nnue_available()){
@@ -567,6 +638,7 @@ void loop(){
                 }
             }
             send("option name Hash type spin default 18 min 10 max 24");
+            send("option name MultiPV type spin default 1 min 1 max 10");
             #ifdef USE_NNUE
             send("option name NNUEFile type string default " + std::string(NNUE_FILE));
             #endif
