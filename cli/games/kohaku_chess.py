@@ -101,11 +101,14 @@ def check_game_over(state):
     result, winner = state.check_game_over()
     if result == "win":
         return ("win", winner)
-    elif result == "draw":
+    elif result in ("draw", "stalemate"):
         return ("draw", None)
+    elif result in ("checkmate", "perpetual_check"):
+        return (result, winner)
 
     if not state.legal_actions:
-        return ("no_moves", 1 - state.player)
+        # Stalemate fallback (chess rule): no legal moves = draw
+        return ("draw", None)
 
     return (None, None)
 

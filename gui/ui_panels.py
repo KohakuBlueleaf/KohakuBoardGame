@@ -550,6 +550,8 @@ class SidePanel:
             return f"{p0} wins!", (100, 220, 100)
         if game_result in ("black_wins", "p1_wins"):
             return f"{p1} wins!", (220, 80, 80)
+        if game_result == "stalemate_draw":
+            return "Stalemate -- Draw!", (200, 200, 100)
         if game_result == "stopped":
             return "Game stopped", (180, 180, 180)
         return "Draw!", (200, 200, 100)

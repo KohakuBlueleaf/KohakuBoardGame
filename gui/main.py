@@ -1150,13 +1150,16 @@ class GameApp:
         self._sync_hand_highlight(None)
 
         result, winner = self.game_state.check_game_over()
-        if result in ("win", "checkmate", "perpetual_check"):
+        if result in ("win", "checkmate", "perpetual_check", "stalemate_loss"):
             if result == "checkmate":
                 self.game_result = "p0_checkmate" if winner == 0 else "p1_checkmate"
             elif result == "perpetual_check":
                 self.game_result = "p0_perpetual_check" if winner == 0 else "p1_perpetual_check"
             else:
                 self.game_result = "p0_wins" if winner == 0 else "p1_wins"
+            return
+        if result == "stalemate":
+            self.game_result = "stalemate_draw"
             return
         if result == "draw":
             self.game_result = "draw"

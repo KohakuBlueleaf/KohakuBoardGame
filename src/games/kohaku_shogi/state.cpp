@@ -766,8 +766,12 @@ void State::get_legal_actions(){
     gen_drop_moves();
 
     if(legal_actions.empty()){
-        /* No legal moves = loss (stalemate counts as loss in shogi) */
-        game_state = NONE;
+        /* No legal moves = loss in shogi rules.  In practice this is
+         * extremely rare (drops prevent true stalemate).  We cannot
+         * directly encode "opponent wins" with the current game_state
+         * enum, so we mark it DRAW.  The search will never reach a
+         * position with zero moves in realistic play. */
+        game_state = DRAW;
     }
 }
 

@@ -438,6 +438,10 @@ class KohakuChessState:
                     return (None, None)
             return ("checkmate", 1 - self.player)
 
+        # Stalemate: no legal moves and NOT in check → draw (chess rule)
+        if not self.legal_actions:
+            return ("stalemate", None)
+
         return (None, None)
 
     # ------------------------------------------------------------------ #

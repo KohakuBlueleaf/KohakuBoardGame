@@ -662,6 +662,11 @@ class KohakuShogiState:
                     return (None, None)  # at least one escape
             return ("checkmate", 1 - self.player)
 
+        # Stalemate: no legal moves → loss for the side with no moves (shogi rule).
+        # In practice this is extremely rare due to drops.
+        if not self.legal_actions:
+            return ("stalemate_loss", 1 - self.player)
+
         return (None, None)
 
     # ------------------------------------------------------------------ #

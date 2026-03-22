@@ -291,9 +291,11 @@ def check_game_over(state):
         return ("win", winner)
     elif result == "draw":
         return ("draw", None)
+    elif result in ("checkmate", "perpetual_check", "stalemate_loss"):
+        return (result, winner)
 
     if not state.legal_actions:
-        # Side to move has no legal moves -- they lose
+        # Side to move has no legal moves -- they lose (shogi rule)
         return ("no_moves", 1 - state.player)
 
     return (None, None)

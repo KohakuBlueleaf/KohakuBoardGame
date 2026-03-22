@@ -778,6 +778,14 @@ void State::get_legal_actions(){
     #else
     get_legal_actions_naive();
     #endif
+
+    /* Stalemate: no legal moves and not already a king-capture (WIN).
+     * In our king-capture model, if the opponent could capture our king,
+     * game_state would already be WIN from the previous ply's movegen.
+     * So empty legal_actions + no WIN = stalemate = DRAW (chess rule). */
+    if(legal_actions.empty() && game_state != WIN){
+        game_state = DRAW;
+    }
 }
 
 
