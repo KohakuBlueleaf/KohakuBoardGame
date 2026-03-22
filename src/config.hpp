@@ -5,7 +5,7 @@
 #define TIMEOUT_LIMIT 2
 
 /* === TT === */
-#define DEFAULT_TT_SIZE_BITS 18
+#define DEFAULT_TT_SIZE_BITS 24
 
 /* === NNUE === */
 #ifndef NO_NNUE
