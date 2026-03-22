@@ -51,6 +51,7 @@ def _get_game_module(game_name):
                 PLAYER_COLORS,
                 DROP_PIECE_CHAR,
                 CHAR_TO_DROP_PIECE,
+                PROMOTE_MAP,
             )
             from gui.games.minishogi_renderer import MiniShogiRenderer
         except ImportError:
@@ -61,10 +62,12 @@ def _get_game_module(game_name):
                 PLAYER_COLORS,
                 DROP_PIECE_CHAR,
                 CHAR_TO_DROP_PIECE,
+                PROMOTE_MAP,
             )
             from games.minishogi_renderer import MiniShogiRenderer
         _cfg.DROP_PIECE_CHAR = DROP_PIECE_CHAR
         _cfg.CHAR_TO_DROP_PIECE = CHAR_TO_DROP_PIECE
+        _cfg.PROMOTE_MAP = PROMOTE_MAP
         return (
             MiniShogiState,
             format_move,

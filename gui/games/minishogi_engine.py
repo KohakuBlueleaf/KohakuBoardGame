@@ -69,7 +69,7 @@ DROP_PIECE_CHAR = {PAWN: "P", SILVER: "S", GOLD: "G", BISHOP: "B", ROOK: "R"}
 CHAR_TO_DROP_PIECE = {"P": PAWN, "S": SILVER, "G": GOLD, "B": BISHOP, "R": ROOK}
 
 # Promotable pieces and their promoted forms
-_PROMOTE_MAP = {
+PROMOTE_MAP = {
     PAWN: P_PAWN,
     SILVER: P_SILVER,
     BISHOP: P_BISHOP,
@@ -138,7 +138,7 @@ def _in_promotion_zone(row, player):
 
 def _can_promote(piece_type):
     """Return True if piece_type can promote."""
-    return piece_type in _PROMOTE_MAP
+    return piece_type in PROMOTE_MAP
 
 
 def _is_promoted(piece_type):
@@ -476,7 +476,7 @@ class MiniShogiState:
             # Move piece
             new_board[me][fr][fc] = EMPTY
             if promoting:
-                new_board[me][actual_tr][tc] = _PROMOTE_MAP[moved_piece]
+                new_board[me][actual_tr][tc] = PROMOTE_MAP[moved_piece]
             else:
                 new_board[me][actual_tr][tc] = moved_piece
 
