@@ -93,12 +93,30 @@ std::string move_to_str(const Move& m){
     }
     /* Board move: from + to (+ promotion if to.first >= BOARD_H) */
     bool promote = (m.second.first >= static_cast<size_t>(BOARD_H));
-    size_t to_row = promote ? m.second.first - BOARD_H : m.second.first;
-    std::string s = sq_to_str(m.first.first, m.first.second)
-                  + sq_to_str(to_row, m.second.second);
     if(promote){
+#if NUM_HAND_TYPES > 0
+        /* Shogi-style promotion: to.first = actual_row + BOARD_H */
+        size_t to_row = m.second.first - BOARD_H;
+        std::string s = sq_to_str(m.first.first, m.first.second)
+                      + sq_to_str(to_row, m.second.second);
         s += '+';
+        return s;
+#else
+        /* Chess-style promotion: to.first = actual_row + BOARD_H * promo_idx
+         * promo_idx: 1=Queen, 2=Rook, 3=Bishop, 4=Knight */
+        int promo_idx = static_cast<int>(m.second.first / BOARD_H);
+        size_t to_row = m.second.first % BOARD_H;
+        std::string s = sq_to_str(m.first.first, m.first.second)
+                      + sq_to_str(to_row, m.second.second);
+        static const char promo_chars[] = "?qrbn";
+        if(promo_idx >= 1 && promo_idx <= 4){
+            s += promo_chars[promo_idx];
+        }
+        return s;
+#endif
     }
+    std::string s = sq_to_str(m.first.first, m.first.second)
+                  + sq_to_str(m.second.first, m.second.second);
     return s;
 }
 
@@ -134,11 +152,26 @@ Move str_to_move(const std::string& s){
     if(pos >= s.size() || !std::isalpha(s[pos])){
         return Move(Point(fr, fc), Point(fr, fc));
     }
-    /* Board move: parse second square [+promote] */
+    /* Board move: parse second square [+promote or qrbn suffix] */
     auto [tr, tc] = parse_sq(s, pos);
-    bool promote = (pos < s.size() && s[pos] == '+');
-    if(promote){
-        tr += BOARD_H;  /* sentinel for promotion */
+    if(pos < s.size()){
+        char suffix = s[pos];
+        if(suffix == '+'){
+            /* Shogi-style promotion */
+            tr += BOARD_H;
+        }else{
+            /* Chess-style promotion suffix: q=1, r=2, b=3, n=4 */
+            int pidx = 0;
+            switch(suffix){
+                case 'q': case 'Q': pidx = 1; break;
+                case 'r': case 'R': pidx = 2; break;
+                case 'b': case 'B': pidx = 3; break;
+                case 'n': case 'N': pidx = 4; break;
+            }
+            if(pidx > 0){
+                tr += BOARD_H * pidx;
+            }
+        }
     }
     return Move(Point(fr, fc), Point(tr, tc));
 }

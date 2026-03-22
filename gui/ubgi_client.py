@@ -586,10 +586,20 @@ class UBGIEngine:
             return ch + "*" + col_ch(tc) + row_ch(tr)
         # Promotion: to_r >= BOARD_H
         promote = tr >= bh
-        actual_tr = tr - bh if promote else tr
-        s = col_ch(fc) + row_ch(fr) + col_ch(tc) + row_ch(actual_tr)
         if promote:
-            s += "+"
+            promo_idx = tr // bh
+            actual_tr = tr % bh
+            s = col_ch(fc) + row_ch(fr) + col_ch(tc) + row_ch(actual_tr)
+            # Check if this is a shogi game (has drops) or chess game
+            has_drops = bool(getattr(_c, "DROP_PIECE_CHAR", None))
+            if has_drops:
+                s += "+"
+            else:
+                # Chess-style promotion suffix: 1=q, 2=r, 3=b, 4=n
+                promo_chars = {1: "q", 2: "r", 3: "b", 4: "n"}
+                s += promo_chars.get(promo_idx, "q")
+            return s
+        s = col_ch(fc) + row_ch(fr) + col_ch(tc) + row_ch(tr)
         return s
 
     @staticmethod
@@ -642,9 +652,18 @@ class UBGIEngine:
 
         # Board move (possibly with promotion)
         (tr, tc), pos = parse_sq(uci_str, pos)
-        promote = pos < len(uci_str) and uci_str[pos] == "+"
-        if promote:
-            tr += bh
+        if pos < len(uci_str):
+            suffix = uci_str[pos]
+            if suffix == "+":
+                # Shogi-style promotion
+                tr += bh
+            else:
+                # Chess-style promotion suffix: q=1, r=2, b=3, n=4
+                promo_map = {"q": 1, "Q": 1, "r": 2, "R": 2,
+                             "b": 3, "B": 3, "n": 4, "N": 4}
+                pidx = promo_map.get(suffix, 0)
+                if pidx > 0:
+                    tr += bh * pidx
         return ((fr, fc), (tr, tc))
 
 

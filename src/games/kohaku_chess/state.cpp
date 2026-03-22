@@ -212,16 +212,26 @@ State* State::next_state(const Move& move){
     Point from = move.first, to = move.second;
 
     int8_t moved = next.board[this->player][from.first][from.second];
-    // promotion for pawn
-    if(moved == 1 && (to.first == BOARD_H - 1 || to.first == 0)){
-        moved = 5;  // promote to queen
+
+    /* Decode chess promotion encoding:
+     *   to.first = actual_row + BOARD_H * promo_idx
+     *   promo_idx: 0=none, 1=Queen, 2=Rook, 3=Bishop, 4=Knight */
+    size_t actual_to_row = to.first;
+    if(to.first >= static_cast<size_t>(BOARD_H)){
+        int promo_idx = static_cast<int>(to.first / BOARD_H);
+        actual_to_row = to.first % BOARD_H;
+        static const int promo_piece[5] = {0, QUEEN, ROOK, BISHOP, KNIGHT};
+        if(promo_idx >= 1 && promo_idx <= 4){
+            moved = promo_piece[promo_idx];
+        }
     }
-    if(next.board[1 - this->player][to.first][to.second]){
-        next.board[1 - this->player][to.first][to.second] = 0;
+
+    if(next.board[1 - this->player][actual_to_row][to.second]){
+        next.board[1 - this->player][actual_to_row][to.second] = 0;
     }
 
     next.board[this->player][from.first][from.second] = 0;
-    next.board[this->player][to.first][to.second] = moved;
+    next.board[this->player][actual_to_row][to.second] = moved;
 
     State* ns = new State(next, 1 - this->player);
     ns->inherit_history(this);
@@ -269,11 +279,27 @@ void State::get_legal_actions_naive(){
         for(int j = 0; j < BOARD_W; j++){
             if((now_piece = self_board[i][j])){
                 switch(now_piece){
-                    case 1: // pawn
+                    case 1: { // pawn
+                        /* Helper lambda: add pawn move, generating 4 promotion
+                         * variants (Q/R/B/N) when reaching the last rank. */
+                        auto add_pawn_move = [&](int fr, int fc, int tr, int tc){
+                            bool promotes = (this->player == 0 && tr == 0)
+                                         || (this->player == 1 && tr == BOARD_H - 1);
+                            if(promotes){
+                                for(int pidx = 1; pidx <= 4; pidx++){
+                                    all_actions.push_back(
+                                        Move(Point(fr, fc),
+                                             Point(tr + BOARD_H * pidx, tc)));
+                                }
+                            }else{
+                                all_actions.push_back(
+                                    Move(Point(fr, fc), Point(tr, tc)));
+                            }
+                        };
                         if(this->player && i < BOARD_H - 1){
                             // black: advance down (+row)
                             if(!oppn_board[i+1][j] && !self_board[i+1][j]){
-                                all_actions.push_back(Move(Point(i, j), Point(i+1, j)));
+                                add_pawn_move(i, j, i+1, j);
                             }
                             if(j < BOARD_W - 1 && (oppn_piece = oppn_board[i+1][j+1]) > 0){
                                 if(oppn_piece == 6){
@@ -282,7 +308,7 @@ void State::get_legal_actions_naive(){
                                     this->legal_actions = all_actions;
                                     return;
                                 }
-                                all_actions.push_back(Move(Point(i, j), Point(i+1, j+1)));
+                                add_pawn_move(i, j, i+1, j+1);
                             }
                             if(j > 0 && (oppn_piece = oppn_board[i+1][j-1]) > 0){
                                 if(oppn_piece == 6){
@@ -291,12 +317,12 @@ void State::get_legal_actions_naive(){
                                     this->legal_actions = all_actions;
                                     return;
                                 }
-                                all_actions.push_back(Move(Point(i, j), Point(i+1, j-1)));
+                                add_pawn_move(i, j, i+1, j-1);
                             }
                         }else if(!this->player && i > 0){
                             // white: advance up (-row)
                             if(!oppn_board[i-1][j] && !self_board[i-1][j]){
-                                all_actions.push_back(Move(Point(i, j), Point(i-1, j)));
+                                add_pawn_move(i, j, i-1, j);
                             }
                             if(j < BOARD_W - 1 && (oppn_piece = oppn_board[i-1][j+1]) > 0){
                                 if(oppn_piece == 6){
@@ -305,7 +331,7 @@ void State::get_legal_actions_naive(){
                                     this->legal_actions = all_actions;
                                     return;
                                 }
-                                all_actions.push_back(Move(Point(i, j), Point(i-1, j+1)));
+                                add_pawn_move(i, j, i-1, j+1);
                             }
                             if(j > 0 && (oppn_piece = oppn_board[i-1][j-1]) > 0){
                                 if(oppn_piece == 6){
@@ -314,10 +340,11 @@ void State::get_legal_actions_naive(){
                                     this->legal_actions = all_actions;
                                     return;
                                 }
-                                all_actions.push_back(Move(Point(i, j), Point(i-1, j-1)));
+                                add_pawn_move(i, j, i-1, j-1);
                             }
                         }
                         break;
+                    }
 
                     case 2: // rook
                     case 4: // bishop
@@ -552,7 +579,27 @@ void State::get_legal_actions_bitboard(){
                         return;
                     }
                 }
-                targets = push | cap;
+                /* Pawn moves need special handling for promotion:
+                 * generate 4 separate moves (Q/R/B/N) when reaching last rank. */
+                uint64_t pawn_targets = push | cap;
+                while(pawn_targets){
+                    int to = __builtin_ctzll(pawn_targets);
+                    pawn_targets &= pawn_targets - 1;
+                    int to_r = BB_ROW(to), to_c = BB_COL(to);
+                    bool promotes = (self == 0 && to_r == 0)
+                                 || (self == 1 && to_r == BOARD_H - 1);
+                    if(promotes){
+                        for(int pidx = 1; pidx <= 4; pidx++){
+                            this->legal_actions.push_back(
+                                Move(Point(r, c),
+                                     Point(to_r + BOARD_H * pidx, to_c)));
+                        }
+                    }else{
+                        this->legal_actions.push_back(
+                            Move(Point(r, c), Point(to_r, to_c)));
+                    }
+                }
+                /* targets stays 0 — pawn moves already added above */
                 break;
             }
 
