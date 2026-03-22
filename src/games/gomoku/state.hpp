@@ -25,7 +25,12 @@ public:
 
     State* next_state(const Move& move) override;
     void get_legal_actions() override;
-    int evaluate(bool use_nnue = true, bool use_kp = true, bool use_mobility = true) override;
+    int evaluate(
+        bool use_nnue = true,
+        bool use_kp = true,
+        bool use_mobility = true,
+        const GameHistory* history = nullptr
+    ) override;
     std::string encode_output() const override;
     uint64_t hash() const override;
     int piece_at(int p, int row, int col) const override {
@@ -49,6 +54,7 @@ public:
     int board_h() const override { return BOARD_H; }
     int board_w() const override { return BOARD_W; }
     const char* game_name() const override { return "Gomoku"; }
+    bool check_repetition(const GameHistory& history, int& out_score) const override;
     BaseState* create_null_state() const override { return nullptr; }
 
 private:

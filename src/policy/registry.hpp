@@ -12,6 +12,7 @@
 #include <functional>
 #include <vector>
 #include "search_types.hpp"
+#include "game_history.hpp"
 #include "pvs.hpp"
 #include "alphabeta.hpp"
 #include "minimax.hpp"
@@ -21,19 +22,43 @@ struct AlgoEntry {
     std::string name;
     ParamMap default_params;
     std::vector<ParamDef> param_defs;
-    std::function<SearchResult(State*, int, SearchContext&)> search;
+    std::function<SearchResult(State*, int, GameHistory&, SearchContext&)> search;
 };
 
 inline const std::vector<AlgoEntry>& get_algo_table(){
     static const std::vector<AlgoEntry> table = {
-        {"pvs",       PVS::default_params(),       PVS::param_defs(),
-         [](State* s, int d, SearchContext& c){ return PVS::search(s, d, c); }},
-        {"alphabeta", AlphaBeta::default_params(),  AlphaBeta::param_defs(),
-         [](State* s, int d, SearchContext& c){ return AlphaBeta::search(s, d, c); }},
-        {"minimax",   MiniMax::default_params(),    MiniMax::param_defs(),
-         [](State* s, int d, SearchContext& c){ return MiniMax::search(s, d, c); }},
-        {"random",    Random::default_params(),     Random::param_defs(),
-         [](State* s, int d, SearchContext& c){ return Random::search(s, d, c); }},
+        {
+            "pvs",
+            PVS::default_params(),
+            PVS::param_defs(),
+            [](State* s, int d, GameHistory& h, SearchContext& c){
+                return PVS::search(s, d, h, c);
+            }
+        },
+        {
+            "alphabeta",
+            AlphaBeta::default_params(),
+            AlphaBeta::param_defs(),
+            [](State* s, int d, GameHistory& h, SearchContext& c){
+                return AlphaBeta::search(s, d, h, c);
+            }
+        },
+        {
+            "minimax",
+            MiniMax::default_params(),
+            MiniMax::param_defs(),
+            [](State* s, int d, GameHistory& h, SearchContext& c){
+                return MiniMax::search(s, d, h, c);
+            }
+        },
+        {
+            "random",
+            Random::default_params(),
+            Random::param_defs(),
+            [](State* s, int d, GameHistory& h, SearchContext& c){
+                return Random::search(s, d, h, c);
+            }
+        },
     };
     return table;
 }

@@ -9,8 +9,16 @@
  * Negamax with alpha-beta pruning.
  * Caller manages memory (no delete inside).
  *============================================================*/
-int AlphaBeta::eval_ctx(State *state, int depth, int alpha, int beta,
-                        SearchContext& ctx, const ABParams& p, int ply){
+int AlphaBeta::eval_ctx(
+    State *state,
+    int depth,
+    int alpha,
+    int beta,
+    GameHistory& history,
+    int ply,
+    SearchContext& ctx,
+    const ABParams& p
+){
     ctx.nodes++;
     if(ply > ctx.seldepth){
         ctx.seldepth = ply;
@@ -27,24 +35,36 @@ int AlphaBeta::eval_ctx(State *state, int depth, int alpha, int beta,
     if(now_res == DRAW){
         return 0;
     }
+
+    /* === Repetition check (game-specific) === */
+    int rep_score;
+    if(state->check_repetition(history, rep_score)){
+        return rep_score;
+    }
+    history.push(state->hash());
+
     if(depth == 0){
-        return state->evaluate(p.use_nnue, p.use_kp_eval, p.use_eval_mobility);
+        int score = state->evaluate(p.use_nnue, p.use_kp_eval, p.use_eval_mobility, &history);
+        history.pop(state->hash());
+        return score;
     }
 
     /* === Alpha-beta loop === */
     for(auto& move : state->legal_actions){
         State *next = state->next_state(move);
-        int score = -eval_ctx(next, depth - 1, -beta, -alpha, ctx, p, ply + 1);
+        int score = -eval_ctx(next, depth - 1, -beta, -alpha, history, ply + 1, ctx, p);
         delete next;
 
         if(score > alpha){
             alpha = score;
         }
         if(alpha >= beta){
+            history.pop(state->hash());
             return alpha;
         }
     }
 
+    history.pop(state->hash());
     return alpha;
 }
 
@@ -54,7 +74,12 @@ int AlphaBeta::eval_ctx(State *state, int depth, int alpha, int beta,
  *
  * Iterate legal moves, call eval_ctx, return SearchResult.
  *============================================================*/
-SearchResult AlphaBeta::search(State *state, int depth, SearchContext& ctx){
+SearchResult AlphaBeta::search(
+    State *state,
+    int depth,
+    GameHistory& history,
+    SearchContext& ctx
+){
     ctx.reset();
     ABParams p = ABParams::from_map(ctx.params);
     SearchResult result;
@@ -72,7 +97,7 @@ SearchResult AlphaBeta::search(State *state, int depth, SearchContext& ctx){
 
     for(auto& move : all_moves){
         State *next = state->next_state(move);
-        int score = -eval_ctx(next, depth - 1, -(beta_root), -alpha, ctx, p, 1);
+        int score = -eval_ctx(next, depth - 1, -(beta_root), -alpha, history, 1, ctx, p);
         delete next;
 
         if(score > alpha){

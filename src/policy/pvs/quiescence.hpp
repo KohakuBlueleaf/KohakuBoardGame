@@ -5,6 +5,7 @@
 #include "state.hpp"
 #include "search_types.hpp"
 #include "../pvs.hpp"
+#include "../game_history.hpp"
 #include "move_ordering.hpp"
 
 /*============================================================
@@ -15,9 +16,10 @@ inline int quiescence_ctx(
     int alpha,
     int beta,
     int qdepth,
+    GameHistory& history,
+    int ply,
     SearchContext& ctx,
-    const PVSParams& p,
-    int ply
+    const PVSParams& p
 ){
     ctx.nodes++;
     if(ply > ctx.seldepth){
@@ -30,14 +32,14 @@ inline int quiescence_ctx(
 
     if(state->game_state == WIN){
         delete state;
-        return P_MAX;
+        return P_MAX - ply;
     }
     if(state->game_state == DRAW){
         delete state;
         return 0;
     }
 
-    int stand_pat = state->evaluate(p.use_nnue, p.use_kp_eval, p.use_eval_mobility);
+    int stand_pat = state->evaluate(p.use_nnue, p.use_kp_eval, p.use_eval_mobility, &history);
     if(stand_pat >= beta){
         delete state;
         return beta;
@@ -70,7 +72,7 @@ inline int quiescence_ctx(
 
     for(auto& move : captures){
         int score = -quiescence_ctx(
-            state->next_state(move), -beta, -alpha, qdepth + 1, ctx, p, ply + 1
+            state->next_state(move), -beta, -alpha, qdepth + 1, history, ply + 1, ctx, p
         );
         if(ctx.stop){
             delete state;

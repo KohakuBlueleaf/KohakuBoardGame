@@ -5,11 +5,11 @@
 #include "pvs.hpp"
 #include "state.hpp"
 #include "config.hpp"
+#include "game_history.hpp"
 #include "pvs/tt.hpp"
 #include "pvs/killer_moves.hpp"
 #include "pvs/move_ordering.hpp"
 #include "pvs/quiescence.hpp"
-#include "pvs/search_history.hpp"
 
 
 /*============================================================
@@ -20,15 +20,31 @@
  *   use_tt, use_null_move, use_lmr, use_killer_moves,
  *   use_quiescence, use_move_ordering
  *============================================================*/
+/* RAII guard: push on construction, pop on destruction */
+struct HistoryGuard {
+    GameHistory& hist;
+    uint64_t h;
+    HistoryGuard(
+        GameHistory& hist, uint64_t hash
+    ): hist(hist), h(hash) {
+        hist.push(h);
+    }
+    ~HistoryGuard(){
+        hist.pop(h);
+    }
+};
+
+
 int PVS::eval_ctx(
     State *state,
     int depth,
     int alpha,
     int beta,
-    SearchContext& ctx,
-    const PVSParams& p,
+    GameHistory& history,
     int ply,
-    bool can_null
+    bool can_null,
+    SearchContext& ctx,
+    const PVSParams& p
 ){
     ctx.nodes++;
     if(ctx.stop){
@@ -46,25 +62,23 @@ int PVS::eval_ctx(
         return 0;
     }
 
-    /* === Repetition check via search history (push/pop, no map copying) === */
+    /* === Repetition check (game-specific rule) === */
     uint64_t state_hash = state->hash();
-    if(search_history_is_repetition(state_hash, 3)){
-        /* Position appeared 3+ times already → draw on revisit.
-         * Use 3 instead of 4 because the search sees positions earlier
-         * than the game-level 4-fold rule. */
+    int rep_score;
+    if(state->check_repetition(history, rep_score)){
         delete state;
-        return 0;
+        return rep_score;
     }
     /* RAII guard: push now, auto-pop on any return from this function */
-    SearchHistoryGuard hist_guard(state_hash);
+    HistoryGuard hist_guard(history, state_hash);
 
     /* === Leaf node === */
     if(depth == 0){
         if(p.use_quiescence){
             /* quiescence_ctx takes ownership of state and deletes it */
-            return quiescence_ctx(state, alpha, beta, 0, ctx, p, ply);
+            return quiescence_ctx(state, alpha, beta, 0, history, ply, ctx, p);
         }else{
-            int score = state->evaluate(p.use_nnue, p.use_kp_eval, p.use_eval_mobility);
+            int score = state->evaluate(p.use_nnue, p.use_kp_eval, p.use_eval_mobility, &history);
             delete state;
             return score;
         }
@@ -113,7 +127,7 @@ int PVS::eval_ctx(
             if(null_state->game_state != WIN && null_state->game_state != DRAW){
                 int null_score = -eval_ctx(
                     null_state, depth - 1 - p.null_move_r,
-                    -beta, -(beta - 1), ctx, p, ply + 1, false
+                    -beta, -(beta - 1), history, ply + 1, false, ctx, p
                 );
                 if(ctx.stop){
                     delete state;
@@ -145,7 +159,7 @@ int PVS::eval_ctx(
             /* First move: full window, full depth */
             score = -eval_ctx(
                 state->next_state(move), depth - 1,
-                -beta, -alpha, ctx, p, ply + 1, true
+                -beta, -alpha, history, ply + 1, true, ctx, p
             );
             first_child = false;
             best_move = move;
@@ -174,19 +188,19 @@ int PVS::eval_ctx(
                 /* LMR: null-window, reduced depth */
                 score = -eval_ctx(
                     state->next_state(move), depth - 2,
-                    -(alpha + 1), -alpha, ctx, p, ply + 1, true
+                    -(alpha + 1), -alpha, history, ply + 1, true, ctx, p
                 );
                 if(score > alpha){
                     /* Re-search at full depth, null-window */
                     score = -eval_ctx(
                         state->next_state(move), depth - 1,
-                        -(alpha + 1), -alpha, ctx, p, ply + 1, true
+                        -(alpha + 1), -alpha, history, ply + 1, true, ctx, p
                     );
                     if(score > alpha && score < beta){
                         /* Full window re-search */
                         score = -eval_ctx(
                             state->next_state(move), depth - 1,
-                            -beta, -alpha, ctx, p, ply + 1, true
+                            -beta, -alpha, history, ply + 1, true, ctx, p
                         );
                     }
                 }
@@ -194,12 +208,12 @@ int PVS::eval_ctx(
                 /* Standard PVS null-window search */
                 score = -eval_ctx(
                     state->next_state(move), depth - 1,
-                    -(alpha + 1), -alpha, ctx, p, ply + 1, true
+                    -(alpha + 1), -alpha, history, ply + 1, true, ctx, p
                 );
                 if(score > alpha && score < beta){
                     score = -eval_ctx(
                         state->next_state(move), depth - 1,
-                        -beta, -alpha, ctx, p, ply + 1, true
+                        -beta, -alpha, history, ply + 1, true, ctx, p
                     );
                 }
             }
@@ -251,14 +265,14 @@ int PVS::eval_ctx(
  * Root search: returns SearchResult with best move, score,
  * node count, seldepth, and principal variation.
  *============================================================*/
-SearchResult PVS::search(State *state, int depth, SearchContext& ctx){
+SearchResult PVS::search(
+    State *state,
+    int depth,
+    GameHistory& history,
+    SearchContext& ctx
+){
     ctx.reset();
     PVSParams p = PVSParams::from_map(ctx.params);
-
-    /* Initialize search history from the game-level position history.
-     * This seeds the push/pop repetition tracker with positions from
-     * actual play (before the search started). */
-    search_history_init(state->hash_counts);
 
     int alpha = M_MAX - 10;
     int beta  = P_MAX + 10;
@@ -294,20 +308,29 @@ SearchResult PVS::search(State *state, int depth, SearchContext& ctx){
                 depth - 1,
                 -beta,
                 -alpha,
-                ctx,
-                p,
+                history,
                 1,
-                true
+                true,
+                ctx,
+                p
             );
             first_child = false;
         }else{
             score = -eval_ctx(
-                state->next_state(move), depth - 1, -(alpha + 1), -alpha, ctx, p, 1, true
+                state->next_state(move),
+                depth - 1,
+                -(alpha + 1),
+                -alpha,
+                history,
+                1,
+                true,
+                ctx,
+                p
             );
             if(score > alpha && score < beta){
                 score = -eval_ctx(
                     state->next_state(move), depth - 1,
-                    -beta, -alpha, ctx, p, 1, true
+                    -beta, -alpha, history, 1, true, ctx, p
                 );
             }
         }

@@ -42,7 +42,12 @@ public:
         this->player = player;
     }
 
-    int evaluate(bool use_nnue = true, bool use_kp_eval = true, bool use_mobility = true) override;
+    int evaluate(
+        bool use_nnue = true,
+        bool use_kp_eval = true,
+        bool use_mobility = true,
+        const GameHistory* history = nullptr
+    ) override;
     State* next_state(const Move& move) override;
     void get_legal_actions() override;
     void get_legal_actions_naive();
@@ -50,6 +55,7 @@ public:
     std::string encode_output() const override;
     std::string encode_state();
 
+    bool check_repetition(const GameHistory& history, int& out_score) const override;
     BaseState* create_null_state() const override;
 
     int piece_at(int player, int row, int col) const override {

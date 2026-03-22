@@ -1,5 +1,6 @@
 #pragma once
 #include "search_types.hpp"
+#include "game_history.hpp"
 
 struct ABParams {
     bool use_nnue = true;
@@ -19,9 +20,22 @@ struct ABParams {
 
 class AlphaBeta{
 public:
-    static int eval_ctx(State *state, int depth, int alpha, int beta,
-                        SearchContext& ctx, const ABParams& p, int ply = 0);
-    static SearchResult search(State *state, int depth, SearchContext& ctx);
+    static int eval_ctx(
+        State *state,
+        int depth,
+        int alpha,
+        int beta,
+        GameHistory& history,
+        int ply,
+        SearchContext& ctx,
+        const ABParams& p
+    );
+    static SearchResult search(
+        State *state,
+        int depth,
+        GameHistory& history,
+        SearchContext& ctx
+    );
 
     static ParamMap default_params();
     static std::vector<ParamDef> param_defs();

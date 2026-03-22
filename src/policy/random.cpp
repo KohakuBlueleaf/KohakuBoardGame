@@ -8,7 +8,13 @@
  *
  * Pick a uniformly random legal move.
  *============================================================*/
-SearchResult Random::search(State *state, int depth, SearchContext& ctx){
+SearchResult Random::search(
+    State *state,
+    int depth,
+    GameHistory& history,
+    SearchContext& ctx
+){
+    (void)history;
     ctx.reset();
     SearchResult result;
     result.depth = 1;

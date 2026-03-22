@@ -8,8 +8,14 @@
  *
  * Negamax without pruning. Caller manages memory.
  *============================================================*/
-int MiniMax::eval_ctx(State *state, int depth, SearchContext& ctx,
-                      const MMParams& p, int ply){
+int MiniMax::eval_ctx(
+    State *state,
+    int depth,
+    GameHistory& history,
+    int ply,
+    SearchContext& ctx,
+    const MMParams& p
+){
     ctx.nodes++;
     if(ply > ctx.seldepth){
         ctx.seldepth = ply;
@@ -25,15 +31,25 @@ int MiniMax::eval_ctx(State *state, int depth, SearchContext& ctx,
     if(state->game_state == DRAW){
         return 0;
     }
+
+    /* === Repetition check (game-specific) === */
+    int rep_score;
+    if(state->check_repetition(history, rep_score)){
+        return rep_score;
+    }
+    history.push(state->hash());
+
     if(depth <= 0){
-        return state->evaluate(p.use_nnue, p.use_kp_eval, p.use_eval_mobility);
+        int score = state->evaluate(p.use_nnue, p.use_kp_eval, p.use_eval_mobility, &history);
+        history.pop(state->hash());
+        return score;
     }
 
     /* === Negamax loop === */
     int best_score = M_MAX;
     for(auto& action : state->legal_actions){
         State *next = state->next_state(action);
-        int score = -eval_ctx(next, depth - 1, ctx, p, ply + 1);
+        int score = -eval_ctx(next, depth - 1, history, ply + 1, ctx, p);
         delete next;
 
         if(score > best_score){
@@ -41,6 +57,7 @@ int MiniMax::eval_ctx(State *state, int depth, SearchContext& ctx,
         }
     }
 
+    history.pop(state->hash());
     return best_score;
 }
 
@@ -50,7 +67,12 @@ int MiniMax::eval_ctx(State *state, int depth, SearchContext& ctx,
  *
  * Iterate legal moves, call eval_ctx, return SearchResult.
  *============================================================*/
-SearchResult MiniMax::search(State *state, int depth, SearchContext& ctx){
+SearchResult MiniMax::search(
+    State *state,
+    int depth,
+    GameHistory& history,
+    SearchContext& ctx
+){
     ctx.reset();
     MMParams p = MMParams::from_map(ctx.params);
     SearchResult result;
@@ -66,7 +88,7 @@ SearchResult MiniMax::search(State *state, int depth, SearchContext& ctx){
 
     for(auto& action : state->legal_actions){
         State *next = state->next_state(action);
-        int score = -eval_ctx(next, depth - 1, ctx, p, 1);
+        int score = -eval_ctx(next, depth - 1, history, 1, ctx, p);
         delete next;
 
         if(score > best_score){

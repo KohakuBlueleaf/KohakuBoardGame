@@ -1,5 +1,6 @@
 #pragma once
 #include "search_types.hpp"
+#include "game_history.hpp"
 
 struct MMParams {
     bool use_nnue = true;
@@ -19,9 +20,20 @@ struct MMParams {
 
 class MiniMax{
 public:
-    static int eval_ctx(State *state, int depth, SearchContext& ctx,
-                        const MMParams& p, int ply = 0);
-    static SearchResult search(State *state, int depth, SearchContext& ctx);
+    static int eval_ctx(
+        State *state,
+        int depth,
+        GameHistory& history,
+        int ply,
+        SearchContext& ctx,
+        const MMParams& p
+    );
+    static SearchResult search(
+        State *state,
+        int depth,
+        GameHistory& history,
+        SearchContext& ctx
+    );
 
     static ParamMap default_params();
     static std::vector<ParamDef> param_defs();

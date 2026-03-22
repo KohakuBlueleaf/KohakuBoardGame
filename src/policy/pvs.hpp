@@ -1,5 +1,7 @@
 #pragma once
 #include "search_types.hpp"
+#include "game_history.hpp"
+
 
 /* === PVS-specific params (parsed from ParamMap for fast access) === */
 struct PVSParams {
@@ -21,31 +23,45 @@ struct PVSParams {
 
     static PVSParams from_map(const ParamMap& m){
         PVSParams p;
-        p.use_nnue           = param_bool(m, "UseNNUE", true);
-        p.use_kp_eval        = param_bool(m, "UseKPEval", true);
-        p.use_eval_mobility  = param_bool(m, "UseEvalMobility", true);
-        p.use_move_ordering  = param_bool(m, "UseMoveOrdering", true);
-        p.use_quiescence     = param_bool(m, "UseQuiescence", true);
+        p.use_nnue            = param_bool(m, "UseNNUE", true);
+        p.use_kp_eval         = param_bool(m, "UseKPEval", true);
+        p.use_eval_mobility   = param_bool(m, "UseEvalMobility", true);
+        p.use_move_ordering   = param_bool(m, "UseMoveOrdering", true);
+        p.use_quiescence      = param_bool(m, "UseQuiescence", true);
         p.quiescence_max_depth = param_int(m, "QuiescenceMaxDepth", 16);
-        p.use_tt             = param_bool(m, "UseTT", true);
-        p.use_killer_moves   = param_bool(m, "UseKillerMoves", true);
-        p.killer_slots       = param_int(m, "KillerSlots", 2);
-        p.use_null_move      = param_bool(m, "UseNullMove", true);
-        p.null_move_r        = param_int(m, "NullMoveR", 2);
-        p.use_lmr            = param_bool(m, "UseLMR", true);
-        p.lmr_full_depth     = param_int(m, "LMRFullDepth", 3);
-        p.lmr_depth_limit    = param_int(m, "LMRDepthLimit", 3);
-        p.report_partial     = param_bool(m, "ReportPartial", true);
+        p.use_tt              = param_bool(m, "UseTT", true);
+        p.use_killer_moves    = param_bool(m, "UseKillerMoves", true);
+        p.killer_slots         = param_int(m, "KillerSlots", 2);
+        p.use_null_move       = param_bool(m, "UseNullMove", true);
+        p.null_move_r          = param_int(m, "NullMoveR", 2);
+        p.use_lmr             = param_bool(m, "UseLMR", true);
+        p.lmr_full_depth       = param_int(m, "LMRFullDepth", 3);
+        p.lmr_depth_limit      = param_int(m, "LMRDepthLimit", 3);
+        p.report_partial      = param_bool(m, "ReportPartial", true);
         return p;
     }
 };
 
+
 class PVS{
 public:
-    static int eval_ctx(State *state, int depth, int alpha, int beta,
-                        SearchContext& ctx, const PVSParams& p,
-                        int ply = 0, bool can_null = true);
-    static SearchResult search(State *state, int depth, SearchContext& ctx);
+    static int eval_ctx(
+        State *state,
+        int depth,
+        int alpha,
+        int beta,
+        GameHistory& history,
+        int ply,
+        bool can_null,
+        SearchContext& ctx,
+        const PVSParams& p
+    );
+    static SearchResult search(
+        State *state,
+        int depth,
+        GameHistory& history,
+        SearchContext& ctx
+    );
     static std::vector<Move> extract_pv(State *state, int depth);
 
     static ParamMap default_params();
