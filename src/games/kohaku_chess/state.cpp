@@ -102,6 +102,10 @@ static const int pst[6][BOARD_H][BOARD_W] = {
      { 6,  6,  2,  2,  6,  6}},
 };
 
+/* 8 directions: 0-3 orthogonal, 4-7 diagonal */
+static const int dir8_dr[8] = { -1,  1,  0,  0, -1, -1,  1,  1 };
+static const int dir8_dc[8] = {  0,  0, -1,  1, -1,  1, -1,  1 };
+
 // King tropism weights per piece type
 static const int tropism_w[7] = {0, 0, 3, 3, 2, 5, 0};
 
@@ -186,6 +190,77 @@ int State::evaluate(bool use_nnue, bool use_kp_eval, bool use_mobility){
     }
 
     int bonus = 0;
+    int material_diff = self_score - oppn_score;
+
+    /* === Endgame adjustments === */
+    if(use_kp_eval){
+        int total_material = self_score + oppn_score - 2000; /* subtract kings */
+        bool is_endgame = (total_material < 500); /* few pieces left */
+        int self_kr = -1, self_kc = -1, oppn_kr = -1, oppn_kc = -1;
+
+        /* Re-find kings (already found above but scope is limited) */
+        for(int i = 0; i < BOARD_H; i++){
+            for(int j = 0; j < BOARD_W; j++){
+                if(self_board[i][j] == KING){ self_kr = i; self_kc = j; }
+                if(oppn_board[i][j] == KING){ oppn_kr = i; oppn_kc = j; }
+            }
+        }
+
+        if(is_endgame && material_diff > 50 && oppn_kr >= 0 && self_kr >= 0){
+            /* === Winning side endgame bonuses === */
+
+            /* 1. Drive enemy king to edge/corner.
+             * Center distance: king at center = 0, king at edge = high */
+            int oppn_center_dist_r = std::abs(oppn_kr - BOARD_H / 2);
+            int oppn_center_dist_c = std::abs(oppn_kc - BOARD_W / 2);
+            int oppn_edge_bonus = (oppn_center_dist_r + oppn_center_dist_c) * 8;
+            bonus += oppn_edge_bonus;
+
+            /* 2. Bring own king closer to enemy king (help coordinate mate) */
+            int king_dist = std::max(std::abs(self_kr - oppn_kr),
+                                     std::abs(self_kc - oppn_kc));
+            bonus += (7 - king_dist) * 6;  /* closer = higher bonus */
+
+            /* 3. Reduce enemy king mobility (fewer escape squares = closer to mate) */
+            int oppn_king_moves = 0;
+            for(int d = 0; d < 8; d++){
+                int nr = oppn_kr + dir8_dr[d];
+                int nc = oppn_kc + dir8_dc[d];
+                if(nr >= 0 && nr < BOARD_H && nc >= 0 && nc < BOARD_W
+                   && !oppn_board[nr][nc]){
+                    oppn_king_moves++;
+                }
+            }
+            bonus += (8 - oppn_king_moves) * 5;
+        }
+
+        /* 4. Passed pawn bonus (pawn with no enemy pawn ahead on same/adjacent files) */
+        for(int j = 0; j < BOARD_W; j++){
+            for(int i = 0; i < BOARD_H; i++){
+                if(self_board[i][j] == 1){  /* own pawn */
+                    bool passed = true;
+                    int dir = (this->player == 0) ? -1 : 1;
+                    int start_r = i + dir;
+                    /* Check ahead on same + adjacent files */
+                    while(start_r >= 0 && start_r < BOARD_H){
+                        for(int dc = -1; dc <= 1; dc++){
+                            int cc = j + dc;
+                            if(cc >= 0 && cc < BOARD_W && oppn_board[start_r][cc] == 1){
+                                passed = false;
+                            }
+                        }
+                        start_r += dir;
+                    }
+                    if(passed){
+                        /* Bonus grows exponentially as pawn advances */
+                        int rank_from_promo = (this->player == 0) ? i : (BOARD_H - 1 - i);
+                        int advance_bonus = (BOARD_H - 1 - rank_from_promo);
+                        bonus += advance_bonus * advance_bonus * 3;
+                    }
+                }
+            }
+        }
+    }
 
     /* === Mobility bonus === */
     if(use_mobility){
@@ -196,7 +271,17 @@ int State::evaluate(bool use_nnue, bool use_kp_eval, bool use_mobility){
         bonus += 2 * (self_mobility - oppn_mobility);
     }
 
-    return self_score - oppn_score + bonus;
+    /* === Anti-repetition contempt === */
+    /* When winning, penalize positions we've seen before to force progress */
+    if(material_diff > 30){
+        uint64_t h = this->hash();
+        auto it = hash_counts.find(h);
+        if(it != hash_counts.end() && it->second > 0){
+            bonus -= material_diff / 3;  /* lose 33% of advantage for repeating */
+        }
+    }
+
+    return material_diff + bonus;
 }
 
 
