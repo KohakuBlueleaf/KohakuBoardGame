@@ -78,7 +78,7 @@ FONT_SIZE_STATUS = 20
 
 # Axis labels (matching C++ game runner)
 COL_LABELS = "ABCDE"
-ROW_LABELS = "654321"
+ROW_LABELS = ["6", "5", "4", "3", "2", "1"]
 
 # Paths
 BUILD_DIR = os.path.join(

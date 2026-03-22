@@ -393,11 +393,11 @@ placed on any color --- making it effectively omnipresent.
 
 **Promoted Bishop / Horse (+B)** --- Bishop + 1-step orthogonal:
 ```
-  x . . . x
-  . x . x .
-  . x +B x .
-  . x . x .
-  x . . . x
+  x .  .  . x
+  . x  x  x .
+  . x +B  x .
+  . x  x  x .
+  x .  .  . x
 ```
 
 The Horse retains full diagonal sliding movement and gains the ability to
@@ -422,11 +422,11 @@ creates the fundamental "which file to open" strategic decision.
 
 **Promoted Rook / Dragon (+R)** --- Rook + 1-step diagonal:
 ```
-  . x x x .
-  . . x . .
-  x x +R x x
-  . . x . .
-  . x x x .
+  . .  x  . .
+  . x  x  x .
+  x x +R  x x
+  . x  x  x .
+  . .  x  . .
 ```
 
 The Dragon retains full orthogonal sliding movement and gains the ability to

@@ -54,7 +54,7 @@ GAME_CONFIGS: Dict[str, dict] = {
         "board_h": 7,
         "board_w": 6,
         "num_piece_types": 15,  # 0=empty, 1-8 base, 9-14 promoted
-        "num_pt_no_king": 13,   # piece types 1-7 + 9-14, excluding KING=8
+        "num_pt_no_king": 14,   # C++ NUM_PT_NO_KING=14 (includes gap at KING index 8)
         "king_id": 8,
         "piece_names": [
             ".",
