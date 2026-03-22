@@ -618,8 +618,19 @@ class GameApp:
         return self._game_started and self.game_result is None
 
     def undo_move(self):
-        if not self._undo_stack or self._is_gaming():
+        if not self._undo_stack:
             return
+        # Stop AI if thinking
+        if self.ai_thinking:
+            for attr in ("white_uci_engine", "black_uci_engine"):
+                eng = getattr(self, attr, None)
+                if eng is not None:
+                    try:
+                        eng.stop()
+                    except Exception:
+                        pass
+            self.ai_thinking = False
+            self.ai_result = {"move": None, "depth": 0, "ready": False}
         if self.analyze["enabled"]:
             self._stop_analysis()
         snap = self._undo_stack.pop()
@@ -629,12 +640,15 @@ class GameApp:
         self.score_history = snap["score_history"]
         self.last_move = snap["last_move"]
         self.game_result = None
+        self._promotion_dialog = None
         self.search_info = {}
         self.selected_piece = None
         self.legal_moves_for_selected = []
         self._sync_hand_highlight(None)
         if self.analyze["enabled"]:
             self._start_analysis()
+        elif self._is_gaming():
+            self._trigger_ai_if_needed()
 
     # ------------------------------------------------------------------
     # Main loop
@@ -1141,9 +1155,8 @@ class GameApp:
         if self.game_result == "stopped":
             self.game_result = None
 
-        # Save undo snapshot (always — user may want to explore/replay)
-        if not self._is_gaming():
-            self._undo_stack.append(
+        # Save undo snapshot (always — allows undo during games too)
+        self._undo_stack.append(
                 {
                     "game_state": self.game_state,
                     "uci_moves": list(self.uci_moves),

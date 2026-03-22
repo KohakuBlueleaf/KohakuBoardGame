@@ -277,7 +277,7 @@ class SidePanel:
             cy = self._draw_pv(cx, cy, search_info["pv"])
 
         # Undo: disabled during gaming
-        self.btn_undo.enabled = not gaming
+        self.btn_undo.enabled = True  # always enabled (undo works during games too)
         self.btn_undo.draw(self.surface, mouse_pos)
 
         # Top row: New | Stop | Reset
