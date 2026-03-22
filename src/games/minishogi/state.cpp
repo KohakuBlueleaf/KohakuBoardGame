@@ -746,31 +746,6 @@ State* State::next_state(const Move& move){
 
     if(this->game_state != WIN){
         ns->get_legal_actions();
-
-        /* Detect if the child position is "in check" (opponent attacks our king).
-         * Probe: create a temp state with side-to-move flipped, run get_legal_actions.
-         * If that probe has game_state==WIN, the child's king is under attack. */
-        if(ns->game_state != WIN){
-            State probe(next, p);  /* same board, parent's player to move */
-            probe.step = ns->step;
-            probe.get_legal_actions();
-            bool in_check = (probe.game_state == WIN);
-            ns->record_check_status(in_check);
-
-            /* Perpetual check: if 4-fold repetition (DRAW) and all 4 occurrences
-             * were checks, the checker (opponent = p) loses → child (opp) wins. */
-            if(ns->game_state == DRAW && in_check){
-                auto cit = ns->check_hash_counts.find(ns->hash());
-                int chk = (cit != ns->check_hash_counts.end()) ? cit->second : 0;
-                /* chk already includes the current occurrence (just recorded above).
-                 * Need all occurrences to be checks: chk >= 4. */
-                if(chk >= 4){
-                    ns->game_state = WIN;
-                    ns->legal_actions.clear();
-                    ns->legal_actions.push_back({{0,0},{0,0}});
-                }
-            }
-        }
     }
     return ns;
 }

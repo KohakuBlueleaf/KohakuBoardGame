@@ -9,6 +9,7 @@
 #include "pvs/killer_moves.hpp"
 #include "pvs/move_ordering.hpp"
 #include "pvs/quiescence.hpp"
+#include "pvs/search_history.hpp"
 
 
 /*============================================================
@@ -38,8 +39,6 @@ int PVS::eval_ctx(
     /* === Terminal checks === */
     if(state->game_state == WIN){
         delete state;
-        /* Prefer faster wins (higher ply = found deeper = less urgent).
-         * Also makes the losing side prefer slower losses. */
         return P_MAX - ply;
     }
     if(state->game_state == DRAW){
@@ -47,9 +46,22 @@ int PVS::eval_ctx(
         return 0;
     }
 
+    /* === Repetition check via search history (push/pop, no map copying) === */
+    uint64_t state_hash = state->hash();
+    if(search_history_is_repetition(state_hash, 3)){
+        /* Position appeared 3+ times already → draw on revisit.
+         * Use 3 instead of 4 because the search sees positions earlier
+         * than the game-level 4-fold rule. */
+        delete state;
+        return 0;
+    }
+    /* RAII guard: push now, auto-pop on any return from this function */
+    SearchHistoryGuard hist_guard(state_hash);
+
     /* === Leaf node === */
     if(depth == 0){
         if(p.use_quiescence){
+            /* quiescence_ctx takes ownership of state and deletes it */
             return quiescence_ctx(state, alpha, beta, 0, ctx, p, ply);
         }else{
             int score = state->evaluate(p.use_nnue, p.use_kp_eval, p.use_eval_mobility);
@@ -242,6 +254,11 @@ int PVS::eval_ctx(
 SearchResult PVS::search(State *state, int depth, SearchContext& ctx){
     ctx.reset();
     PVSParams p = PVSParams::from_map(ctx.params);
+
+    /* Initialize search history from the game-level position history.
+     * This seeds the push/pop repetition tracker with positions from
+     * actual play (before the search started). */
+    search_history_init(state->hash_counts);
 
     int alpha = M_MAX - 10;
     int beta  = P_MAX + 10;
