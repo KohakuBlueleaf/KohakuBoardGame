@@ -40,8 +40,8 @@ def _init_game(game_name, board_size=None):
         from cli.games.minichess import get_context
 
         _game_ctx.update(get_context())
-    elif game_name == "gomoku":
-        from cli.games.gomoku import get_context
+    elif game_name == "connect6":
+        from cli.games.connect6 import get_context
 
         _game_ctx.update(get_context(board_size or 15))
     elif game_name == "minishogi":
@@ -132,7 +132,7 @@ def format_move_display(move_or_uci, state=None):
     """Format a move for display, adapting to the active game type.
 
     For minichess: uses the algebraic format_move (e.g. 'B2->B3').
-    For gomoku: shows the coordinate (e.g. 'E5').
+    For connect6: shows the coordinate (e.g. 'E5').
     For generic: shows the raw UCI string.
     """
     game_name = _game_ctx.get("name", "generic")
@@ -142,8 +142,8 @@ def format_move_display(move_or_uci, state=None):
         return _game_ctx["format_move"](move_or_uci)
     elif game_name in ("minishogi", "kohakushogi") and isinstance(move_or_uci, str):
         return move_or_uci.upper()
-    elif game_name == "gomoku" and isinstance(move_or_uci, str):
-        # Gomoku UCI move is like "e5" (column letter + row number)
+    elif game_name == "connect6" and isinstance(move_or_uci, str):
+        # Connect6 UCI move is like "e5" (column letter + row number)
         return move_or_uci.upper()
     else:
         if isinstance(move_or_uci, str):
@@ -356,7 +356,7 @@ def run_game(
                 elif game_name in ("minishogi", "kohakushogi"):
                     winner_str = "Sente" if winner == 0 else "Gote"
                     color = "white" if winner == 0 else "black"
-                elif game_name == "gomoku":
+                elif game_name == "connect6":
                     winner_str = "Player 1 (X)" if winner == 1 else "Player 2 (O)"
                     color = "white" if winner == 1 else "black"
                 else:
@@ -393,7 +393,7 @@ def run_game(
             # Determine which side to move
             if game_name in ("minichess", "minishogi", "kohakuchess", "kohakushogi"):
                 is_white = state.player == 0
-            elif game_name == "gomoku":
+            elif game_name == "connect6":
                 is_white = state["player"] == 1  # player 1 = "white" (first player)
             else:
                 is_white = len(uci_moves) % 2 == 0
@@ -418,7 +418,7 @@ def run_game(
                 if game_name in ("minichess", "minishogi", "kohakuchess", "kohakushogi") and verbose:
                     print(f"  Step {state.step}/{_game_ctx['max_step']}")
                 result = human_fn(state, _game_ctx)
-                # For chess/shogi variants, result is a move tuple; for gomoku, a UCI string
+                # For chess/shogi variants, result is a move tuple; for connect6, a UCI string
                 if game_name in ("minichess", "minishogi", "kohakuchess", "kohakushogi"):
                     bestmove_uci = _game_ctx["move_to_uci"](result)
                 else:
@@ -462,7 +462,7 @@ def run_game(
                                 f"  >> {side_name} engine returned illegal move {_game_ctx['format_move'](move)}! {side_name} loses."
                             )
                         return "black" if is_white else "white"
-                elif game_name == "gomoku":
+                elif game_name == "connect6":
                     # Validate placement is on an empty square and in bounds
                     _, (r, c) = move
                     size = state["size"]
@@ -628,7 +628,7 @@ def main():
         epilog="""Examples:
   %(prog)s --white build/minichess-uci.exe --black build/minichess-uci.exe --time 2000 --games 10
   %(prog)s --white human --black build/minichess-uci.exe --time 2000
-  %(prog)s --game gomoku --white build/gomoku.exe --black build/gomoku.exe --depth 6
+  %(prog)s --game connect6 --white build/connect6.exe --black build/connect6.exe --depth 6
   %(prog)s --game generic --white build/engine.exe --black build/engine.exe --time 5000
 """,
     )
@@ -637,7 +637,7 @@ def main():
         "--game",
         default="minichess",
         help="Game type for board display and move input (default: minichess). "
-        "Built-in: minichess, minishogi, kohakuchess, kohakushogi, gomoku. Use 'generic' for any other UBGI engine.",
+        "Built-in: minichess, minishogi, kohakuchess, kohakushogi, connect6. Use 'generic' for any other UBGI engine.",
     )
     parser.add_argument(
         "--white", required=True, help='Path to UBGI/UCI engine for White, or "human".'
@@ -697,7 +697,7 @@ def main():
         "--board-size",
         type=int,
         default=15,
-        help="Board size for gomoku (default: 15).",
+        help="Board size for connect6 (default: 15).",
     )
 
     args = parser.parse_args()

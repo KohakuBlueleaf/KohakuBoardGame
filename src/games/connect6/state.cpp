@@ -5,13 +5,13 @@
 #include <sstream>
 
 
-/* === Zobrist hashing for Gomoku === */
+/* === Zobrist hashing for Connect6 === */
 
-static uint64_t gomoku_zobrist[3][BOARD_H][BOARD_W];
-static uint64_t gomoku_zobrist_side;
-static bool gomoku_zobrist_ready = false;
+static uint64_t connect6_zobrist[3][BOARD_H][BOARD_W];
+static uint64_t connect6_zobrist_side;
+static bool connect6_zobrist_ready = false;
 
-static void init_gomoku_zobrist(){
+static void init_connect6_zobrist(){
     uint64_t s = 0xA1B2C3D4E5F6A7B8ULL;
     auto rand64 = [&s]() -> uint64_t {
         s ^= s << 13; s ^= s >> 7; s ^= s << 17; return s;
@@ -19,28 +19,28 @@ static void init_gomoku_zobrist(){
     for(int v = 0; v < 3; v++){
         for(int r = 0; r < BOARD_H; r++){
             for(int c = 0; c < BOARD_W; c++){
-                gomoku_zobrist[v][r][c] = rand64();
+                connect6_zobrist[v][r][c] = rand64();
             }
         }
     }
-    gomoku_zobrist_side = rand64();
-    gomoku_zobrist_ready = true;
+    connect6_zobrist_side = rand64();
+    connect6_zobrist_ready = true;
 }
 
 uint64_t State::compute_hash_full() const{
-    if(!gomoku_zobrist_ready){
-        init_gomoku_zobrist();
+    if(!connect6_zobrist_ready){
+        init_connect6_zobrist();
     }
     uint64_t h = 0;
     for(int r = 0; r < BOARD_H; r++){
         for(int c = 0; c < BOARD_W; c++){
             if(board.board[r][c]){
-                h ^= gomoku_zobrist[static_cast<int>(board.board[r][c])][r][c];
+                h ^= connect6_zobrist[static_cast<int>(board.board[r][c])][r][c];
             }
         }
     }
     if(player){
-        h ^= gomoku_zobrist_side;
+        h ^= connect6_zobrist_side;
     }
     return h;
 }
@@ -807,7 +807,7 @@ void State::get_legal_actions(){
  * Checks if the move wins; otherwise switches side to move.
  *============================================================*/
 State* State::next_state(const Move& move){
-    if(!gomoku_zobrist_ready){ init_gomoku_zobrist(); }
+    if(!connect6_zobrist_ready){ init_connect6_zobrist(); }
 
     State* next = new State(this->board, 1 - this->player);
     next->step = this->step + 1;
@@ -818,8 +818,8 @@ State* State::next_state(const Move& move){
 
     /* Incremental hash update */
     uint64_t h = this->hash();
-    h ^= gomoku_zobrist_side;      /* toggle side to move */
-    h ^= gomoku_zobrist[stone][r][c];  /* XOR in new stone */
+    h ^= connect6_zobrist_side;      /* toggle side to move */
+    h ^= connect6_zobrist[stone][r][c];  /* XOR in new stone */
     next->zobrist_hash = h;
     next->zobrist_valid = true;
 
@@ -828,7 +828,7 @@ State* State::next_state(const Move& move){
 
 
 /*============================================================
- * Heuristic evaluation for Gomoku.
+ * Heuristic evaluation for Connect6.
  *
  * Phase 1: Terminal state check (win/draw).
  * Phase 2: Count threats for both sides using pattern table.
@@ -855,7 +855,7 @@ int State::evaluate(
     const GameHistory* /*history*/
 ){
     if(game_state == WIN){
-        return P_MAX;  /* should not happen for gomoku */
+        return P_MAX;  /* should not happen for connect6 */
     }
     if(game_state == DRAW){
         return 0;
@@ -1003,7 +1003,7 @@ void State::decode_board(const std::string& s, int side_to_move){
 }
 
 
-/* === Repetition: gomoku has no repetition rule === */
+/* === Repetition: connect6 has no repetition rule === */
 bool State::check_repetition(const GameHistory& /*history*/, int& /*out_score*/) const {
     return false;
 }

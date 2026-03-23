@@ -62,7 +62,7 @@ public:
     /* === Game description === */
     int board_h() const override { return BOARD_H; }
     int board_w() const override { return BOARD_W; }
-    const char* game_name() const override { return "Gomoku"; }
+    const char* game_name() const override { return "Connect6"; }
     bool check_repetition(const GameHistory& history, int& out_score) const override;
     BaseState* create_null_state() const override { return nullptr; }
 

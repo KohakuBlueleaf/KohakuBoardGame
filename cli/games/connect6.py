@@ -1,18 +1,18 @@
-"""Gomoku game module for CLI -- board display, human input, game logic."""
+"""Connect6 game module for CLI -- board display, human input, game logic."""
 
 import sys
 
 try:
-    from gui.games.gomoku_engine import GomokuState, format_move
+    from gui.games.connect6_engine import Connect6State, format_move
 except ImportError:
     raise ImportError(
-        "Gomoku CLI requires gui.games.gomoku_engine. "
+        "Connect6 CLI requires gui.games.connect6_engine. "
         "Make sure the gui package is on sys.path."
     )
 
 
 def print_board(state, game_ctx):
-    """Print Gomoku board with X and O markers.
+    """Print Connect6 board with X and O markers.
 
     state: dict with 'board' (2D list) and 'size'.
     """
@@ -38,7 +38,7 @@ def print_board(state, game_ctx):
 
 
 def get_human_move(state, game_ctx):
-    """Prompt human player for a Gomoku move (e.g. 'E5')."""
+    """Prompt human player for a Connect6 move (e.g. 'E5')."""
     size = state["size"]
     player_num = state["player"]
     player_name = "Player 1 (X)" if player_num == 1 else "Player 2 (O)"
@@ -82,7 +82,7 @@ def get_human_move(state, game_ctx):
 
 
 def make_state(size):
-    """Create initial Gomoku state dict."""
+    """Create initial Connect6 state dict."""
     return {
         "board": [[0] * size for _ in range(size)],
         "size": size,
@@ -92,7 +92,7 @@ def make_state(size):
 
 
 def uci_to_move(uci_str, size):
-    """Convert gomoku UCI string (e.g. 'e5') to ((r,c),(r,c)) tuple."""
+    """Convert connect6 UCI string (e.g. 'e5') to ((r,c),(r,c)) tuple."""
     if uci_str is None or len(uci_str) < 2:
         return None
     col = ord(uci_str[0].lower()) - ord("a")
@@ -101,15 +101,15 @@ def uci_to_move(uci_str, size):
 
 
 def move_to_uci(move, size):
-    """Convert ((r,c),(r,c)) tuple to gomoku UCI string (e.g. 'e5')."""
+    """Convert ((r,c),(r,c)) tuple to connect6 UCI string (e.g. 'e5')."""
     _, (r, c) = move
     return chr(ord("a") + c) + str(size - r)
 
 
 def apply_move(state, uci_str, game_ctx):
-    """Apply a UCI move string to Gomoku state. Returns (new_state, uci_str).
+    """Apply a UCI move string to Connect6 state. Returns (new_state, uci_str).
 
-    Gomoku UCI move format: column letter + row number, e.g. 'e5'.
+    Connect6 UCI move format: column letter + row number, e.g. 'e5'.
     """
     size = state["size"]
     board = [row[:] for row in state["board"]]
@@ -134,7 +134,7 @@ def apply_move(state, uci_str, game_ctx):
     return new_state, uci_str
 
 
-def _check_gomoku_winner(board, size):
+def _check_connect6_winner(board, size):
     """Check for 5-in-a-row. Returns winning player (1 or 2) or 0 for none."""
     directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
     for r in range(size):
@@ -161,7 +161,7 @@ def check_game_over(state):
     winner: 1 or 2 for 'win', None otherwise.
     Maps to 'white'/'black' in the caller: player 1 = white, player 2 = black.
     """
-    winner = _check_gomoku_winner(state["board"], state["size"])
+    winner = _check_connect6_winner(state["board"], state["size"])
     if winner != 0:
         return ("win", winner)
 
@@ -178,7 +178,7 @@ def check_game_over(state):
 
 
 def get_context(board_size=15):
-    """Return the game context dict for Gomoku with the given board size."""
+    """Return the game context dict for Connect6 with the given board size."""
     size = board_size
 
     def _uci_to_move(uci_str):
@@ -188,8 +188,8 @@ def get_context(board_size=15):
         return move_to_uci(move, size)
 
     ctx = {
-        "name": "gomoku",
-        "state_class": GomokuState,
+        "name": "connect6",
+        "state_class": Connect6State,
         "format_move": format_move,
         "uci_to_move": _uci_to_move,
         "move_to_uci": _move_to_uci,

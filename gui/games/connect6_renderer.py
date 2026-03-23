@@ -1,4 +1,4 @@
-"""Gomoku board renderer — stones as filled/open circles."""
+"""Connect6 board renderer — stones as filled/open circles."""
 
 import pygame
 
@@ -8,8 +8,8 @@ except ImportError:
     import config as cfg
 
 
-class GomokuRenderer:
-    """Renders Gomoku board with filled circles for stones."""
+class Connect6Renderer:
+    """Renders Connect6 board with filled circles for stones."""
 
     def __init__(self, surface):
         self.surface = surface
@@ -54,7 +54,7 @@ class GomokuRenderer:
             uci = pv_moves[i]
 
             # Parse placement move (e.g. "e5", "a10") or board move destination
-            # Gomoku placement: letter + digits (variable length)
+            # Connect6 placement: letter + digits (variable length)
             c_idx, r_idx = None, None
             if len(uci) >= 2 and uci[0].isalpha() and uci[1:].isdigit():
                 # Simple placement move

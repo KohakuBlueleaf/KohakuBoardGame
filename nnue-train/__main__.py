@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-nnue-train — Train a NNUE for MiniChess / MiniShogi / Gomoku.
+nnue-train — Train a NNUE for MiniChess / MiniShogi / Connect6.
 
 Usage:
     python -m nnue-train --data "data/train_*.bin" --features halfkp --epochs 100
@@ -19,7 +19,7 @@ from .trainer import train
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Train a NNUE for MiniChess / MiniShogi / Gomoku",
+        description="Train a NNUE for MiniChess / MiniShogi / Connect6",
     )
     parser.add_argument(
         "--game",

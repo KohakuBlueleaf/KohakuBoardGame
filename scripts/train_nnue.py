@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-train_nnue.py — Train a NNUE for MiniChess / MiniShogi / Gomoku.
+train_nnue.py — Train a NNUE for MiniChess / MiniShogi / Connect6.
 
 Supports two feature types:
   PS:     PieceSquare  -> Accumulator -> SCReLU -> ...
@@ -17,7 +17,7 @@ compatibility with old data files that lack metadata.
 Usage:
     python scripts/train_nnue.py --data "data/train_*.bin" --features halfkp --epochs 100
     python scripts/train_nnue.py --game minishogi --data "data/shogi_*.bin" --features ps
-    python scripts/train_nnue.py --game gomoku --data "data/gomoku_*.bin" --features ps
+    python scripts/train_nnue.py --game connect6 --data "data/connect6_*.bin" --features ps
 """
 
 import argparse
@@ -70,12 +70,12 @@ GAME_CONFIGS: Dict[str, dict] = {
         "has_hand": True,
         "num_hand_types": 5,  # pawn, silver, gold, bishop, rook (indices 1-5)
     },
-    "gomoku": {
+    "connect6": {
         "board_h": 9,
         "board_w": 9,
         "num_piece_types": 2,  # 1=X (black), 2=O (white) -- but no king
         "num_pt_no_king": 2,
-        "king_id": None,  # gomoku has no king
+        "king_id": None,  # connect6 has no king
         "piece_names": [".", "X", "O"],
         "has_hand": False,
         "num_hand_types": 0,
@@ -485,7 +485,7 @@ def board_to_halfkp_indices(
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Convert board arrays to HalfKP sparse feature indices.
 
-    For games without a king (e.g. gomoku), falls back to PS features
+    For games without a king (e.g. connect6), falls back to PS features
     stored in HalfKP-style sparse format (king_sq fixed to 0).
 
     Returns:
@@ -519,7 +519,7 @@ def board_to_halfkp_indices(
         b_king_c = b_king_sq % board_w
         b_king_mir = ((board_h - 1 - b_king_r) * board_w + b_king_c).astype(np.int32)
     else:
-        # No king (e.g. gomoku): use fixed king_sq=0 (degenerates to PS)
+        # No king (e.g. connect6): use fixed king_sq=0 (degenerates to PS)
         w_king_sq = np.zeros(N, dtype=np.int32)
         b_king_mir = np.zeros(N, dtype=np.int32)
 
@@ -1241,7 +1241,7 @@ def train(args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Train a NNUE for MiniChess / MiniShogi / Gomoku",
+        description="Train a NNUE for MiniChess / MiniShogi / Connect6",
     )
     parser.add_argument(
         "--game",

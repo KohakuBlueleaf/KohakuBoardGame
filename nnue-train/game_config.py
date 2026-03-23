@@ -40,7 +40,7 @@ GAME_CONFIGS: Dict[str, dict] = {
         "has_hand": True,
         "num_hand_types": 5,
     },
-    "gomoku": {
+    "connect6": {
         "board_h": 15,
         "board_w": 15,
         "num_piece_types": 2,

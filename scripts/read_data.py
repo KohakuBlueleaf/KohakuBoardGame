@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-read_data.py -- Read and inspect training data files for MiniChess / MiniShogi / Gomoku.
+read_data.py -- Read and inspect training data files for MiniChess / MiniShogi / Connect6.
 
 Usage:
     python scripts/read_data.py [options] [file1.bin] [file2.bin] ...
@@ -46,7 +46,7 @@ GAME_CONFIGS = {
         "col_labels": "ABCDE",
         "row_labels": ["5", "4", "3", "2", "1"],
     },
-    "gomoku": {
+    "connect6": {
         "board_h": 15,
         "board_w": 15,
         "piece_names": [".", "X", "O"],
@@ -326,7 +326,7 @@ def print_board(board, player, gcfg):
 # ---------------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(
-        description="Read and inspect training data files for MiniChess / MiniShogi / Gomoku",
+        description="Read and inspect training data files for MiniChess / MiniShogi / Connect6",
     )
     parser.add_argument(
         "--game",

@@ -1,9 +1,9 @@
 #!/bin/bash
 # Generate training positions using parallel workers.
-# Supports: minichess, minishogi, gomoku, kohakushogi, kohakuchess
+# Supports: minichess, minishogi, connect6, kohakushogi, kohakuchess
 #
 # Usage: bash scripts/gen_data.sh [options]
-#   -g GAME         Game type: minichess, minishogi, gomoku (default: minichess)
+#   -g GAME         Game type: minichess, minishogi, connect6 (default: minichess)
 #   -n NUM_GAMES    Target games (default: 30000)
 #   -w NUM_WORKERS  Parallel processes (default: 64)
 #   -d DEPTH        Search depth (default: 6)
@@ -35,7 +35,7 @@ while getopts "g:n:w:d:r:p:o:m:h" opt; do
     o) OUTPUT_DIR=$OPTARG ;;
     m) NNUE_MODEL=$OPTARG ;;
     h) echo "Usage: $0 [-g game] [-n games] [-w workers] [-d depth] [-r random_moves] [-p random_maxply] [-m model] [-o output_dir]"
-       echo "  Games: minichess, minishogi, gomoku, kohakushogi, kohakuchess"
+       echo "  Games: minichess, minishogi, connect6, kohakushogi, kohakuchess"
        exit 0 ;;
     *) exit 1 ;;
   esac
@@ -59,7 +59,7 @@ case "$GAME" in
     HAND_CELLS=$((2 * 5))        # 10 (5 hand types per player)
     POS_PER_GAME=40
     ;;
-  gomoku)
+  connect6)
     BOARD_CELLS=$((2 * 15 * 15))  # 450
     POS_PER_GAME=40
     ;;
@@ -73,7 +73,7 @@ case "$GAME" in
     POS_PER_GAME=50
     ;;
   *)
-    echo "Error: unknown game '$GAME'. Use: minichess, minishogi, gomoku, kohakushogi, kohakuchess"
+    echo "Error: unknown game '$GAME'. Use: minichess, minishogi, connect6, kohakushogi, kohakuchess"
     exit 1
     ;;
 esac

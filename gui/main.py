@@ -32,24 +32,24 @@ def _get_game_module(game_name):
     _cfg.DROP_PIECE_CHAR = {}
     _cfg.CHAR_TO_DROP_PIECE = {}
 
-    if game_name in ("Gomoku", "gomoku"):
+    if game_name in ("Connect6", "connect6"):
         try:
-            from gui.games.gomoku_engine import (
-                GomokuState,
+            from gui.games.connect6_engine import (
+                Connect6State,
                 format_move,
                 PLAYER_LABELS,
                 PLAYER_COLORS,
             )
-            from gui.games.gomoku_renderer import GomokuRenderer
+            from gui.games.connect6_renderer import Connect6Renderer
         except ImportError:
-            from games.gomoku_engine import (
-                GomokuState,
+            from games.connect6_engine import (
+                Connect6State,
                 format_move,
                 PLAYER_LABELS,
                 PLAYER_COLORS,
             )
-            from games.gomoku_renderer import GomokuRenderer
-        return GomokuState, format_move, GomokuRenderer, PLAYER_LABELS, PLAYER_COLORS
+            from games.connect6_renderer import Connect6Renderer
+        return Connect6State, format_move, Connect6Renderer, PLAYER_LABELS, PLAYER_COLORS
     if game_name in ("MiniShogi", "minishogi"):
         try:
             from gui.games.minishogi_engine import (
@@ -161,12 +161,12 @@ def _get_game_module(game_name):
 
 def _configure_board_size(game_name):
     """Set config board dimensions based on game type."""
-    if game_name in ("Gomoku", "gomoku"):
+    if game_name in ("Connect6", "connect6"):
         _cfg.BOARD_H = 15
         _cfg.BOARD_W = 15
         _cfg.SQUARE_SIZE = 36  # smaller squares for 15x15 board
         _cfg.MAX_STEP = _cfg.BOARD_H * _cfg.BOARD_W
-        _cfg.SCORE_PLOT_MAX_CP = 10000  # gomoku threats score large
+        _cfg.SCORE_PLOT_MAX_CP = 10000  # connect6 threats score large
         _cfg.SCORE_DISPLAY_DIV = 2000  # normalize to ±5 range for display
     elif game_name in ("MiniShogi", "minishogi"):
         _cfg.BOARD_H = 5
@@ -547,11 +547,11 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
         try:
             clicked_piece = self.game_state.board[player][row][col]
         except (TypeError, IndexError):
-            # Non-chess games (e.g. Gomoku) use board[row][col]
+            # Non-chess games (e.g. Connect6) use board[row][col]
             clicked_piece = _cfg.EMPTY
 
         if self.selected_piece is None:
-            # For placement games (Gomoku), check if any legal move targets (row,col)
+            # For placement games (Connect6), check if any legal move targets (row,col)
             placement_move = None
             for m in self.game_state.legal_actions:
                 if m[1] == (row, col):
@@ -888,7 +888,7 @@ def main():
     parser.add_argument(
         "--game",
         default="minichess",
-        help="Game type: minichess, minishogi, gomoku, kohakushogi, kohakuchess (default: minichess)",
+        help="Game type: minichess, minishogi, connect6, kohakushogi, kohakuchess (default: minichess)",
     )
     args = parser.parse_args()
 

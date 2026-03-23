@@ -117,7 +117,7 @@ GAME_PIECES = {
             6: "\u265a",
         },
     },
-    "Gomoku": {
+    "Connect6": {
         0: {1: "\u25cf"},  # black stone
         1: {1: "\u25cb"},  # white stone
     },

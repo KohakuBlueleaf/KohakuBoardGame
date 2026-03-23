@@ -1,4 +1,4 @@
-"""Gomoku game engine — Python implementation for GUI state tracking."""
+"""Connect6 game engine — Python implementation for GUI state tracking."""
 
 BOARD_SIZE = 15  # 15x15 standard board
 WIN_LENGTH = 5
@@ -8,7 +8,7 @@ PLAYER_LABELS = {0: "Black", 1: "White"}
 PLAYER_COLORS = {0: (20, 20, 20), 1: (240, 240, 240)}  # for rendering
 
 
-class GomokuState:
+class Connect6State:
     def __init__(self):
         self.board = [[EMPTY] * BOARD_SIZE for _ in range(BOARD_SIZE)]
         self.player = 0  # Black moves first
@@ -20,7 +20,7 @@ class GomokuState:
 
     @staticmethod
     def initial():
-        return GomokuState()
+        return Connect6State()
 
     @property
     def current_player(self):
@@ -37,7 +37,7 @@ class GomokuState:
 
     def next_state(self, move):
         _, (r, c) = move
-        new = GomokuState.__new__(GomokuState)
+        new = Connect6State.__new__(Connect6State)
         new.board = [row[:] for row in self.board]
         new.player = 1 - self.player
         new.step = self.step + 1
@@ -84,7 +84,7 @@ class GomokuState:
 
 
 def format_move(move):
-    """Format a gomoku move as algebraic (e.g. 'E5')."""
+    """Format a connect6 move as algebraic (e.g. 'E5')."""
     _, (r, c) = move
     col_labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     row_label = str(BOARD_SIZE - r)
