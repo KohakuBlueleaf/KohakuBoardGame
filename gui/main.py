@@ -83,7 +83,7 @@ def _get_game_module(game_name):
             PLAYER_LABELS,
             PLAYER_COLORS,
         )
-    if game_name in ("KohakuShogi", "kohaku_shogi"):
+    if game_name in ("KohakuShogi", "kohaku_shogi", "kohakushogi"):
         try:
             from gui.games.kohaku_shogi_engine import (
                 KohakuShogiState,
@@ -116,7 +116,7 @@ def _get_game_module(game_name):
             PLAYER_LABELS,
             PLAYER_COLORS,
         )
-    if game_name in ("KohakuChess", "kohaku_chess"):
+    if game_name in ("KohakuChess", "kohaku_chess", "kohakuchess"):
         try:
             from gui.games.kohaku_chess_engine import (
                 KohakuChessState,
@@ -176,7 +176,7 @@ def _configure_board_size(game_name):
         _cfg.SCORE_PLOT_MAX_CP = 2000
         _cfg.SCORE_DISPLAY_DIV = 100
         _cfg.HAND_ROW_H = 60  # height of each hand row (gote top, sente bottom)
-    elif game_name in ("KohakuShogi", "kohaku_shogi"):
+    elif game_name in ("KohakuShogi", "kohaku_shogi", "kohakushogi"):
         _cfg.BOARD_H = 7
         _cfg.BOARD_W = 6
         _cfg.SQUARE_SIZE = 64  # medium squares for 7x6 board with kanji
@@ -184,7 +184,7 @@ def _configure_board_size(game_name):
         _cfg.SCORE_PLOT_MAX_CP = 2000
         _cfg.SCORE_DISPLAY_DIV = 100
         _cfg.HAND_ROW_H = 60  # height of each hand row (gote top, sente bottom)
-    elif game_name in ("KohakuChess", "kohaku_chess"):
+    elif game_name in ("KohakuChess", "kohaku_chess", "kohakuchess"):
         _cfg.BOARD_H = 7
         _cfg.BOARD_W = 6
         _cfg.SQUARE_SIZE = 72  # medium squares for 7x6 chess board
@@ -888,7 +888,7 @@ def main():
     parser.add_argument(
         "--game",
         default="minichess",
-        help="Game type: minichess, minishogi, gomoku, kohaku_shogi, kohaku_chess (default: minichess)",
+        help="Game type: minichess, minishogi, gomoku, kohakushogi, kohakuchess (default: minichess)",
     )
     args = parser.parse_args()
 

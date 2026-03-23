@@ -50,7 +50,7 @@ GAME_CONFIGS: Dict[str, dict] = {
         "has_hand": False,
         "num_hand_types": 0,
     },
-    "kohaku_shogi": {
+    "kohakushogi": {
         "board_h": 7,
         "board_w": 6,
         "num_piece_types": 15,  # 0=empty, 1-8 base, 9-14 promoted
@@ -64,7 +64,7 @@ GAME_CONFIGS: Dict[str, dict] = {
         "has_hand": True,
         "num_hand_types": 7,
     },
-    "kohaku_chess": {
+    "kohakuchess": {
         "board_h": 7,
         "board_w": 6,
         "num_piece_types": 6,
@@ -81,7 +81,7 @@ DEFAULT_GAME = "minichess"
 
 def get_game_config(game_name: str) -> dict:
     """Return the game config dict, raising an error if unknown."""
-    name = game_name.lower()
+    name = game_name.lower().replace("_", "")
     if name not in GAME_CONFIGS:
         raise ValueError(
             f"Unknown game '{game_name}'. "
@@ -171,8 +171,10 @@ def detect_game_from_file(path: str) -> Optional[str]:
     """Try to auto-detect game type from data file header."""
     try:
         hdr = read_data_header(path)
-        if hdr["game_name"] and hdr["game_name"] in GAME_CONFIGS:
-            return hdr["game_name"]
+        if hdr["game_name"]:
+            normalized = hdr["game_name"].lower().replace("_", "")
+            if normalized in GAME_CONFIGS:
+                return normalized
         if hdr["board_h"] is not None and hdr["board_w"] is not None:
             for name, cfg in GAME_CONFIGS.items():
                 if (

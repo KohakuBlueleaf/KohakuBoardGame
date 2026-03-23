@@ -35,11 +35,21 @@ while getopts "g:n:w:d:r:p:o:m:h" opt; do
     o) OUTPUT_DIR=$OPTARG ;;
     m) NNUE_MODEL=$OPTARG ;;
     h) echo "Usage: $0 [-g game] [-n games] [-w workers] [-d depth] [-r random_moves] [-p random_maxply] [-m model] [-o output_dir]"
-       echo "  Games: minichess, minishogi, gomoku, kohaku_shogi, kohaku_chess"
+       echo "  Games: minichess, minishogi, gomoku, kohakushogi, kohakuchess"
        exit 0 ;;
     *) exit 1 ;;
   esac
 done
+
+# Normalize game name: accept kohaku_shogi, KohakuShogi, kohakushogi etc.
+GAME=$(echo "$GAME" | tr '[:upper:]' '[:lower:]' | tr -d '_')
+
+# Map normalized name to build binary name (Makefile uses underscores)
+case "$GAME" in
+  kohakushogi) BIN_GAME="kohaku_shogi" ;;
+  kohakuchess) BIN_GAME="kohaku_chess" ;;
+  *) BIN_GAME="$GAME" ;;
+esac
 
 # Per-game record size (header=12 bytes for v3, record = board + metadata)
 # v3 record: board(2*H*W) + player(1) + score(2) + result(1) + ply(2) + best_move(2) = 2*H*W + 8
@@ -57,17 +67,17 @@ case "$GAME" in
     BOARD_CELLS=$((2 * 15 * 15))  # 450
     POS_PER_GAME=40
     ;;
-  kohaku_shogi)
+  kohakushogi)
     BOARD_CELLS=$((2 * 7 * 6))   # 84
     HAND_CELLS=$((2 * 7))        # 14 (7 hand types per player)
     POS_PER_GAME=70
     ;;
-  kohaku_chess)
+  kohakuchess)
     BOARD_CELLS=$((2 * 7 * 6))   # 84
     POS_PER_GAME=50
     ;;
   *)
-    echo "Error: unknown game '$GAME'. Use: minichess, minishogi, gomoku, kohaku_shogi, kohaku_chess"
+    echo "Error: unknown game '$GAME'. Use: minichess, minishogi, gomoku, kohakushogi, kohakuchess"
     exit 1
     ;;
 esac
@@ -79,7 +89,7 @@ HEADER_SIZE=36  # v5 header size
 
 GAMES_PER_WORKER=$(( (TOTAL_GAMES + NUM_WORKERS - 1) / NUM_WORKERS ))
 
-BIN=./build/${GAME}-datagen
+BIN=./build/${BIN_GAME}-datagen
 
 # Fall back to legacy name if game-specific binary doesn't exist
 if [ ! -f "$BIN" ] && [ ! -f "${BIN}.exe" ]; then
@@ -103,7 +113,7 @@ echo ""
 # Build if needed
 if [ ! -f "$BIN" ] && [ ! -f "${BIN}.exe" ]; then
   echo "Building datagen for ${GAME}..."
-  make ${GAME}-datagen
+  make ${BIN_GAME}-datagen
 fi
 
 mkdir -p "$OUTPUT_DIR"

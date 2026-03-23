@@ -14,15 +14,26 @@ except ImportError:
 def _discover_nnue_models(game_name):
     """Scan models/ for .bin files matching the current game.
 
-    Looks in models/<game_name>/, models/<game_name>-models/, and
-    models/ root. Returns list of relative paths sorted by name.
+    Tries multiple naming conventions: CamelCase, snake_case, lowercase,
+    with/without -models suffix. Returns list of relative paths sorted.
     """
-    patterns = [
-        f"models/{game_name}/*.bin",
-        f"models/{game_name}-models/*.bin",
-        f"models/{game_name.lower()}/*.bin",
-        f"models/{game_name.lower().replace(' ', '')}/*.bin",
-    ]
+    # Generate all plausible directory names
+    names = {game_name}
+    names.add(game_name.lower())
+    names.add(game_name.replace(" ", ""))
+    names.add(game_name.replace(" ", "").lower())
+    # CamelCase → snake_case: "KohakuShogi" → "kohaku_shogi"
+    import re
+    snake = re.sub(r'(?<!^)(?=[A-Z])', '_', game_name).lower()
+    names.add(snake)
+    # Also strip underscores: "kohaku_shogi" → "kohakushogi"
+    names.add(game_name.lower().replace("_", ""))
+
+    patterns = []
+    for n in names:
+        patterns.append(f"models/{n}/*.bin")
+        patterns.append(f"models/{n}-models/*.bin")
+
     found = set()
     for pat in patterns:
         for p in glob.glob(pat):
