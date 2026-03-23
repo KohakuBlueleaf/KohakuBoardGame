@@ -6,7 +6,12 @@
 
 class Board {
 public:
+    /* board[r][c]: 0=empty, 1=black, 2=white
+     * Initial position: black stone at center */
     char board[BOARD_H][BOARD_W] = {};
+    Board(){
+        board[BOARD_H / 2][BOARD_W / 2] = 1;
+    }
 };
 
 class State : public BaseState {
@@ -17,7 +22,13 @@ public:
     mutable uint64_t zobrist_hash = 0;
     mutable bool zobrist_valid = false;
 
-    State(){}
+    /* Default: Connect6 initial position.
+     * Black stone pre-placed at center. Player 0 (white) moves first.
+     * Player 0 = white (stone value 2), Player 1 = black (stone value 1). */
+    State(){
+        player = 0;
+        step = 0;
+    }
     State(int player){
         this->player = player;
     }
@@ -45,14 +56,10 @@ public:
     int piece_at(int p, int row, int col) const override {
         return (board.board[row][col] == p + 1) ? 1 : 0;
     }
-    std::string cell_display(int row, int col) const override{
+    std::string cell_display(int row, int col) const override {
         char v = board.board[row][col];
-        if(v == 1){
-            return " X ";
-        }
-        if(v == 2){
-            return " O ";
-        }
+        if(v == 1) return " X ";
+        if(v == 2) return " O ";
         return " . ";
     }
 
@@ -66,7 +73,11 @@ public:
     bool check_repetition(const GameHistory& history, int& out_score) const override;
     BaseState* create_null_state() const override { return nullptr; }
 
+    /* === NNUE feature extraction === */
+    int extract_nnue_features(int perspective, int* features) const override;
+
 private:
     bool check_win_at(int row, int col) const;
     int count_dir(int row, int col, int dr, int dc) const;
+    int score_single_placement(int r, int c, int who) const;
 };
