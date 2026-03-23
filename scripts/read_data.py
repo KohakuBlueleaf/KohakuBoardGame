@@ -47,11 +47,28 @@ GAME_CONFIGS = {
         "row_labels": ["5", "4", "3", "2", "1"],
     },
     "gomoku": {
-        "board_h": 9,
-        "board_w": 9,
+        "board_h": 15,
+        "board_w": 15,
         "piece_names": [".", "X", "O"],
-        "col_labels": "ABCDEFGHI",
-        "row_labels": ["9", "8", "7", "6", "5", "4", "3", "2", "1"],
+        "col_labels": "ABCDEFGHIJKLMNO",
+        "row_labels": [str(i) for i in range(15, 0, -1)],
+    },
+    "kohakushogi": {
+        "board_h": 7,
+        "board_w": 6,
+        "piece_names": [
+            ".", "P", "S", "G", "L", "N", "B", "R", "K",
+            "+P", "+S", "+L", "+N", "+B", "+R",
+        ],
+        "col_labels": "ABCDEF",
+        "row_labels": ["7", "6", "5", "4", "3", "2", "1"],
+    },
+    "kohakuchess": {
+        "board_h": 7,
+        "board_w": 6,
+        "piece_names": [".", "P", "R", "N", "B", "Q", "K"],
+        "col_labels": "ABCDEF",
+        "row_labels": ["7", "6", "5", "4", "3", "2", "1"],
     },
 }
 
@@ -123,6 +140,7 @@ def detect_game_from_header(path):
         if version >= 4:
             game_name = (
                 game_raw.rstrip(b"\x00").decode("ascii", errors="replace").lower()
+                .replace("_", "")
             )
             if game_name in GAME_CONFIGS:
                 return game_name
