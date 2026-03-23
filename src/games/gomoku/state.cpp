@@ -55,7 +55,7 @@ int State::count_dir(int row, int col, int dr, int dc) const{
     int count = 0;
     int r = row + dr, c = col + dc;
     while(r >= 0 && r < BOARD_H && c >= 0 && c < BOARD_W
-          && board.board[r][c] == who){
+        && board.board[r][c] == who){
         count++;
         r += dr;
         c += dc;
@@ -465,8 +465,10 @@ static ThreatCounts count_threats(const Board& board, int who){
                     int cc = sc + pos * dc;
                     cells[k] = read_cell(board, rr, cc, who);
                 }
-                int code = cells[0]*243 + cells[1]*81 + cells[2]*27
-                         + cells[3]*9 + cells[4]*3 + cells[5];
+                int code = (
+                    cells[0]*243 + cells[1]*81 + cells[2]*27
+                    + cells[3]*9 + cells[4]*3 + cells[5]
+                );
                 ThreatType tt = pattern6_table[code];
 
                 /* Deduplicate: only count a threat if it is new
@@ -530,8 +532,10 @@ static ThreatCounts count_threats_at(
                 int cc = sc + j * dcc;
                 cells[j] = read_cell(board, rr, cc, who);
             }
-            int code = cells[0]*243 + cells[1]*81 + cells[2]*27
-                     + cells[3]*9 + cells[4]*3 + cells[5];
+            int code = (
+                cells[0]*243 + cells[1]*81 + cells[2]*27
+                + cells[3]*9 + cells[4]*3 + cells[5]
+            );
             ThreatType tt = pattern6_table[code];
             if(tt > best) best = tt;
         }
@@ -559,11 +563,13 @@ static ThreatCounts count_threats_at(
  * Each level dominates all lower levels combined.
  *------------------------------------------------------------*/
 static int threat_score(const ThreatCounts& t){
-    return t.half4  * 5000
-         + t.open3  * 800
-         + t.half3  * 150
-         + t.open2  * 100
-         + t.half2  * 20;
+    return (
+        t.half4  * 5000
+        + t.open3  * 800
+        + t.half3  * 150
+        + t.open2  * 100
+        + t.half2  * 20
+    );
 }
 
 /*------------------------------------------------------------
@@ -763,10 +769,12 @@ void State::get_legal_actions(){
             }
         }
         /* Sort even the reduced set by priority */
-        std::sort(forced.begin(), forced.end(),
+        std::sort(
+            forced.begin(), forced.end(),
             [](const ScoredMove& a, const ScoredMove& b){
                 return a.priority > b.priority;
-            });
+            }
+        );
         for(auto& fm : forced){
             legal_actions.push_back(fm.move);
         }
@@ -775,10 +783,12 @@ void State::get_legal_actions(){
     }
 
     /* --- Normal case: sort all candidates by priority --- */
-    std::sort(candidates.begin(), candidates.end(),
+    std::sort(
+        candidates.begin(), candidates.end(),
         [](const ScoredMove& a, const ScoredMove& b){
             return a.priority > b.priority;
-        });
+        }
+    );
 
     legal_actions.reserve(candidates.size());
     for(auto& cm : candidates){

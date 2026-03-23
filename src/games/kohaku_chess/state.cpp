@@ -227,8 +227,10 @@ int State::evaluate(
             bonus += oppn_edge_bonus;
 
             /* 2. Bring own king closer to enemy king (help coordinate mate) */
-            int king_dist = std::max(std::abs(self_kr - oppn_kr),
-                                     std::abs(self_kc - oppn_kc));
+            int king_dist = std::max(
+                std::abs(self_kr - oppn_kr),
+                std::abs(self_kc - oppn_kc)
+            );
             bonus += (7 - king_dist) * 6;  /* closer = higher bonus */
 
             /* 3. Reduce enemy king mobility (fewer escape squares = closer to mate) */
@@ -237,7 +239,7 @@ int State::evaluate(
                 int nr = oppn_kr + dir8_dr[d];
                 int nc = oppn_kc + dir8_dc[d];
                 if(nr >= 0 && nr < BOARD_H && nc >= 0 && nc < BOARD_W
-                   && !oppn_board[nr][nc]){
+                    && !oppn_board[nr][nc]){
                     oppn_king_moves++;
                 }
             }
@@ -375,13 +377,16 @@ void State::get_legal_actions_naive(){
                         /* Helper lambda: add pawn move, generating 4 promotion
                          * variants (Q/R/B/N) when reaching the last rank. */
                         auto add_pawn_move = [&](int fr, int fc, int tr, int tc){
-                            bool promotes = (this->player == 0 && tr == 0)
-                                         || (this->player == 1 && tr == BOARD_H - 1);
+                            bool promotes = (
+                                (this->player == 0 && tr == 0)
+                                || (this->player == 1 && tr == BOARD_H - 1)
+                            );
                             if(promotes){
                                 for(int pidx = 1; pidx <= 4; pidx++){
-                                    all_actions.push_back(
-                                        Move(Point(fr, fc),
-                                             Point(tr + BOARD_H * pidx, tc)));
+                                    all_actions.push_back(Move(
+                                        Point(fr, fc),
+                                        Point(tr + BOARD_H * pidx, tc)
+                                    ));
                                 }
                             }else{
                                 all_actions.push_back(
@@ -678,13 +683,16 @@ void State::get_legal_actions_bitboard(){
                     int to = __builtin_ctzll(pawn_targets);
                     pawn_targets &= pawn_targets - 1;
                     int to_r = BB_ROW(to), to_c = BB_COL(to);
-                    bool promotes = (self == 0 && to_r == 0)
-                                 || (self == 1 && to_r == BOARD_H - 1);
+                    bool promotes = (
+                        (self == 0 && to_r == 0)
+                        || (self == 1 && to_r == BOARD_H - 1)
+                    );
                     if(promotes){
                         for(int pidx = 1; pidx <= 4; pidx++){
-                            this->legal_actions.push_back(
-                                Move(Point(r, c),
-                                     Point(to_r + BOARD_H * pidx, to_c)));
+                            this->legal_actions.push_back(Move(
+                                Point(r, c),
+                                Point(to_r + BOARD_H * pidx, to_c)
+                            ));
                         }
                     }else{
                         this->legal_actions.push_back(

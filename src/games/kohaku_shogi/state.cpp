@@ -241,13 +241,13 @@ bool State::is_promotion_zone(int row, int player) const{
 
 bool State::must_promote(int piece, int row, int player) const{
     /* Pawn/Lance on last rank must promote (no forward moves otherwise) */
-    if((piece == PAWN || piece == LANCE) &&
-       ((player == 0 && row == 0) || (player == 1 && row == BOARD_H - 1))){
+    if((piece == PAWN || piece == LANCE)
+        && ((player == 0 && row == 0) || (player == 1 && row == BOARD_H - 1))){
         return true;
     }
     /* Knight on last 2 ranks must promote (no legal knight moves) */
-    if(piece == KNIGHT &&
-       ((player == 0 && row <= 1) || (player == 1 && row >= BOARD_H - 2))){
+    if(piece == KNIGHT
+        && ((player == 0 && row <= 1) || (player == 1 && row >= BOARD_H - 2))){
         return true;
     }
     return false;
@@ -282,8 +282,10 @@ int State::unpromoted_type(int piece) const{
 
 /* Can this piece type be promoted? */
 static bool can_promote(int piece){
-    return (piece == PAWN || piece == SILVER || piece == LANCE ||
-            piece == KNIGHT || piece == BISHOP || piece == ROOK);
+    return (
+        piece == PAWN || piece == SILVER || piece == LANCE
+        || piece == KNIGHT || piece == BISHOP || piece == ROOK
+    );
 }
 
 /* Return the promoted version of a piece */
@@ -344,13 +346,13 @@ static bool try_add_move(
         /* Promotion zone entry/exit: check if must promote */
         bool forced = false;
         /* Pawn/Lance on last rank must promote */
-        if((piece == PAWN || piece == LANCE) &&
-           ((player == 0 && to_r == 0) || (player == 1 && to_r == BOARD_H - 1))){
+        if((piece == PAWN || piece == LANCE)
+            && ((player == 0 && to_r == 0) || (player == 1 && to_r == BOARD_H - 1))){
             forced = true;
         }
         /* Knight on last 2 ranks must promote */
-        if(piece == KNIGHT &&
-           ((player == 0 && to_r <= 1) || (player == 1 && to_r >= BOARD_H - 2))){
+        if(piece == KNIGHT
+            && ((player == 0 && to_r <= 1) || (player == 1 && to_r >= BOARD_H - 2))){
             forced = true;
         }
         if(forced){
@@ -394,8 +396,11 @@ void State::gen_board_moves(){
                     int dr = flip_dr(-1, p);
                     int tr = r + dr;
                     bool to_promo = (tr >= 0 && tr < BOARD_H) && is_promotion_zone(tr, p);
-                    if(try_add_move(legal_actions, self_board, oppn_board,
-                                    r, c, tr, c, piece, p, to_promo, from_promo, game_state)){
+                    if(try_add_move(
+                        legal_actions, self_board, oppn_board,
+                        r, c, tr, c, piece, p,
+                        to_promo, from_promo, game_state
+                    )){
                         return;
                     }
                     break;
@@ -408,8 +413,11 @@ void State::gen_board_moves(){
                         int dc = silver_dc[d];
                         int tr = r + dr, tc = c + dc;
                         bool to_promo = (tr >= 0 && tr < BOARD_H) && is_promotion_zone(tr, p);
-                        if(try_add_move(legal_actions, self_board, oppn_board,
-                                        r, c, tr, tc, piece, p, to_promo, from_promo, game_state)){
+                        if(try_add_move(
+                            legal_actions, self_board, oppn_board,
+                            r, c, tr, tc, piece, p,
+                            to_promo, from_promo, game_state
+                        )){
                             return;
                         }
                     }
@@ -428,8 +436,11 @@ void State::gen_board_moves(){
                         int dc = gold_dc[d];
                         int tr = r + dr, tc = c + dc;
                         /* Gold/promoted pieces cannot promote further */
-                        if(try_add_move(legal_actions, self_board, oppn_board,
-                                        r, c, tr, tc, GOLD, p, false, false, game_state)){
+                        if(try_add_move(
+                            legal_actions, self_board, oppn_board,
+                            r, c, tr, tc, GOLD, p,
+                            false, false, game_state
+                        )){
                             return;
                         }
                     }
@@ -487,8 +498,11 @@ void State::gen_board_moves(){
                         int dc = knight_dc[d];
                         int tr = r + dr, tc = c + dc;
                         bool to_promo = (tr >= 0 && tr < BOARD_H) && is_promotion_zone(tr, p);
-                        if(try_add_move(legal_actions, self_board, oppn_board,
-                                        r, c, tr, tc, piece, p, to_promo, from_promo, game_state)){
+                        if(try_add_move(
+                            legal_actions, self_board, oppn_board,
+                            r, c, tr, tc, piece, p,
+                            to_promo, from_promo, game_state
+                        )){
                             return;
                         }
                     }
@@ -578,8 +592,11 @@ void State::gen_board_moves(){
                         int tr = r + dir8_dr[d];
                         int tc = c + dir8_dc[d];
                         /* King cannot promote -- pass false for promo flags */
-                        if(try_add_move(legal_actions, self_board, oppn_board,
-                                        r, c, tr, tc, KING, p, false, false, game_state)){
+                        if(try_add_move(
+                            legal_actions, self_board, oppn_board,
+                            r, c, tr, tc, KING, p,
+                            false, false, game_state
+                        )){
                             return;
                         }
                     }
@@ -615,8 +632,11 @@ void State::gen_board_moves(){
                     for(int d = 0; d < 4; d++){
                         int tr = r + dir8_dr[d];
                         int tc = c + dir8_dc[d];
-                        if(try_add_move(legal_actions, self_board, oppn_board,
-                                        r, c, tr, tc, P_BISHOP, p, false, false, game_state)){
+                        if(try_add_move(
+                            legal_actions, self_board, oppn_board,
+                            r, c, tr, tc, P_BISHOP, p,
+                            false, false, game_state
+                        )){
                             return;
                         }
                     }
@@ -652,8 +672,11 @@ void State::gen_board_moves(){
                     for(int d = 4; d < 8; d++){
                         int tr = r + dir8_dr[d];
                         int tc = c + dir8_dc[d];
-                        if(try_add_move(legal_actions, self_board, oppn_board,
-                                        r, c, tr, tc, P_ROOK, p, false, false, game_state)){
+                        if(try_add_move(
+                            legal_actions, self_board, oppn_board,
+                            r, c, tr, tc, P_ROOK, p,
+                            false, false, game_state
+                        )){
                             return;
                         }
                     }
@@ -1283,8 +1306,10 @@ static char piece_to_sfen_char(int piece, int player){
 }
 
 static bool is_promoted_piece(int piece){
-    return (piece == P_PAWN || piece == P_SILVER || piece == P_LANCE ||
-            piece == P_KNIGHT || piece == P_BISHOP || piece == P_ROOK);
+    return (
+        piece == P_PAWN || piece == P_SILVER || piece == P_LANCE
+        || piece == P_KNIGHT || piece == P_BISHOP || piece == P_ROOK
+    );
 }
 
 std::string State::encode_board() const{

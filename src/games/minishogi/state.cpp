@@ -329,8 +329,11 @@ void State::gen_board_moves(){
                     int dr = flip_dr(-1, p);
                     int tr = r + dr;
                     bool to_promo = (tr >= 0 && tr < BOARD_H) && is_promotion_zone(tr, p);
-                    if(try_add_move(legal_actions, self_board, oppn_board,
-                                    r, c, tr, c, piece, p, to_promo, from_promo, game_state)){
+                    if(try_add_move(
+                        legal_actions, self_board, oppn_board,
+                        r, c, tr, c, piece, p,
+                        to_promo, from_promo, game_state
+                    )){
                         return;
                     }
                     break;
@@ -343,8 +346,11 @@ void State::gen_board_moves(){
                         int dc = silver_dc[d];
                         int tr = r + dr, tc = c + dc;
                         bool to_promo = (tr >= 0 && tr < BOARD_H) && is_promotion_zone(tr, p);
-                        if(try_add_move(legal_actions, self_board, oppn_board,
-                                        r, c, tr, tc, piece, p, to_promo, from_promo, game_state)){
+                        if(try_add_move(
+                            legal_actions, self_board, oppn_board,
+                            r, c, tr, tc, piece, p,
+                            to_promo, from_promo, game_state
+                        )){
                             return;
                         }
                     }
@@ -360,8 +366,11 @@ void State::gen_board_moves(){
                         int dc = gold_dc[d];
                         int tr = r + dr, tc = c + dc;
                         /* Gold/promoted pieces cannot promote further */
-                        if(try_add_move(legal_actions, self_board, oppn_board,
-                                        r, c, tr, tc, GOLD, p, false, false, game_state)){
+                        if(try_add_move(
+                            legal_actions, self_board, oppn_board,
+                            r, c, tr, tc, GOLD, p,
+                            false, false, game_state
+                        )){
                             return;
                         }
                     }
@@ -451,8 +460,11 @@ void State::gen_board_moves(){
                         int tr = r + dir8_dr[d];
                         int tc = c + dir8_dc[d];
                         /* King cannot promote — pass false for promo flags */
-                        if(try_add_move(legal_actions, self_board, oppn_board,
-                                        r, c, tr, tc, KING, p, false, false, game_state)){
+                        if(try_add_move(
+                            legal_actions, self_board, oppn_board,
+                            r, c, tr, tc, KING, p,
+                            false, false, game_state
+                        )){
                             return;
                         }
                     }
@@ -488,8 +500,11 @@ void State::gen_board_moves(){
                     for(int d = 0; d < 4; d++){
                         int tr = r + dir8_dr[d];
                         int tc = c + dir8_dc[d];
-                        if(try_add_move(legal_actions, self_board, oppn_board,
-                                        r, c, tr, tc, P_BISHOP, p, false, false, game_state)){
+                        if(try_add_move(
+                            legal_actions, self_board, oppn_board,
+                            r, c, tr, tc, P_BISHOP, p,
+                            false, false, game_state
+                        )){
                             return;
                         }
                     }
@@ -525,8 +540,11 @@ void State::gen_board_moves(){
                     for(int d = 4; d < 8; d++){
                         int tr = r + dir8_dr[d];
                         int tc = c + dir8_dc[d];
-                        if(try_add_move(legal_actions, self_board, oppn_board,
-                                        r, c, tr, tc, P_ROOK, p, false, false, game_state)){
+                        if(try_add_move(
+                            legal_actions, self_board, oppn_board,
+                            r, c, tr, tc, P_ROOK, p,
+                            false, false, game_state
+                        )){
                             return;
                         }
                     }
