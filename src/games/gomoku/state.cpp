@@ -27,7 +27,7 @@ static void init_gomoku_zobrist(){
     gomoku_zobrist_ready = true;
 }
 
-uint64_t State::hash() const{
+uint64_t State::compute_hash_full() const{
     if(!gomoku_zobrist_ready){
         init_gomoku_zobrist();
     }
@@ -676,6 +676,7 @@ void State::get_legal_actions(){
         int priority;
     };
     std::vector<ScoredMove> candidates;
+    candidates.reserve(225);
 
     /* Track if we find any immediate wins or must-block situations */
     bool stm_has_winning_move = false;
@@ -806,19 +807,21 @@ void State::get_legal_actions(){
  * Checks if the move wins; otherwise switches side to move.
  *============================================================*/
 State* State::next_state(const Move& move){
+    if(!gomoku_zobrist_ready){ init_gomoku_zobrist(); }
+
     State* next = new State(this->board, 1 - this->player);
     next->step = this->step + 1;
     int r = move.second.first;
     int c = move.second.second;
-    next->board.board[r][c] = this->player + 1;
+    int stone = this->player + 1;
+    next->board.board[r][c] = stone;
 
-    /* Never set game_state=WIN in next_state for gomoku.
-     * Terminal detection is handled entirely by evaluate(), which
-     * returns the correct score with proper sign for negamax.
-     * This avoids the ply-offset issue where chess detects WIN
-     * one move later (opponent can capture king) but gomoku
-     * detects it immediately (five formed on placement). */
-    next->get_legal_actions();
+    /* Incremental hash update */
+    uint64_t h = this->hash();
+    h ^= gomoku_zobrist_side;      /* toggle side to move */
+    h ^= gomoku_zobrist[stone][r][c];  /* XOR in new stone */
+    next->zobrist_hash = h;
+    next->zobrist_valid = true;
 
     return next;
 }
@@ -974,6 +977,7 @@ std::string State::encode_board() const{
 void State::decode_board(const std::string& s, int side_to_move){
     player = side_to_move;
     game_state = UNKNOWN;
+    zobrist_valid = false;
     step = 0;
     board = Board{};
     int r = 0, c = 0;

@@ -27,6 +27,11 @@ int AlphaBeta::eval_ctx(
         return 0;
     }
 
+    /* === Lazy move generation (sets game_state) === */
+    if(state->legal_actions.empty() && state->game_state == UNKNOWN){
+        state->get_legal_actions();
+    }
+
     /* === Terminal / leaf checks === */
     GameState now_res = state->game_state;
     if(now_res == WIN){

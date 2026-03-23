@@ -233,6 +233,11 @@ static void play_game(
         }
     }
     while(step < MAX_STEP){
+        /* Lazy move generation */
+        if(game->legal_actions.empty() && game->game_state == UNKNOWN){
+            game->get_legal_actions();
+        }
+
         /* Check for terminal state */
         if(game->game_state == WIN){
             winner = game->player;
@@ -276,6 +281,11 @@ static void play_game(
         /* Make the move */
         State* next = game->next_state(chosen_move);
         step++;
+
+        /* Lazy move generation for terminal detection */
+        if(next->legal_actions.empty() && next->game_state == UNKNOWN){
+            next->get_legal_actions();
+        }
 
         /* Record position after the move with search score */
         if(next->game_state != WIN){

@@ -204,33 +204,98 @@ int State::evaluate(
 
 
 
+/*============================================================
+ * Zobrist hash for transposition table
+ *============================================================*/
+static uint64_t zobrist_piece[2][7][BOARD_H][BOARD_W];
+static uint64_t zobrist_side;
+static bool zobrist_ready = false;
+
+static void init_zobrist(){
+    uint64_t s = 0x7A35C9D1E4F02B68ULL;
+    auto rand64 = [&s]() -> uint64_t {
+        s ^= s << 13; s ^= s >> 7; s ^= s << 17; return s;
+    };
+    for(int p = 0; p < 2; p++){
+        for(int t = 0; t < 7; t++){
+            for(int r = 0; r < BOARD_H; r++){
+                for(int c = 0; c < BOARD_W; c++){
+                    zobrist_piece[p][t][r][c] = rand64();
+                }
+            }
+        }
+    }
+    zobrist_side = rand64();
+    zobrist_ready = true;
+}
+
+uint64_t State::compute_hash_full() const{
+    if(!zobrist_ready){
+        init_zobrist();
+    }
+    uint64_t h = 0;
+    for(int p = 0; p < 2; p++){
+        for(int r = 0; r < BOARD_H; r++){
+            for(int c = 0; c < BOARD_W; c++){
+                int piece = this->board.board[p][r][c];
+                if(piece){
+                    h ^= zobrist_piece[p][piece][r][c];
+                }
+            }
+        }
+    }
+    if(this->player){
+        h ^= zobrist_side;
+    }
+    return h;
+}
+
+
 /**
  * @brief return next state after the move
- * 
- * @param move 
- * @return State* 
+ *
+ * @param move
+ * @return State*
  */
 State* State::next_state(const Move& move){
+    if(!zobrist_ready){ init_zobrist(); }
+
     Board next = this->board;
     Point from = move.first, to = move.second;
+    int p = this->player;
+    int opp = 1 - p;
 
-    int8_t moved = next.board[this->player][from.first][from.second];
+    int8_t orig_piece = next.board[p][from.first][from.second];
+    int8_t moved = orig_piece;
     //promotion for pawn
     if(moved == 1 && (to.first==BOARD_H-1 || to.first==0)){
         moved = 5;
     }
-    if(next.board[1-this->player][to.first][to.second]){
-        next.board[1-this->player][to.first][to.second] = 0;
+
+    /* Incremental hash update */
+    uint64_t h = this->hash();
+    h ^= zobrist_side;  /* toggle side to move */
+
+    /* XOR out piece from source */
+    h ^= zobrist_piece[p][orig_piece][from.first][from.second];
+
+    /* XOR out captured piece at destination */
+    int8_t captured = next.board[opp][to.first][to.second];
+    if(captured){
+        h ^= zobrist_piece[opp][captured][to.first][to.second];
+        next.board[opp][to.first][to.second] = 0;
     }
 
-    next.board[this->player][from.first][from.second] = 0;
-    next.board[this->player][to.first][to.second] = moved;
+    /* XOR in piece at destination */
+    h ^= zobrist_piece[p][moved][to.first][to.second];
 
-    State* next_state = new State(next, 1-this->player);
-    if(this->game_state != WIN){
-        next_state->get_legal_actions();
-    }
-    return next_state;
+    next.board[p][from.first][from.second] = 0;
+    next.board[p][to.first][to.second] = moved;
+
+    State* ns = new State(next, opp);
+    ns->zobrist_hash = h;
+    ns->zobrist_valid = true;
+    return ns;
 }
 
 
@@ -262,6 +327,7 @@ static const int move_table_king[8][2] = {
 void State::get_legal_actions_naive(){
     this->game_state = NONE;
     std::vector<Move> all_actions;
+    all_actions.reserve(64);
     auto self_board = this->board.board[this->player];
     auto oppn_board = this->board.board[1 - this->player];
 
@@ -725,6 +791,7 @@ std::string State::encode_board() const{
 void State::decode_board(const std::string& s, int side_to_move){
     player = side_to_move;
     game_state = UNKNOWN;
+    zobrist_valid = false;
     board = Board{};
     int r = 0, c = 0;
     for(char ch : s){
@@ -757,51 +824,7 @@ void State::decode_board(const std::string& s, int side_to_move){
 }
 
 
-/*============================================================
- * Zobrist hash for transposition table
- *============================================================*/
-static uint64_t zobrist_piece[2][7][BOARD_H][BOARD_W];
-static uint64_t zobrist_side;
-static bool zobrist_ready = false;
-
-static void init_zobrist(){
-    uint64_t s = 0x7A35C9D1E4F02B68ULL;
-    auto rand64 = [&s]() -> uint64_t {
-        s ^= s << 13; s ^= s >> 7; s ^= s << 17; return s;
-    };
-    for(int p = 0; p < 2; p++){
-        for(int t = 0; t < 7; t++){
-            for(int r = 0; r < BOARD_H; r++){
-                for(int c = 0; c < BOARD_W; c++){
-                    zobrist_piece[p][t][r][c] = rand64();
-                }
-            }
-        }
-    }
-    zobrist_side = rand64();
-    zobrist_ready = true;
-}
-
-uint64_t State::hash() const{
-    if(!zobrist_ready){
-        init_zobrist();
-    }
-    uint64_t h = 0;
-    for(int p = 0; p < 2; p++){
-        for(int r = 0; r < BOARD_H; r++){
-            for(int c = 0; c < BOARD_W; c++){
-                int piece = this->board.board[p][r][c];
-                if(piece){
-                    h ^= zobrist_piece[p][piece][r][c];
-                }
-            }
-        }
-    }
-    if(this->player){
-        h ^= zobrist_side;
-    }
-    return h;
-}
+/* (Zobrist tables moved above next_state) */
 
 
 /*============================================================

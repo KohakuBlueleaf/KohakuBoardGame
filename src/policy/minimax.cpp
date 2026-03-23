@@ -24,6 +24,11 @@ int MiniMax::eval_ctx(
         return 0;
     }
 
+    /* === Lazy move generation (sets game_state) === */
+    if(state->legal_actions.empty() && state->game_state == UNKNOWN){
+        state->get_legal_actions();
+    }
+
     /* === Terminal / leaf checks === */
     if(state->game_state == WIN){
         return P_MAX - ply;

@@ -30,6 +30,9 @@ int main(){
     while(true){
         /* === Player 0's turn === */
         step += 1;
+        if(game->legal_actions.empty() && game->game_state == UNKNOWN){
+            game->get_legal_actions();
+        }
         if(game->game_state == WIN || game->game_state == DRAW){
             break;
         }
@@ -49,6 +52,9 @@ int main(){
 
         /* === Player 1's turn === */
         step += 1;
+        if(game->legal_actions.empty() && game->game_state == UNKNOWN){
+            game->get_legal_actions();
+        }
         if(game->game_state == WIN || game->game_state == DRAW){
             break;
         }

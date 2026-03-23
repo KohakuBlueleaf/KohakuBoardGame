@@ -50,6 +50,8 @@ class State : public BaseState {
 public:
     Board board;
     int score = 0;
+    mutable uint64_t zobrist_hash = 0;
+    mutable bool zobrist_valid = false;
 
     State(){}
     State(int player){
@@ -79,7 +81,14 @@ public:
     int piece_at(int player, int row, int col) const override {
         return board.board[player][row][col];
     }
-    uint64_t hash() const override;
+    uint64_t hash() const override {
+        if(!zobrist_valid){
+            zobrist_hash = compute_hash_full();
+            zobrist_valid = true;
+        }
+        return zobrist_hash;
+    }
+    uint64_t compute_hash_full() const;
     std::string cell_display(int row, int col) const override;
 
     std::string encode_board() const override;

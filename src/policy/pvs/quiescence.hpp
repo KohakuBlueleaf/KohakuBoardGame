@@ -30,6 +30,11 @@ inline int quiescence_ctx(
         return 0;
     }
 
+    /* === Lazy move generation (sets game_state) === */
+    if(state->legal_actions.empty() && state->game_state == UNKNOWN){
+        state->get_legal_actions();
+    }
+
     if(state->game_state == WIN){
         delete state;
         return P_MAX - ply;

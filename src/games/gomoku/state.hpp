@@ -14,6 +14,8 @@ public:
     Board board;
     int step = 0;
     int score = 0;
+    mutable uint64_t zobrist_hash = 0;
+    mutable bool zobrist_valid = false;
 
     State(){}
     State(int player){
@@ -32,7 +34,14 @@ public:
         const GameHistory* history = nullptr
     ) override;
     std::string encode_output() const override;
-    uint64_t hash() const override;
+    uint64_t hash() const override {
+        if(!zobrist_valid){
+            zobrist_hash = compute_hash_full();
+            zobrist_valid = true;
+        }
+        return zobrist_hash;
+    }
+    uint64_t compute_hash_full() const;
     int piece_at(int p, int row, int col) const override {
         return (board.board[row][col] == p + 1) ? 1 : 0;
     }

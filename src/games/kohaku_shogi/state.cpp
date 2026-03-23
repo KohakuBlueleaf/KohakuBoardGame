@@ -806,6 +806,7 @@ void State::gen_drop_moves(bool skip_uchifuzume){
 
         for(auto& opp_move : probe_opp.legal_actions){
             State* child = probe_opp.next_state(opp_move);
+            child->get_legal_actions();
             bool still_captured = (child->game_state == WIN);
             delete child;
             if(!still_captured){
@@ -857,10 +858,82 @@ void State::get_legal_actions(){
 
 
 /* ================================================================
+ * Zobrist hashing
+ * ================================================================ */
+
+static uint64_t zobrist_piece[2][NUM_PIECE_TYPES][BOARD_H][BOARD_W];
+static uint64_t zobrist_hand[2][NUM_HAND_TYPES + 1][8]; /* hand counts 0-7 */
+static uint64_t zobrist_side;
+static bool zobrist_ready = false;
+
+static void init_zobrist(){
+    uint64_t s = 0x6B83A4D1E7F205C9ULL; /* different seed from minishogi */
+    auto rand64 = [&s]() -> uint64_t {
+        s ^= s << 13; s ^= s >> 7; s ^= s << 17; return s;
+    };
+    for(int p = 0; p < 2; p++){
+        for(int t = 0; t < NUM_PIECE_TYPES; t++){
+            for(int r = 0; r < BOARD_H; r++){
+                for(int c = 0; c < BOARD_W; c++){
+                    zobrist_piece[p][t][r][c] = rand64();
+                }
+            }
+        }
+    }
+    for(int p = 0; p < 2; p++){
+        for(int t = 0; t <= NUM_HAND_TYPES; t++){
+            for(int cnt = 0; cnt < 8; cnt++){
+                zobrist_hand[p][t][cnt] = rand64();
+            }
+        }
+    }
+    zobrist_side = rand64();
+    zobrist_ready = true;
+}
+
+uint64_t State::compute_hash_full() const{
+    if(!zobrist_ready){
+        init_zobrist();
+    }
+    uint64_t h = 0;
+
+    /* Board pieces */
+    for(int p = 0; p < 2; p++){
+        for(int r = 0; r < BOARD_H; r++){
+            for(int c = 0; c < BOARD_W; c++){
+                int piece = this->board.board[p][r][c];
+                if(piece){
+                    h ^= zobrist_piece[p][piece][r][c];
+                }
+            }
+        }
+    }
+
+    /* Hand pieces */
+    for(int p = 0; p < 2; p++){
+        for(int t = 1; t <= NUM_HAND_TYPES; t++){
+            int cnt = this->board.hand[p][t];
+            if(cnt > 0 && cnt < 8){
+                h ^= zobrist_hand[p][t][cnt];
+            }
+        }
+    }
+
+    /* Side to move */
+    if(this->player){
+        h ^= zobrist_side;
+    }
+    return h;
+}
+
+
+/* ================================================================
  * next_state -- apply a move and return new state
  * ================================================================ */
 
 State* State::next_state(const Move& move){
+    if(!zobrist_ready){ init_zobrist(); }
+
     Board next = this->board;
     Point from = move.first;
     Point to   = move.second;
@@ -868,13 +941,28 @@ State* State::next_state(const Move& move){
     int p = this->player;
     int opp = 1 - p;
 
+    uint64_t h = this->hash();
+    h ^= zobrist_side;  /* toggle side to move */
+
     if(from.first == DROP_ROW){
         /* === Drop move === */
         int piece_type = (int)from.second;
         int tr = (int)to.first;
         int tc = (int)to.second;
 
+        /* XOR out old hand count, update, XOR in new */
+        int old_cnt = next.hand[p][piece_type];
+        if(old_cnt > 0 && old_cnt < 8){
+            h ^= zobrist_hand[p][piece_type][old_cnt];
+        }
         next.hand[p][piece_type]--;
+        int new_cnt = next.hand[p][piece_type];
+        if(new_cnt > 0 && new_cnt < 8){
+            h ^= zobrist_hand[p][piece_type][new_cnt];
+        }
+
+        /* XOR in placed piece */
+        h ^= zobrist_piece[p][piece_type][tr][tc];
         next.board[p][tr][tc] = (char)piece_type;
 
     }else{
@@ -888,12 +976,18 @@ State* State::next_state(const Move& move){
         int tc = (int)to.second;
 
         int piece = next.board[p][fr][fc];
+
+        /* XOR out piece from source */
+        h ^= zobrist_piece[p][piece][fr][fc];
         next.board[p][fr][fc] = 0;
 
         /* Capture opponent piece at destination */
         int captured = next.board[opp][tr][tc];
         if(captured){
+            /* XOR out captured piece */
+            h ^= zobrist_piece[opp][captured][tr][tc];
             next.board[opp][tr][tc] = 0;
+
             /* Demote and add to hand */
             int base = 0;
             switch(captured){
@@ -907,23 +1001,36 @@ State* State::next_state(const Move& move){
                 default: break; /* king -- should not happen in normal play */
             }
             if(base >= 1 && base <= NUM_HAND_TYPES){
+                /* XOR out old hand count, update, XOR in new */
+                int old_cnt = next.hand[p][base];
+                if(old_cnt > 0 && old_cnt < 8){
+                    h ^= zobrist_hand[p][base][old_cnt];
+                }
                 next.hand[p][base]++;
+                int new_cnt = next.hand[p][base];
+                if(new_cnt > 0 && new_cnt < 8){
+                    h ^= zobrist_hand[p][base][new_cnt];
+                }
             }
         }
 
         /* Place piece (possibly promoted) */
+        int placed;
         if(promote){
-            next.board[p][tr][tc] = (char)promote_piece(piece);
+            placed = promote_piece(piece);
+            next.board[p][tr][tc] = (char)placed;
         }else{
+            placed = piece;
             next.board[p][tr][tc] = (char)piece;
         }
+        /* XOR in placed piece at destination */
+        h ^= zobrist_piece[p][placed][tr][tc];
     }
 
     State* ns = new State(next, opp);
     ns->step = this->step + 1;
-    if(this->game_state != WIN){
-        ns->get_legal_actions();
-    }
+    ns->zobrist_hash = h;
+    ns->zobrist_valid = true;
     return ns;
 }
 
@@ -1114,70 +1221,7 @@ BaseState* State::create_null_state() const{
  * Zobrist hashing
  * ================================================================ */
 
-static uint64_t zobrist_piece[2][NUM_PIECE_TYPES][BOARD_H][BOARD_W];
-static uint64_t zobrist_hand[2][NUM_HAND_TYPES + 1][8]; /* hand counts 0-7 */
-static uint64_t zobrist_side;
-static bool zobrist_ready = false;
-
-static void init_zobrist(){
-    uint64_t s = 0x6B83A4D1E7F205C9ULL; /* different seed from minishogi */
-    auto rand64 = [&s]() -> uint64_t {
-        s ^= s << 13; s ^= s >> 7; s ^= s << 17; return s;
-    };
-    for(int p = 0; p < 2; p++){
-        for(int t = 0; t < NUM_PIECE_TYPES; t++){
-            for(int r = 0; r < BOARD_H; r++){
-                for(int c = 0; c < BOARD_W; c++){
-                    zobrist_piece[p][t][r][c] = rand64();
-                }
-            }
-        }
-    }
-    for(int p = 0; p < 2; p++){
-        for(int t = 0; t <= NUM_HAND_TYPES; t++){
-            for(int cnt = 0; cnt < 8; cnt++){
-                zobrist_hand[p][t][cnt] = rand64();
-            }
-        }
-    }
-    zobrist_side = rand64();
-    zobrist_ready = true;
-}
-
-uint64_t State::hash() const{
-    if(!zobrist_ready){
-        init_zobrist();
-    }
-    uint64_t h = 0;
-
-    /* Board pieces */
-    for(int p = 0; p < 2; p++){
-        for(int r = 0; r < BOARD_H; r++){
-            for(int c = 0; c < BOARD_W; c++){
-                int piece = this->board.board[p][r][c];
-                if(piece){
-                    h ^= zobrist_piece[p][piece][r][c];
-                }
-            }
-        }
-    }
-
-    /* Hand pieces */
-    for(int p = 0; p < 2; p++){
-        for(int t = 1; t <= NUM_HAND_TYPES; t++){
-            int cnt = this->board.hand[p][t];
-            if(cnt > 0 && cnt < 8){
-                h ^= zobrist_hand[p][t][cnt];
-            }
-        }
-    }
-
-    /* Side to move */
-    if(this->player){
-        h ^= zobrist_side;
-    }
-    return h;
-}
+/* (Zobrist tables moved above next_state) */
 
 
 /* ================================================================
@@ -1385,6 +1429,7 @@ std::string State::encode_board() const{
 void State::decode_board(const std::string& s, int side_to_move){
     player = side_to_move;
     game_state = UNKNOWN;
+    zobrist_valid = false;
     /* Clear board -- zero out all arrays */
     for(int p = 0; p < 2; p++){
         for(int r = 0; r < BOARD_H; r++){
