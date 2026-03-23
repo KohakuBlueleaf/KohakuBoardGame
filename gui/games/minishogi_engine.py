@@ -697,9 +697,8 @@ class MiniShogiState:
 
         # Checkmate: current player is in check and every move
         # still leaves king capturable.
-        # Use lightweight probes (no drops/uchifuzume) to avoid exponential blowup.
-        probe = MiniShogiState(self.board, self.hand, 1 - self.player, self.step)
-        if probe._can_capture_king(1 - self.player):  # we are in check
+        # Use lightweight _can_capture_king (no drops/uchifuzume).
+        if self._can_capture_king(1 - self.player):  # opponent can take our king = we are in check
             for move in self.legal_actions:
                 child = self._apply_move_raw(move)
                 if not child._can_capture_king(self.player):
