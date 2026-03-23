@@ -68,10 +68,18 @@ class BoardRenderer:
         if self.game_renderer:
             self.game_renderer.draw_pieces(state)
         if pv_multi:
-            current_player = getattr(state, "player", 0) if state else 0
-            self._draw_pv_multi(pv_multi, current_player)
+            # Delegate to game-specific renderer if it has draw_pv_multi
+            if self.game_renderer and hasattr(self.game_renderer, "draw_pv_multi"):
+                self.game_renderer.draw_pv_multi(state, pv_multi)
+            else:
+                current_player = getattr(state, "player", 0) if state else 0
+                self._draw_pv_multi(pv_multi, current_player)
         elif pv_arrows:
-            self._draw_pv_arrows(pv_arrows)
+            # Delegate to game-specific renderer if it has draw_pv
+            if self.game_renderer and hasattr(self.game_renderer, "draw_pv"):
+                self.game_renderer.draw_pv(state, pv_arrows)
+            else:
+                self._draw_pv_arrows(pv_arrows)
         self._draw_labels()
 
     def screen_to_board(self, x, y):
