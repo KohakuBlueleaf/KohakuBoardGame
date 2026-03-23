@@ -166,16 +166,17 @@ void State::get_legal_actions(){
         }
     }
 
-    /* Build proximity mask (Manhattan distance ≤ 2 from any stone) */
+    /* Build proximity mask (Chebyshev distance ≤ 3 from any stone).
+     * Larger radius than Gomoku because Connect6 needs 6-in-a-row
+     * and each turn places 2 stones that can bridge gaps. */
     bool near[BOARD_H][BOARD_W] = {};
     int stone_count = 0;
     for(int r = 0; r < BOARD_H; r++){
         for(int c = 0; c < BOARD_W; c++){
             if(board.board[r][c] != 0){
                 stone_count++;
-                for(int dr = -2; dr <= 2; dr++){
-                    for(int dc = -2; dc <= 2; dc++){
-                        if(abs(dr) + abs(dc) > 2) continue;
+                for(int dr = -3; dr <= 3; dr++){
+                    for(int dc = -3; dc <= 3; dc++){
                         int nr = r + dr, nc = c + dc;
                         if(nr >= 0 && nr < BOARD_H && nc >= 0 && nc < BOARD_W){
                             near[nr][nc] = true;
@@ -219,37 +220,38 @@ void State::get_legal_actions(){
         }
     );
 
-    /* Limit to top-K to control branching */
-    constexpr int MAX_SINGLES = 30;
-    int n = std::min((int)candidates.size(), MAX_SINGLES);
+    /* Take top-K1 for first stone, top-K2 for second stone.
+     * The second stone candidates include ALL nearby squares (not just top-K1)
+     * because placing the first stone may make new positions relevant. */
+    constexpr int MAX_FIRST = 20;
+    constexpr int MAX_SECOND = 30;
+    int n1 = std::min((int)candidates.size(), MAX_FIRST);
+    int n2 = std::min((int)candidates.size(), MAX_SECOND);
 
-    /* Check for immediate wins: if placing 1 stone creates six,
-     * pair it with any second stone */
-    for(int i = 0; i < n; i++){
-        if(candidates[i].score >= 100000){
-            /* This single placement wins. Pair with first other candidate. */
+    /* Check for immediate wins first */
+    for(int i = 0; i < n1; i++){
+        if(candidates[i].score >= 500000){
+            /* This placement makes 5+ or creates open-4. Pair with best other. */
             int r1 = candidates[i].r, c1 = candidates[i].c;
-            for(int j = 0; j < n; j++){
+            for(int j = 0; j < n2; j++){
                 if(j == i) continue;
-                int r2 = candidates[j].r, c2 = candidates[j].c;
                 legal_actions.push_back(
-                    Move(Point(r1, c1), Point(r2, c2))
+                    Move(Point(r1, c1), Point(candidates[j].r, candidates[j].c))
                 );
-                return; /* Only need one winning move */
+                return;
             }
-            /* Only 1 candidate total — shouldn't happen but handle */
-            legal_actions.push_back(
-                Move(Point(r1, c1), Point(r1, c1))
-            );
+            legal_actions.push_back(Move(Point(r1, c1), Point(r1, c1)));
             return;
         }
     }
 
-    /* Generate all ordered pairs from top-K.
-     * (r1,c1) < (r2,c2) in raster order to avoid duplicates. */
-    legal_actions.reserve(n * (n - 1) / 2);
-    for(int i = 0; i < n; i++){
-        for(int j = i + 1; j < n; j++){
+    /* Generate pairs: top-K1 first stones × top-K2 second stones.
+     * Allow second stone to be any top-K2 candidate, not just those
+     * with index > first stone. This captures the "first stone changes
+     * what's relevant for second stone" insight. */
+    legal_actions.reserve(n1 * n2);
+    for(int i = 0; i < n1; i++){
+        for(int j = i + 1; j < n2; j++){
             legal_actions.push_back(
                 Move(
                     Point(candidates[i].r, candidates[i].c),
@@ -260,7 +262,6 @@ void State::get_legal_actions(){
     }
 
     if(legal_actions.empty()){
-        /* Only 1 candidate — place it twice (degenerate) */
         if(!candidates.empty()){
             int r = candidates[0].r, c = candidates[0].c;
             legal_actions.push_back(Move(Point(r, c), Point(r, c)));

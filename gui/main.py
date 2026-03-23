@@ -576,26 +576,32 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
                 self._deselect_piece()
 
     def _handle_connect6_click(self, row, col):
-        """Two-click input for Connect6: click first square, then second."""
+        """Two-click input for Connect6: click any empty square twice."""
         # Must be empty
         try:
             val = self.game_state.board[row][col]
         except (TypeError, IndexError):
             val = 0
         if val != 0:
+            # Clicked occupied square — deselect
             self._connect6_first_sq = None
+            self.selected_piece = None
+            self.legal_moves_for_selected = []
             return
 
         if self._connect6_first_sq is None:
             # First click: select first stone position
             self._connect6_first_sq = (row, col)
-            # Show highlight
             self.selected_piece = (row, col)
-            # Show which second squares are legal
-            self.legal_moves_for_selected = [
-                m for m in self.game_state.legal_actions
-                if m[0] == (row, col) or m[1] == (row, col)
-            ]
+            # Show ALL other empty squares as valid second placements
+            self.legal_moves_for_selected = []
+            board = self.game_state.board
+            for r in range(len(board)):
+                for c in range(len(board[0])):
+                    if board[r][c] == 0 and (r, c) != (row, col):
+                        self.legal_moves_for_selected.append(
+                            ((row, col), (r, c))
+                        )
         else:
             # Second click: form the move pair
             sq1 = self._connect6_first_sq
@@ -605,20 +611,21 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
             self.legal_moves_for_selected = []
 
             if sq1 == sq2:
-                return  # can't place both on same square
+                return
 
-            # Ensure consistent ordering (sq1 < sq2 in raster order)
-            if sq1 > sq2:
-                sq1, sq2 = sq2, sq1
+            # Try both orderings against legal actions
+            move_a = (sq1, sq2) if sq1 < sq2 else (sq2, sq1)
+            move_b = (sq2, sq1) if sq1 < sq2 else (sq1, sq2)
 
-            move = (sq1, sq2)
-            if move in self.game_state.legal_actions:
-                self.execute_move(move)
+            if move_a in self.game_state.legal_actions:
+                self.execute_move(move_a)
+            elif move_b in self.game_state.legal_actions:
+                self.execute_move(move_b)
             else:
-                # Try reverse order
-                move = (sq2, sq1)
-                if move in self.game_state.legal_actions:
-                    self.execute_move(move)
+                # Not in engine's pruned move list — execute directly
+                # (GUI allows full board, engine may have pruned this pair)
+                move = (min(sq1, sq2), max(sq1, sq2))
+                self.execute_move(move)
 
     def _select_piece(self, row, col):
         self.selected_piece = (row, col)
