@@ -231,3 +231,4 @@ gamelog.txt
 temp/
 wandb/
 lightning_logs/
+*.exe
