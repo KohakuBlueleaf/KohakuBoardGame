@@ -77,13 +77,7 @@ inline void tt_store(
 ){
     tt_init();
     TTEntry& e = tt[hash & tt_mask];
-    /* Always replace same position; for different positions, prefer deeper
-     * or exact entries to preserve PV chain across iterative deepening. */
-    if(e.flag == TT_NONE
-        || e.hash == hash
-        || e.depth <= depth
-        || (flag == TT_EXACT && e.flag != TT_EXACT)
-    ){
+    if(e.flag == TT_NONE || e.depth <= depth){
         e.hash = hash;
         e.score = score;
         e.depth = depth;
