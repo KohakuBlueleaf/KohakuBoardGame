@@ -22,7 +22,7 @@ _COLORS = {
 }
 
 _LEVEL_ORDER = {"DEBUG": 0, "INFO": 1, "WARN": 2, "ERROR": 3}
-_MIN_LEVEL = "DEBUG"
+_MIN_LEVEL = "INFO"
 _START_TIME = time.monotonic()
 
 
