@@ -669,7 +669,7 @@ void loop(){
                     );
                 }
             }
-            send("option name Hash type spin default 18 min 10 max 24");
+            send("option name Hash type spin default 24 min 10 max 24");
             send("option name MultiPV type spin default 1 min 1 max 10");
             #ifdef USE_NNUE
             send("option name NNUEFile type string default " + std::string(NNUE_FILE));
