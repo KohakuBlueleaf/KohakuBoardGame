@@ -370,34 +370,9 @@ class DialogsMixin:
             row=1, column=1, sticky="w", padx=4, pady=2
         )
 
-        # NNUE Model selection
-        models = _discover_nnue_models(self._game_name)
-        if models:
-            nnue_frame = ttk.LabelFrame(dialog, text="NNUE Model")
-            nnue_frame.grid(row=3, column=0, columnspan=2, sticky="ew", **pad)
-
-            # Get current NNUEFile from any side's params
-            current_nnue = (
-                self.white.get("params", {}).get("NNUEFile", "")
-                or self.analyze.get("params", {}).get("NNUEFile", "")
-            )
-            nnue_var = tk.StringVar(value=current_nnue if current_nnue in models else models[0])
-            ttk.Label(nnue_frame, text="NNUEFile:").grid(
-                row=0, column=0, sticky="w", padx=4, pady=2
-            )
-            ttk.Combobox(
-                nnue_frame,
-                textvariable=nnue_var,
-                values=models,
-                state="readonly",
-                width=max(20, max(len(m) for m in models) + 2),
-            ).grid(row=0, column=1, sticky="w", padx=4, pady=2)
-        else:
-            nnue_var = None
-
         # Buttons
         bf = ttk.Frame(dialog)
-        bf.grid(row=4, column=0, columnspan=2, pady=10)
+        bf.grid(row=3, column=0, columnspan=2, pady=10)
         ttk.Button(
             bf,
             text="Save",
@@ -454,13 +429,6 @@ class DialogsMixin:
         if multi_pv_changed and self._analyze_engine is not None and self._analyze_engine.is_alive():
             self._analyze_engine.set_option("MultiPV", str(self.multi_pv))
 
-        # Apply NNUE model to all sides
-        if nnue_var is not None:
-            nnue_path = nnue_var.get()
-            for side in (self.white, self.black, self.analyze):
-                side["params"]["NNUEFile"] = nnue_path
-            # Kill existing engines so they restart with new model
-            self._shutdown_uci_engines()
 
         # Restart analysis if it was running
         if self.analyze["enabled"]:
@@ -572,14 +540,15 @@ class DialogsMixin:
                 if name == "NNUEFile":
                     models = _discover_nnue_models(self._game_name)
                     if models:
+                        # Select current if it exists, otherwise first model
                         if current not in models:
-                            models = [current] + models
+                            var.set(models[0])
                         ttk.Combobox(
                             sub_f,
                             textvariable=var,
                             values=models,
                             state="readonly",
-                            width=max(12, max(len(m) for m in models) + 2),
+                            width=max(20, max(len(m) for m in models) + 2),
                         ).pack(side="left", padx=(4, 0))
                     else:
                         ttk.Entry(sub_f, textvariable=var, width=30).pack(
