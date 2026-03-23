@@ -77,6 +77,18 @@ def main() -> None:
         default=0,
         help="Skip positions with ply < this value (default: 0)",
     )
+    parser.add_argument(
+        "--score-scale",
+        type=float,
+        default=400.0,
+        help="Sigmoid scale for score->win_prob (default: 400, Stockfish convention)",
+    )
+    parser.add_argument(
+        "--score-mean",
+        type=float,
+        default=0.0,
+        help="Score mean shift: sigmoid((score - mean) / scale) (default: 0)",
+    )
 
     # --- Val split (choose one) ---
     val_group = parser.add_mutually_exclusive_group()

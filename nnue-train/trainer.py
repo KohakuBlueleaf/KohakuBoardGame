@@ -19,7 +19,7 @@ from tqdm import tqdm
 from .data import MmapDataSource
 from .dataset import NNUEDataset
 from .export import export_binary_weights, export_quantized_weights
-from .loss import dual_loss, nnue_loss, SCORE_SCALE
+from .loss import dual_loss, nnue_loss, _score_to_wp, DEFAULT_SCORE_SCALE, DEFAULT_SCORE_MEAN
 from .model import GameNNUE
 
 
@@ -56,6 +56,8 @@ class NNUETrainer:
         lr: float = 1e-3,
         wdl_weight: float = 0.5,
         policy_weight: float = 0.1,
+        score_scale: float = DEFAULT_SCORE_SCALE,
+        score_mean: float = DEFAULT_SCORE_MEAN,
         warmup_steps: int = 1000,
         total_steps: int = 100000,
         val_every_n_steps: int = 5000,
@@ -70,6 +72,8 @@ class NNUETrainer:
         self.device = device
         self.wdl_weight = wdl_weight
         self.policy_weight = policy_weight
+        self.score_scale = score_scale
+        self.score_mean = score_mean
         self.val_every_n_steps = val_every_n_steps
         self.output_path = output_path
         self.wandb_run = wandb_run
@@ -106,10 +110,17 @@ class NNUETrainer:
 
         if self.model.use_policy:
             vp, pl = self.model(wf, bf, stm)
-            loss = dual_loss(vp, pl, sc, res, bm, self.wdl_weight, self.policy_weight)
+            loss = dual_loss(
+                vp, pl, sc, res, bm,
+                self.wdl_weight, self.policy_weight,
+                self.score_scale, self.score_mean,
+            )
         else:
             vp = self.model(wf, bf, stm)
-            loss = nnue_loss(vp, sc, res, self.wdl_weight)
+            loss = nnue_loss(
+                vp, sc, res, self.wdl_weight,
+                self.score_scale, self.score_mean,
+            )
 
         return loss, vp, sc, res
 
@@ -144,7 +155,7 @@ class NNUETrainer:
             total_loss += loss.item()
             total_mae += (vp - sc).abs().mean().item()
 
-            pred_winner = (torch.sigmoid(vp / SCORE_SCALE) > 0.5).float()
+            pred_winner = (_score_to_wp(vp, self.score_scale, self.score_mean) > 0.5).float()
             actual_winner = (res > 0).float()
             decisive = res != 0
             if decisive.any():
@@ -413,6 +424,10 @@ def train(args) -> None:
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     os.makedirs(os.path.dirname(args.export) or ".", exist_ok=True)
 
+    score_scale = getattr(args, "score_scale", DEFAULT_SCORE_SCALE)
+    score_mean = getattr(args, "score_mean", DEFAULT_SCORE_MEAN)
+    print(f"  Score scale: {score_scale}, Score mean: {score_mean}")
+
     trainer = NNUETrainer(
         model,
         train_loader,
@@ -420,6 +435,8 @@ def train(args) -> None:
         lr=args.lr,
         wdl_weight=args.wdl_weight,
         policy_weight=args.policy_weight,
+        score_scale=score_scale,
+        score_mean=score_mean,
         warmup_steps=warmup,
         total_steps=total_steps,
         val_every_n_steps=val_interval,
