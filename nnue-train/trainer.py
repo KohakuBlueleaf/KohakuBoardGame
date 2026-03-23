@@ -267,7 +267,10 @@ class NNUETrainer:
                 )
 
                 # Step-based val
-                if self.global_step % self.val_every_n_steps == 0:
+                if (
+                    self.val_every_n_steps > 0
+                    and self.global_step % self.val_every_n_steps == 0
+                ):
                     metrics = self.validate()
                     improved = self.save_best(metrics["loss"])
                     self._log_val(ema_loss, metrics, improved)
@@ -275,6 +278,12 @@ class NNUETrainer:
                 # wandb train logging (every 50 steps to reduce overhead)
                 elif self.wandb_run is not None and self.global_step % 50 == 0:
                     self._log_train(loss, ema_loss)
+
+            # Epoch-end val (always when step-based is disabled, or as supplement)
+            if self.val_every_n_steps <= 0:
+                metrics = self.validate()
+                improved = self.save_best(metrics["loss"])
+                self._log_val(ema_loss, metrics, improved)
 
             # Epoch checkpoint
             ckpt_path = self.save_epoch_checkpoint(epoch, ema_loss)
@@ -383,7 +392,7 @@ def train(args) -> None:
     total_steps = steps_per_epoch * args.epochs
 
     val_interval = args.val_every_n_steps
-    if val_interval <= 0:
+    if val_interval < 0:
         val_interval = max(500, steps_per_epoch // 4)
 
     warmup = args.warmup_steps

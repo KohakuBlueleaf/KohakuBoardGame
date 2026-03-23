@@ -109,8 +109,8 @@ def main() -> None:
     parser.add_argument(
         "--val-every-n-steps",
         type=int,
-        default=0,
-        help="Run validation every N steps (default: 0 = auto ~4x/epoch)",
+        default=-1,
+        help="Run validation every N steps (-1=auto ~4x/epoch, 0=epoch-only)",
     )
     parser.add_argument(
         "--warmup-steps",
