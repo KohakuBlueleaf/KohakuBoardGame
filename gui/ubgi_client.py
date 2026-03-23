@@ -9,6 +9,20 @@ import threading
 import os
 import sys
 
+try:
+    from gui.logger import log as _log
+except ImportError:
+    try:
+        from logger import log as _log
+    except ImportError:
+        # Fallback if logger not available
+        class _DummyLog:
+            def debug(self, m): pass
+            def info(self, m): pass
+            def warning(self, m): pass
+            def error(self, m): pass
+        _log = _DummyLog()
+
 
 class UBGIEngine:
     """Manages a UBGI/UCI engine subprocess."""
@@ -192,6 +206,7 @@ class UBGIEngine:
 
     def quit(self):
         """Send 'quit' and kill process immediately (non-blocking)."""
+        _log.debug(f"quit() called, pid={self._process.pid if self._process else None}")
         self._searching = False
         try:
             self._send("quit")
@@ -206,7 +221,7 @@ class UBGIEngine:
             try:
                 self._process.wait(timeout=0.5)
             except Exception:
-                pass
+                _log.warning("quit: process.wait timed out")
             self._process = None
 
     def is_alive(self):
@@ -310,12 +325,13 @@ class UBGIEngine:
                     self._searching = False
                     parts = line.split()
                     bestmove = parts[1] if len(parts) >= 2 else None
+                    _log.debug(f"reader: bestmove={bestmove}")
                     cb = self._done_callback
                     if cb is not None:
                         try:
                             cb(bestmove)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            _log.error(f"reader: bestmove callback error: {e}")
 
                 elif line.strip() == "readyok":
                     cb = self._ready_callback
@@ -325,8 +341,10 @@ class UBGIEngine:
                             cb()
                         except Exception:
                             pass
-        except Exception:
+        except Exception as e:
+            _log.error(f"reader thread crashed: {e}")
             self._searching = False
+        _log.debug("reader thread exited")
 
     # ------------------------------------------------------------------
     # Static helpers

@@ -13,6 +13,7 @@ try:
     from gui.engine_manager import EngineManagerMixin
     from gui.promotion import PromotionMixin
     from gui.dialogs import DialogsMixin
+    from gui.logger import log
     import gui.config as _cfg
 except ImportError:
     from board_renderer import BoardRenderer
@@ -21,6 +22,7 @@ except ImportError:
     from engine_manager import EngineManagerMixin
     from promotion import PromotionMixin
     from dialogs import DialogsMixin
+    from logger import log
     import config as _cfg
 
 
@@ -417,12 +419,25 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
     # ------------------------------------------------------------------
 
     def run(self):
+        log.info("Main loop started")
         try:
             while self._running:
+                t0 = time.monotonic()
                 self.handle_events()
+                t1 = time.monotonic()
                 self.update()
+                t2 = time.monotonic()
                 self.draw()
+                t3 = time.monotonic()
                 self.clock.tick(_cfg.FPS)
+                total = (t3 - t0) * 1000
+                if total > 200:
+                    log.warning(
+                        f"Slow frame: {total:.0f}ms "
+                        f"(events={1000*(t1-t0):.0f} "
+                        f"update={1000*(t2-t1):.0f} "
+                        f"draw={1000*(t3-t2):.0f})"
+                    )
         finally:
             self._shutdown_uci_engines()
             pygame.quit()
@@ -637,6 +652,7 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
     # ------------------------------------------------------------------
 
     def execute_move(self, move):
+        log.info(f"execute_move: {move}")
 
         # Clear "stopped" state so user can keep exploring
         if self.game_result == "stopped":
@@ -681,7 +697,10 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
         self.legal_moves_for_selected = []
         self._sync_hand_highlight(None)
 
-        result, winner = self.game_state.check_game_over()
+        with log.timed("check_game_over"):
+            result, winner = self.game_state.check_game_over()
+        if result is not None:
+            log.info(f"game over: {result} winner={winner}")
         if result in ("win", "checkmate", "perpetual_check", "stalemate_loss"):
             if result == "checkmate":
                 self.game_result = "p0_checkmate" if winner == 0 else "p1_checkmate"
@@ -732,6 +751,7 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
             depth = self.ai_result["depth"]
             self.ai_result = {"move": None, "depth": 0, "ready": False}
             self.ai_thinking = False
+            log.info(f"AI result ready: move={move} depth={depth}")
 
             # Discard stale results if game was reset/stopped
             if not self._game_started:
@@ -739,9 +759,13 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
 
             if move is not None and move in self.game_state.legal_actions:
                 self.ai_depth = depth
+                t0 = time.monotonic()
                 self.execute_move(move)
+                dt = (time.monotonic() - t0) * 1000
+                log.info(f"execute_move done: {dt:.1f}ms")
                 self._last_ai_time = time.time()
             else:
+                log.info(f"AI move invalid or None: {move}")
                 loser = self.game_state.player
                 self.game_result = "p1_wins" if loser == 0 else "p0_wins"
             return

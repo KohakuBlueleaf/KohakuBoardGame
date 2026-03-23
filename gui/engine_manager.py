@@ -4,9 +4,11 @@ import time
 
 try:
     from gui.ubgi_client import UBGIEngine, discover_engines
+    from gui.logger import log
     import gui.config as _cfg
 except ImportError:
     from ubgi_client import UBGIEngine, discover_engines
+    from logger import log
     import config as _cfg
 
 
@@ -124,7 +126,10 @@ class EngineManagerMixin:
         """
         existing = getattr(self, attr_name, None)
         if existing is not None and existing.is_alive():
+            log.debug(f"_get_or_create: reusing {attr_name}")
             return existing
+        log.debug(f"_get_or_create: creating new {attr_name}")
+        t0 = time.monotonic()
         try:
             # Build initial options: Algorithm + all params (including NNUEFile)
             # These are sent before isready so the engine can load NNUE correctly.
@@ -132,18 +137,24 @@ class EngineManagerMixin:
             init_opts.update({k: str(v) for k, v in side_config["params"].items()})
             engine = UBGIEngine(side_config["engine"], initial_options=init_opts)
             setattr(self, attr_name, engine)
+            dt = (time.monotonic() - t0) * 1000
+            log.debug(f"_get_or_create: {attr_name} ready ({dt:.1f}ms)")
             return engine
-        except RuntimeError:
+        except RuntimeError as e:
+            dt = (time.monotonic() - t0) * 1000
+            log.debug(f"_get_or_create: {attr_name} FAILED ({dt:.1f}ms): {e}")
             return None
 
     def _quit_engine(self, attr):
         """Quit a single UCI engine by attribute name and clear it."""
         engine = getattr(self, attr, None)
         if engine is not None:
-            try:
-                engine.quit()
-            except Exception:
-                pass
+            log.debug(f"_quit_engine: {attr}")
+            with log.timed(f"quit {attr}"):
+                try:
+                    engine.quit()
+                except Exception:
+                    pass
             setattr(self, attr, None)
 
     def _shutdown_uci_engines(self):
@@ -209,10 +220,12 @@ class EngineManagerMixin:
 
     def _kill_analyze_engine(self):
         if self._analyze_engine is not None:
-            try:
-                self._analyze_engine.quit()
-            except Exception:
-                pass
+            log.debug("_kill_analyze_engine")
+            with log.timed("kill analyze engine"):
+                try:
+                    self._analyze_engine.quit()
+                except Exception:
+                    pass
             self._analyze_engine = None
 
     def _on_analyze_info(self, info_dict):
@@ -261,6 +274,7 @@ class EngineManagerMixin:
     def trigger_ai_move(self):
         player = self.game_state.player
         side = self.white if player == 0 else self.black
+        log.debug(f"trigger_ai_move: player={player} depth={side.get('depth',0)}")
 
         if side["engine"] is None:
             return  # human's turn
@@ -334,6 +348,7 @@ class EngineManagerMixin:
         self.search_info = info_dict
 
     def _on_uci_bestmove(self, bestmove_str):
+        log.info(f"bestmove received: {bestmove_str}")
         if bestmove_str is None:
             self.ai_result = {"move": None, "depth": 0, "ready": True}
             return
