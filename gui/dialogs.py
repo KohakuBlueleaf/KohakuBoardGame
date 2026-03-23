@@ -534,6 +534,7 @@ class DialogsMixin:
                             sub_f,
                             textvariable=var,
                             values=models,
+                            state="readonly",
                             width=max(12, max(len(m) for m in models) + 2),
                         ).pack(side="left", padx=(4, 0))
                     else:
