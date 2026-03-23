@@ -558,6 +558,358 @@ void State::gen_board_moves(){
 
 
 /* ================================================================
+ * Bitboard board-move generation
+ *
+ * 5x5 = 25 squares fit in uint32_t.
+ * Square (r,c) -> bit index r*5+c.
+ * Precomputed attack masks for leapers (gold, silver, pawn, king).
+ * Sliding pieces (bishop, rook, promoted variants) use direction loop.
+ * ================================================================ */
+#define BB_SQ(r, c)  ((r) * BOARD_W + (c))
+#define BB_ROW(sq)   ((sq) / BOARD_W)
+#define BB_COL(sq)   ((sq) % BOARD_W)
+
+static constexpr int NUM_SQ = BOARD_H * BOARD_W;
+static constexpr uint32_t FULL_MASK = (1u << NUM_SQ) - 1;
+
+/* Precomputed leaper attack tables (initialized once) */
+static uint32_t bb_gold[2][NUM_SQ];    /* gold moves per player/square */
+static uint32_t bb_silver[2][NUM_SQ];  /* silver moves per player/square */
+static uint32_t bb_pawn[2][NUM_SQ];    /* pawn push per player/square */
+static uint32_t bb_king[NUM_SQ];       /* king moves per square */
+
+/* Sliding direction vectors: 0-3 orthogonal, 4-7 diagonal */
+static const int bb_dr[8] = {-1, 1, 0, 0, -1, -1, 1, 1};
+static const int bb_dc[8] = {0, 0, -1, 1, -1, 1, -1, 1};
+
+static bool bb_ready = false;
+
+static void bb_init(){
+    for(int r = 0; r < BOARD_H; r++){
+        for(int c = 0; c < BOARD_W; c++){
+            int sq = BB_SQ(r, c);
+
+            /* King: 8 directions */
+            bb_king[sq] = 0;
+            for(int d = 0; d < 8; d++){
+                int nr = r + bb_dr[d], nc = c + bb_dc[d];
+                if(nr >= 0 && nr < BOARD_H && nc >= 0 && nc < BOARD_W){
+                    bb_king[sq] |= 1u << BB_SQ(nr, nc);
+                }
+            }
+
+            /* Gold: 6 directions (player-relative) */
+            for(int p = 0; p < 2; p++){
+                bb_gold[p][sq] = 0;
+                for(int d = 0; d < 6; d++){
+                    int dr = (p == 0) ? gold_dr[d] : -gold_dr[d];
+                    int dc = gold_dc[d];
+                    int nr = r + dr, nc = c + dc;
+                    if(nr >= 0 && nr < BOARD_H && nc >= 0 && nc < BOARD_W){
+                        bb_gold[p][sq] |= 1u << BB_SQ(nr, nc);
+                    }
+                }
+            }
+
+            /* Silver: 5 directions (player-relative) */
+            for(int p = 0; p < 2; p++){
+                bb_silver[p][sq] = 0;
+                for(int d = 0; d < 5; d++){
+                    int dr = (p == 0) ? silver_dr[d] : -silver_dr[d];
+                    int dc = silver_dc[d];
+                    int nr = r + dr, nc = c + dc;
+                    if(nr >= 0 && nr < BOARD_H && nc >= 0 && nc < BOARD_W){
+                        bb_silver[p][sq] |= 1u << BB_SQ(nr, nc);
+                    }
+                }
+            }
+
+            /* Pawn: 1 forward (player-relative) */
+            for(int p = 0; p < 2; p++){
+                bb_pawn[p][sq] = 0;
+                int nr = r + ((p == 0) ? -1 : 1);
+                if(nr >= 0 && nr < BOARD_H){
+                    bb_pawn[p][sq] = 1u << BB_SQ(nr, c);
+                }
+            }
+        }
+    }
+    bb_ready = true;
+}
+
+
+/* Helper: generate sliding moves from (r,c) in directions [d_start, d_end),
+ * appending to legal_actions. Returns true if king was captured. */
+static bool bb_slide_moves(
+    std::vector<Move>& actions,
+    uint32_t self_occ,
+    uint32_t oppn_occ,
+    const int oppn_pt[NUM_SQ],
+    int r, int c,
+    int piece, int player,
+    int d_start, int d_end,
+    bool can_promo,
+    GameState& game_state
+){
+    bool from_promo = (player == 0) ? (r == 0) : (r == BOARD_H - 1);
+
+    for(int d = d_start; d < d_end; d++){
+        int cr = r + bb_dr[d], cc = c + bb_dc[d];
+        while(cr >= 0 && cr < BOARD_H && cc >= 0 && cc < BOARD_W){
+            int to_sq = BB_SQ(cr, cc);
+            uint32_t to_bit = 1u << to_sq;
+
+            if(self_occ & to_bit){
+                break;
+            }
+
+            /* King capture check */
+            if((oppn_occ & to_bit) && oppn_pt[to_sq] == KING){
+                game_state = WIN;
+                actions.push_back(Move(Point(r, c), Point(cr, cc)));
+                return true;
+            }
+
+            /* Promotion logic */
+            bool to_promo = (player == 0) ? (cr == 0) : (cr == BOARD_H - 1);
+            bool promo_ok = can_promo && (to_promo || from_promo);
+
+            if(promo_ok){
+                /* Pawn on last rank must promote */
+                bool forced = (
+                    piece == PAWN
+                    && ((player == 0 && cr == 0) || (player == 1 && cr == BOARD_H - 1))
+                );
+                if(forced){
+                    actions.push_back(Move(Point(r, c), Point(cr + BOARD_H, cc)));
+                }else{
+                    actions.push_back(Move(Point(r, c), Point(cr + BOARD_H, cc)));
+                    actions.push_back(Move(Point(r, c), Point(cr, cc)));
+                }
+            }else{
+                actions.push_back(Move(Point(r, c), Point(cr, cc)));
+            }
+
+            if(oppn_occ & to_bit){
+                break; /* captured, stop sliding */
+            }
+            cr += bb_dr[d];
+            cc += bb_dc[d];
+        }
+    }
+    return false;
+}
+
+
+/* Helper: generate leaper moves from a precomputed target mask.
+ * Returns true if king was captured. */
+static bool bb_leaper_moves(
+    std::vector<Move>& actions,
+    uint32_t targets,
+    uint32_t oppn_occ,
+    const int oppn_pt[NUM_SQ],
+    int r, int c,
+    int piece, int player,
+    bool can_promo,
+    GameState& game_state
+){
+    bool from_promo = (player == 0) ? (r == 0) : (r == BOARD_H - 1);
+
+    /* Remove own-piece squares (caller should already mask, but safe) */
+    while(targets){
+        int to_sq = __builtin_ctz(targets);
+        targets &= targets - 1;
+        int tr = BB_ROW(to_sq), tc = BB_COL(to_sq);
+
+        /* King capture */
+        if((oppn_occ & (1u << to_sq)) && oppn_pt[to_sq] == KING){
+            game_state = WIN;
+            actions.push_back(Move(Point(r, c), Point(tr, tc)));
+            return true;
+        }
+
+        /* Promotion logic */
+        bool to_promo = (player == 0) ? (tr == 0) : (tr == BOARD_H - 1);
+        bool promo_ok = can_promo && (to_promo || from_promo);
+
+        if(promo_ok){
+            bool forced = (
+                piece == PAWN
+                && ((player == 0 && tr == 0) || (player == 1 && tr == BOARD_H - 1))
+            );
+            if(forced){
+                actions.push_back(Move(Point(r, c), Point(tr + BOARD_H, tc)));
+            }else{
+                actions.push_back(Move(Point(r, c), Point(tr + BOARD_H, tc)));
+                actions.push_back(Move(Point(r, c), Point(tr, tc)));
+            }
+        }else{
+            actions.push_back(Move(Point(r, c), Point(tr, tc)));
+        }
+    }
+    return false;
+}
+
+
+void State::gen_board_moves_bitboard(){
+    if(!bb_ready){
+        bb_init();
+    }
+
+    int self = player;
+    int oppn = 1 - player;
+
+    /* Build occupancy and piece-type lookup */
+    uint32_t self_occ = 0, oppn_occ = 0;
+    int self_pt[NUM_SQ] = {};
+    int oppn_pt[NUM_SQ] = {};
+
+    for(int r = 0; r < BOARD_H; r++){
+        for(int c = 0; c < BOARD_W; c++){
+            int sq = BB_SQ(r, c);
+            if(board.board[self][r][c]){
+                self_occ |= 1u << sq;
+                self_pt[sq] = board.board[self][r][c];
+            }
+            if(board.board[oppn][r][c]){
+                oppn_occ |= 1u << sq;
+                oppn_pt[sq] = board.board[oppn][r][c];
+            }
+        }
+    }
+
+    /* Iterate own pieces */
+    uint32_t pieces = self_occ;
+    while(pieces){
+        int sq = __builtin_ctz(pieces);
+        pieces &= pieces - 1;
+        int r = BB_ROW(sq), c = BB_COL(sq);
+        int piece = self_pt[sq];
+
+        switch(piece){
+            case PAWN: {
+                uint32_t targets = bb_pawn[self][sq] & ~self_occ;
+                if(bb_leaper_moves(
+                    legal_actions, targets, oppn_occ, oppn_pt,
+                    r, c, PAWN, self, true, game_state
+                )){
+                    return;
+                }
+                break;
+            }
+
+            case SILVER: {
+                uint32_t targets = bb_silver[self][sq] & ~self_occ;
+                if(bb_leaper_moves(
+                    legal_actions, targets, oppn_occ, oppn_pt,
+                    r, c, SILVER, self, true, game_state
+                )){
+                    return;
+                }
+                break;
+            }
+
+            case GOLD:
+            case P_PAWN:
+            case P_SILVER: {
+                uint32_t targets = bb_gold[self][sq] & ~self_occ;
+                if(bb_leaper_moves(
+                    legal_actions, targets, oppn_occ, oppn_pt,
+                    r, c, piece, self, false, game_state
+                )){
+                    return;
+                }
+                break;
+            }
+
+            case KING: {
+                uint32_t targets = bb_king[sq] & ~self_occ;
+                if(bb_leaper_moves(
+                    legal_actions, targets, oppn_occ, oppn_pt,
+                    r, c, KING, self, false, game_state
+                )){
+                    return;
+                }
+                break;
+            }
+
+            case BISHOP: {
+                if(bb_slide_moves(
+                    legal_actions, self_occ, oppn_occ, oppn_pt,
+                    r, c, BISHOP, self, 4, 8, true, game_state
+                )){
+                    return;
+                }
+                break;
+            }
+
+            case ROOK: {
+                if(bb_slide_moves(
+                    legal_actions, self_occ, oppn_occ, oppn_pt,
+                    r, c, ROOK, self, 0, 4, true, game_state
+                )){
+                    return;
+                }
+                break;
+            }
+
+            case P_BISHOP: {
+                /* Diagonal sliding */
+                if(bb_slide_moves(
+                    legal_actions, self_occ, oppn_occ, oppn_pt,
+                    r, c, P_BISHOP, self, 4, 8, false, game_state
+                )){
+                    return;
+                }
+                /* + orthogonal king-step */
+                uint32_t ortho = 0;
+                for(int d = 0; d < 4; d++){
+                    int nr = r + bb_dr[d], nc = c + bb_dc[d];
+                    if(nr >= 0 && nr < BOARD_H && nc >= 0 && nc < BOARD_W){
+                        ortho |= 1u << BB_SQ(nr, nc);
+                    }
+                }
+                ortho &= ~self_occ;
+                if(bb_leaper_moves(
+                    legal_actions, ortho, oppn_occ, oppn_pt,
+                    r, c, P_BISHOP, self, false, game_state
+                )){
+                    return;
+                }
+                break;
+            }
+
+            case P_ROOK: {
+                /* Orthogonal sliding */
+                if(bb_slide_moves(
+                    legal_actions, self_occ, oppn_occ, oppn_pt,
+                    r, c, P_ROOK, self, 0, 4, false, game_state
+                )){
+                    return;
+                }
+                /* + diagonal king-step */
+                uint32_t diag = 0;
+                for(int d = 4; d < 8; d++){
+                    int nr = r + bb_dr[d], nc = c + bb_dc[d];
+                    if(nr >= 0 && nr < BOARD_H && nc >= 0 && nc < BOARD_W){
+                        diag |= 1u << BB_SQ(nr, nc);
+                    }
+                }
+                diag &= ~self_occ;
+                if(bb_leaper_moves(
+                    legal_actions, diag, oppn_occ, oppn_pt,
+                    r, c, P_ROOK, self, false, game_state
+                )){
+                    return;
+                }
+                break;
+            }
+        } /* switch */
+    }
+}
+
+
+/* ================================================================
  * gen_drop_moves — generate all drop moves for current player
  * ================================================================ */
 
@@ -686,7 +1038,11 @@ void State::get_legal_actions(){
         return;
     }
 
+    #ifdef USE_BITBOARD
+    gen_board_moves_bitboard();
+    #else
     gen_board_moves();
+    #endif
     if(game_state == WIN){
         return;  /* king capture found */
     }

@@ -9,6 +9,7 @@
 #endif
 
 #define MAX_STEP 200
+#define USE_BITBOARD
 
 /* Piece types (unpromoted) */
 #define EMPTY   0

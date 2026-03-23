@@ -65,6 +65,7 @@ public:
     int extract_nnue_features(int perspective, int* features) const override;
 
     void gen_board_moves();
+    void gen_board_moves_bitboard();
     void gen_drop_moves(bool skip_uchifuzume = false);
 
 private:
