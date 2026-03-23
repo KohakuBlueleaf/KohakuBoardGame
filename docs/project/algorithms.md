@@ -45,11 +45,20 @@ at the same depth, there is a bug.
 
 **Signature:**
 ```cpp
-int MiniMax::eval_ctx(State *state, int depth, SearchContext& ctx,
-                      const MMParams& p, int ply);
+int MiniMax::eval_ctx(
+    State *state,
+    int depth,
+    GameHistory& history,
+    int ply,
+    SearchContext& ctx,
+    const MMParams& p
+);
 ```
 
-No alpha/beta window, no pruning. Returns the negamax score.
+No alpha/beta window, no pruning. `GameHistory` tracks position hashes
+for repetition detection. Legal moves are generated lazily: `eval_ctx`
+calls `get_legal_actions()` only when the state has not already been
+expanded (`game_state == UNKNOWN`). Returns the negamax score.
 
 ### 1.2 Alpha-Beta
 
@@ -78,9 +87,20 @@ ordering -- moves are searched in whatever order `legal_actions` provides.
 
 **Signature:**
 ```cpp
-int AlphaBeta::eval_ctx(State *state, int depth, int alpha, int beta,
-                        SearchContext& ctx, const ABParams& p, int ply);
+int AlphaBeta::eval_ctx(
+    State *state,
+    int depth,
+    int alpha,
+    int beta,
+    GameHistory& history,
+    int ply,
+    SearchContext& ctx,
+    const ABParams& p
+);
 ```
+
+`GameHistory` is threaded through the recursion for repetition detection.
+Legal moves are generated lazily (see Section 1.1).
 
 ### 1.3 PVS (Principal Variation Search)
 
@@ -106,10 +126,21 @@ On top of this, PVS adds:
 
 **Signature:**
 ```cpp
-int PVS::eval_ctx(State *state, int depth, int alpha, int beta,
-                  SearchContext& ctx, const PVSParams& p,
-                  int ply, bool can_null);
+int PVS::eval_ctx(
+    State *state,
+    int depth,
+    int alpha,
+    int beta,
+    GameHistory& history,
+    int ply,
+    bool can_null,
+    SearchContext& ctx,
+    const PVSParams& p
+);
 ```
+
+Like the simpler algorithms, `eval_ctx` generates legal moves lazily and
+threads `GameHistory` for repetition detection.
 
 ---
 
@@ -165,7 +196,7 @@ the selected algorithm's `search()` repeatedly at increasing depths:
 ```cpp
 for (int depth = 1; depth <= depth_limit; depth++) {
     if (!alive()) break;
-    SearchResult result = g_algo->search(&state, depth, ctx);
+    SearchResult result = g_algo->search(&state, depth, history, ctx);
     // ... emit info, update best move, check time ...
 }
 ```
@@ -207,7 +238,11 @@ answer or a best-move hint for move ordering.
 ### 4.1 Hash Computation
 
 Hash computation is delegated to `State::hash()`, which implements a
-game-specific Zobrist hashing scheme. The TT simply calls:
+game-specific Zobrist hashing scheme. Each game maintains an incremental
+Zobrist hash (`zobrist_hash` member) that is updated inside `next_state()`
+rather than recomputed from scratch on every call. A full recomputation
+(`compute_hash_full()`) is used only on the first call when the cached hash
+is zero. The TT simply calls:
 
 ```cpp
 uint64_t hash = compute_hash(state);  // == state->hash()
@@ -792,7 +827,7 @@ struct AlgoEntry {
     std::string name;
     ParamMap default_params;
     std::vector<ParamDef> param_defs;
-    std::function<SearchResult(State*, int, SearchContext&)> search;
+    std::function<SearchResult(State*, int, GameHistory&, SearchContext&)> search;
 };
 ```
 

@@ -5,8 +5,8 @@ The same search algorithms, UBGI protocol layer, and infrastructure support
 multiple two-player zero-sum board games with no game-specific knowledge in
 the shared layers.
 
-Currently implemented games: **MiniChess** (6x5), **MiniShogi** (5x5), and
-**Gomoku** (9x9).
+Currently implemented games: **MiniChess** (6x5), **MiniShogi** (5x5),
+**Gomoku** (15x15), **KohakuShogi** (7x6), and **KohakuChess** (7x6).
 
 ---
 
@@ -50,12 +50,12 @@ GUI, CLI).
 |    next_state, get_legal_actions, evaluate,       |
 |    hash, encode_board, extract_nnue_features ...  |
 +--------------------------------------------------+
-     ^              ^              ^
-     |              |              |
-+---------+   +-----------+   +--------+
-|MiniChess|   | MiniShogi |   | Gomoku |
-| State   |   |   State   |   | State  |
-+---------+   +-----------+   +--------+
+     ^              ^              ^              ^              ^
+     |              |              |              |              |
++---------+   +-----------+   +--------+   +------------+   +------------+
+|MiniChess|   | MiniShogi |   | Gomoku |   |KohakuShogi |   |KohakuChess |
+| State   |   |   State   |   | State  |   |   State    |   |   State    |
++---------+   +-----------+   +--------+   +------------+   +------------+
 ```
 
 ### BaseState Abstract Class
@@ -86,9 +86,11 @@ and the preprocessor resolves them to whichever game's directory appears
 first in the include path.
 
 ```makefile
-MINICHESS_INC = -Isrc/games/minichess -Isrc/state -Isrc
-GOMOKU_INC    = -Isrc/games/gomoku    -Isrc/state -Isrc
-MINISHOGI_INC = -Isrc/games/minishogi -Isrc/state -Isrc
+MINICHESS_INC    = -Isrc/games/minichess    -Isrc/state -Isrc
+GOMOKU_INC       = -Isrc/games/gomoku       -Isrc/state -Isrc
+MINISHOGI_INC    = -Isrc/games/minishogi    -Isrc/state -Isrc
+KOHAKU_SHOGI_INC = -Isrc/games/kohakushogi  -Isrc/state -Isrc
+KOHAKU_CHESS_INC = -Isrc/games/kohakuchess  -Isrc/state -Isrc
 ```
 
 Each game compiles into a separate binary:
@@ -107,6 +109,16 @@ gomoku:
 minishogi:
     $(CXX) $(CXXFLAGS) $(MINISHOGI_INC) -o build/minishogi-ubgi \
         src/games/minishogi/state.cpp src/nnue/nnue.cpp \
+        src/policy/*.cpp src/ubgi/ubgi.cpp
+
+kohakushogi:
+    $(CXX) $(CXXFLAGS) $(KOHAKU_SHOGI_INC) -o build/kohakushogi-ubgi \
+        src/games/kohakushogi/state.cpp src/nnue/nnue.cpp \
+        src/policy/*.cpp src/ubgi/ubgi.cpp
+
+kohakuchess:
+    $(CXX) $(CXXFLAGS) $(KOHAKU_CHESS_INC) -o build/kohakuchess-ubgi \
+        src/games/kohakuchess/state.cpp src/nnue/nnue.cpp \
         src/policy/*.cpp src/ubgi/ubgi.cpp
 ```
 
@@ -272,10 +284,10 @@ The `hand` array is indexed by base piece type (1-5). Gold (3) can be
 captured but never promotes, so it goes to hand as-is. Promoted pieces
 revert to their base type when captured.
 
-### Gomoku (9x9) -- Single-Plane Board
+### Gomoku (15x15) -- Single-Plane Board
 
 ```
-src/games/gomoku/config.hpp:  BOARD_H=9, BOARD_W=9, WIN_LENGTH=5
+src/games/gomoku/config.hpp:  BOARD_H=15, BOARD_W=15, WIN_LENGTH=5
 ```
 
 ```cpp
@@ -560,7 +572,7 @@ handcrafted eval.
 
 ## 7. Zobrist Hashing
 
-All three games implement Zobrist hashing for the transposition table.
+All five games implement Zobrist hashing for the transposition table.
 The scheme follows the same pattern:
 
 1. **Initialize** a table of random 64-bit values using a deterministic
@@ -608,10 +620,13 @@ static uint64_t gomoku_zobrist_side;
 
 ### Lazy Initialization
 
-All three implementations use a `static bool zobrist_ready` flag. The
+All five implementations use a `static bool zobrist_ready` flag. The
 Zobrist tables are initialized on the first call to `hash()`. The PRNG
 seed is hard-coded and deterministic, so hash values are reproducible
-across runs.
+across runs. Each game also maintains an **incremental Zobrist hash**
+(`zobrist_hash` member) that is updated inside `next_state()` rather
+than recomputed from scratch, with `compute_hash_full()` used only on
+the first call.
 
 ---
 
@@ -689,7 +704,7 @@ is actually captured.
 |-----------|--------|-----------------|
 | 5 in a row | `WIN` | `check_win_at()` called in `next_state()` after placing a stone. The win is attributed to the player who placed the stone. |
 | Board full / no nearby moves | `DRAW` | `legal_actions.empty()` after generation in `get_legal_actions()`. |
-| `MAX_STEP` | Equal to `BOARD_H * BOARD_W` (81) | Implicit via board filling up. |
+| `MAX_STEP` | Equal to `BOARD_H * BOARD_W` (225) | Implicit via board filling up. |
 
 ---
 
@@ -960,9 +975,17 @@ src/
             state.hpp               # Board (2-plane+hand), State : BaseState
             state.cpp               # movegen (board+drops), eval, hash, NNUE features
         gomoku/
-            config.hpp              # BOARD_H=9, BOARD_W=9, WIN_LENGTH=5
+            config.hpp              # BOARD_H=15, BOARD_W=15, WIN_LENGTH=5
             state.hpp               # Board (single-plane), State : BaseState
             state.cpp               # movegen (proximity), threat eval, hash
+        kohakushogi/
+            config.hpp              # BOARD_H=7, BOARD_W=6, shogi piece types, DROP_ROW
+            state.hpp               # Board (2-plane+hand), State : BaseState
+            state.cpp               # movegen (board+drops), eval, hash, NNUE features
+        kohakuchess/
+            config.hpp              # BOARD_H=7, BOARD_W=6, chess piece types
+            state.hpp               # Board (2-plane), State : BaseState
+            state.cpp               # movegen, eval, hash, NNUE features
     nnue/
         nnue.hpp                    # Model struct, evaluate(), init()
         nnue.cpp                    # Model loading, forward pass
