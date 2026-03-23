@@ -593,18 +593,6 @@ class MiniShogiState:
             else:
                 return ("draw", None)
 
-        # Checkmate: current player is in check and every move
-        # still leaves king capturable (child.game_state == "win"
-        # means the child's player — our opponent — can take our king).
-        probe = MiniShogiState(self.board, self.hand, 1 - self.player, self.step)
-        probe.get_legal_actions()
-        if probe.game_state == "win":  # we are in check
-            for move in self.legal_actions:
-                child = self.next_state(move)
-                if child.game_state != "win":
-                    return (None, None)  # at least one escape
-            return ("checkmate", 1 - self.player)
-
         # Stalemate: no legal moves → loss for the side with no moves (shogi rule).
         # In practice this is extremely rare due to drops.
         if not self.legal_actions:
