@@ -84,7 +84,7 @@ class NNUETrainer:
             config={
                 "lr": {
                     "mode": "cosine",
-                    "end": total_steps,
+                    "end": total_steps + 1,
                     "min_value": 0.01,
                     "warmup": warmup_steps,
                 },
@@ -189,8 +189,8 @@ class NNUETrainer:
         return False
 
     def save_epoch_checkpoint(self, epoch: int, ema_loss: float):
-        """Save full state for resume."""
-        ckpt_path = self.output_path.replace(".pt", f"_epoch{epoch}.pt")
+        """Save full state for resume (overwrites previous — only keeps last)."""
+        ckpt_path = self.output_path.replace(".pt", "_last.pt")
         torch.save(
             {
                 "epoch": epoch,
