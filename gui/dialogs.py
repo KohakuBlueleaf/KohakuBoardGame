@@ -1,11 +1,33 @@
 """Dialog mixin for GameApp — New Game, Settings, Params."""
 
+import os
+import glob
+
 try:
     from gui.ubgi_client import discover_engines
     import gui.config as _cfg
 except ImportError:
     from ubgi_client import discover_engines
     import config as _cfg
+
+
+def _discover_nnue_models(game_name):
+    """Scan models/ for .bin files matching the current game.
+
+    Looks in models/<game_name>/, models/<game_name>-models/, and
+    models/ root. Returns list of relative paths sorted by name.
+    """
+    patterns = [
+        f"models/{game_name}/*.bin",
+        f"models/{game_name}-models/*.bin",
+        f"models/{game_name.lower()}/*.bin",
+        f"models/{game_name.lower().replace(' ', '')}/*.bin",
+    ]
+    found = set()
+    for pat in patterns:
+        for p in glob.glob(pat):
+            found.add(p.replace("\\", "/"))
+    return sorted(found)
 
 
 class DialogsMixin:
@@ -502,9 +524,26 @@ class DialogsMixin:
                 sub_f = ttk.Frame(content_frame)
                 sub_f.grid(row=r, column=0, columnspan=2, sticky="w", padx=8, pady=1)
                 ttk.Label(sub_f, text=f"{name}:").pack(side="left")
-                ttk.Entry(sub_f, textvariable=var, width=12).pack(
-                    side="left", padx=(4, 0)
-                )
+
+                if name == "NNUEFile":
+                    models = _discover_nnue_models(self._game_name)
+                    if models:
+                        if current not in models:
+                            models = [current] + models
+                        ttk.Combobox(
+                            sub_f,
+                            textvariable=var,
+                            values=models,
+                            width=max(12, max(len(m) for m in models) + 2),
+                        ).pack(side="left", padx=(4, 0))
+                    else:
+                        ttk.Entry(sub_f, textvariable=var, width=30).pack(
+                            side="left", padx=(4, 0)
+                        )
+                else:
+                    ttk.Entry(sub_f, textvariable=var, width=12).pack(
+                        side="left", padx=(4, 0)
+                    )
 
         # OK / Cancel
         applied = [False]
