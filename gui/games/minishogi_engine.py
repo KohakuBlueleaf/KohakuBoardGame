@@ -123,6 +123,32 @@ _ROOK_DIRS = [(0, 1), (0, -1), (1, 0), (-1, 0)]
 _BISHOP_DIRS = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
 
 
+def _get_piece_moves(piece, player):
+    """Return leaper move offsets for a piece (player-relative)."""
+    if piece == PAWN:
+        return [(-1, 0)] if player == 0 else [(1, 0)]
+    if piece == SILVER:
+        return _SILVER_MOVES_SENTE if player == 0 else _SILVER_MOVES_GOTE
+    if piece in (GOLD, P_PAWN, P_SILVER):
+        return _GOLD_MOVES_SENTE if player == 0 else _GOLD_MOVES_GOTE
+    if piece == KING:
+        return _KING_MOVES
+    if piece == P_BISHOP:
+        return [(0, 1), (0, -1), (1, 0), (-1, 0)]
+    if piece == P_ROOK:
+        return [(1, 1), (1, -1), (-1, 1), (-1, -1)]
+    return []
+
+
+def _get_slide_dirs(piece):
+    """Return sliding directions for a piece (empty if non-slider)."""
+    if piece in (BISHOP, P_BISHOP):
+        return _BISHOP_DIRS
+    if piece in (ROOK, P_ROOK):
+        return _ROOK_DIRS
+    return []
+
+
 # ---------------------------------------------------------------------------
 # Promotion zone helpers
 # ---------------------------------------------------------------------------
@@ -479,6 +505,84 @@ class MiniShogiState:
                       for p in range(2) for pt in range(len(self.hand[0]))))
 
     # ------------------------------------------------------------------ #
+    # Lightweight helpers for checkmate detection
+    # ------------------------------------------------------------------ #
+
+    def _apply_move_raw(self, move):
+        """Apply move and return new state WITHOUT generating legal actions."""
+        frm, to = move
+        fr, fc = frm
+        tr, tc = to
+
+        new_board = _deep_copy_board(self.board)
+        new_hand = _deep_copy_hand(self.hand)
+        me = self.player
+        opp = 1 - me
+
+        if fr == BOARD_SIZE:
+            piece_type = fc
+            new_hand[me][piece_type] -= 1
+            new_board[me][tr][tc] = piece_type
+        else:
+            promoting = tr >= BOARD_SIZE
+            actual_tr = tr - BOARD_SIZE if promoting else tr
+            moved_piece = new_board[me][fr][fc]
+            captured = new_board[opp][actual_tr][tc]
+            if captured != EMPTY:
+                new_board[opp][actual_tr][tc] = EMPTY
+                base = _DEMOTE_MAP.get(captured, captured)
+                if base != KING:
+                    new_hand[me][base] += 1
+            new_board[me][fr][fc] = EMPTY
+            if promoting:
+                new_board[me][actual_tr][tc] = PROMOTE_MAP[moved_piece]
+            else:
+                new_board[me][actual_tr][tc] = moved_piece
+
+        return MiniShogiState(new_board, new_hand, opp, self.step + 1)
+
+    def _can_capture_king(self, attacker_player):
+        """Check if attacker_player can capture the opponent's king
+        using board moves only (no drops). Fast O(pieces) check."""
+        me = attacker_player
+        opp = 1 - me
+        # Find opponent king
+        king_r, king_c = -1, -1
+        for r in range(BOARD_SIZE):
+            for c in range(BOARD_SIZE):
+                if self.board[opp][r][c] == KING:
+                    king_r, king_c = r, c
+                    break
+            if king_r >= 0:
+                break
+        if king_r < 0:
+            return True  # king already captured
+
+        # Check all attacker pieces
+        for r in range(BOARD_SIZE):
+            for c in range(BOARD_SIZE):
+                piece = self.board[me][r][c]
+                if piece == EMPTY:
+                    continue
+                # Leaper moves
+                moves = _get_piece_moves(piece, me)
+                for dr, dc in moves:
+                    if r + dr == king_r and c + dc == king_c:
+                        return True
+                # Sliding moves
+                slide_dirs = _get_slide_dirs(piece)
+                for dr, dc in slide_dirs:
+                    ar, ac = r + dr, c + dc
+                    while 0 <= ar < BOARD_SIZE and 0 <= ac < BOARD_SIZE:
+                        if ar == king_r and ac == king_c:
+                            return True
+                        if self.board[me][ar][ac] != EMPTY or self.board[opp][ar][ac] != EMPTY:
+                            break
+                        ar += dr
+                        ac += dc
+        return False
+
+    # ------------------------------------------------------------------ #
     # Next state
     # ------------------------------------------------------------------ #
 
@@ -566,9 +670,7 @@ class MiniShogiState:
             # Check if perpetual check: all 4 occurrences were "in check"
             check_count = self.check_hash_counts.get(key, 0)
             # We also need to check the CURRENT position for check
-            probe = MiniShogiState(self.board, self.hand, 1 - self.player, self.step)
-            probe.get_legal_actions()
-            if probe.game_state == "win":
+            if self._can_capture_king(1 - self.player):
                 check_count += 1  # current position is also in check
             if check_count >= 4:
                 # Perpetual check: the checker (opponent) loses, checked side wins
@@ -594,14 +696,13 @@ class MiniShogiState:
                 return ("draw", None)
 
         # Checkmate: current player is in check and every move
-        # still leaves king capturable (child.game_state == "win"
-        # means the child's player — our opponent — can take our king).
+        # still leaves king capturable.
+        # Use lightweight probes (no drops/uchifuzume) to avoid exponential blowup.
         probe = MiniShogiState(self.board, self.hand, 1 - self.player, self.step)
-        probe.get_legal_actions()
-        if probe.game_state == "win":  # we are in check
+        if probe._can_capture_king(1 - self.player):  # we are in check
             for move in self.legal_actions:
-                child = self.next_state(move)
-                if child.game_state != "win":
+                child = self._apply_move_raw(move)
+                if not child._can_capture_king(self.player):
                     return (None, None)  # at least one escape
             return ("checkmate", 1 - self.player)
 

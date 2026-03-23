@@ -167,6 +167,36 @@ _ROOK_DIRS = [(0, 1), (0, -1), (1, 0), (-1, 0)]
 _BISHOP_DIRS = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
 
 
+def _get_piece_moves_ks(piece, player):
+    """Return leaper move offsets for a piece (player-relative)."""
+    if piece == PAWN:
+        return [(-1, 0)] if player == 0 else [(1, 0)]
+    if piece == SILVER:
+        return _SILVER_MOVES_SENTE if player == 0 else _SILVER_MOVES_GOTE
+    if piece in (GOLD, P_PAWN, P_SILVER, P_LANCE, P_KNIGHT):
+        return _GOLD_MOVES_SENTE if player == 0 else _GOLD_MOVES_GOTE
+    if piece == KNIGHT:
+        return _KNIGHT_MOVES_SENTE if player == 0 else _KNIGHT_MOVES_GOTE
+    if piece == KING:
+        return _KING_MOVES
+    if piece == P_BISHOP:
+        return [(0, 1), (0, -1), (1, 0), (-1, 0)]
+    if piece == P_ROOK:
+        return [(1, 1), (1, -1), (-1, 1), (-1, -1)]
+    return []
+
+
+def _get_slide_dirs_ks(piece, player):
+    """Return sliding directions for a piece."""
+    if piece in (BISHOP, P_BISHOP):
+        return _BISHOP_DIRS
+    if piece in (ROOK, P_ROOK):
+        return _ROOK_DIRS
+    if piece == LANCE:
+        return [(-1, 0)] if player == 0 else [(1, 0)]
+    return []
+
+
 # ---------------------------------------------------------------------------
 # Promotion zone helpers
 # ---------------------------------------------------------------------------
@@ -578,6 +608,78 @@ class KohakuShogiState:
         )
 
     # ------------------------------------------------------------------ #
+    # Lightweight helpers for checkmate detection
+    # ------------------------------------------------------------------ #
+
+    def _apply_move_raw(self, move):
+        """Apply move and return new state WITHOUT generating legal actions."""
+        frm, to = move
+        fr, fc = frm
+        tr, tc = to
+
+        new_board = _deep_copy_board(self.board)
+        new_hand = _deep_copy_hand(self.hand)
+        me = self.player
+        opp = 1 - me
+
+        if fr == BOARD_H:
+            piece_type = fc
+            new_hand[me][piece_type] -= 1
+            new_board[me][tr][tc] = piece_type
+        else:
+            promoting = tr >= BOARD_H
+            actual_tr = tr - BOARD_H if promoting else tr
+            moved_piece = new_board[me][fr][fc]
+            captured = new_board[opp][actual_tr][tc]
+            if captured != EMPTY:
+                new_board[opp][actual_tr][tc] = EMPTY
+                base = _DEMOTE_MAP.get(captured, captured)
+                if base != KING:
+                    new_hand[me][base] += 1
+            new_board[me][fr][fc] = EMPTY
+            if promoting:
+                new_board[me][actual_tr][tc] = PROMOTE_MAP[moved_piece]
+            else:
+                new_board[me][actual_tr][tc] = moved_piece
+
+        return KohakuShogiState(new_board, new_hand, opp, self.step + 1)
+
+    def _can_capture_king(self, attacker_player):
+        """Check if attacker_player can capture opponent's king
+        using board moves only (no drops). Fast O(pieces) check."""
+        me = attacker_player
+        opp = 1 - me
+        king_r, king_c = -1, -1
+        for r in range(BOARD_H):
+            for c in range(BOARD_W):
+                if self.board[opp][r][c] == KING:
+                    king_r, king_c = r, c
+                    break
+            if king_r >= 0:
+                break
+        if king_r < 0:
+            return True
+
+        for r in range(BOARD_H):
+            for c in range(BOARD_W):
+                piece = self.board[me][r][c]
+                if piece == EMPTY:
+                    continue
+                for dr, dc in _get_piece_moves_ks(piece, me):
+                    if r + dr == king_r and c + dc == king_c:
+                        return True
+                for dr, dc in _get_slide_dirs_ks(piece, me):
+                    ar, ac = r + dr, c + dc
+                    while 0 <= ar < BOARD_H and 0 <= ac < BOARD_W:
+                        if ar == king_r and ac == king_c:
+                            return True
+                        if self.board[me][ar][ac] != EMPTY or self.board[opp][ar][ac] != EMPTY:
+                            break
+                        ar += dr
+                        ac += dc
+        return False
+
+    # ------------------------------------------------------------------ #
     # Next state
     # ------------------------------------------------------------------ #
 
@@ -665,9 +767,7 @@ class KohakuShogiState:
             # Check if perpetual check: all 4 occurrences were "in check"
             check_count = self.check_hash_counts.get(key, 0)
             # We also need to check the CURRENT position for check
-            probe = KohakuShogiState(self.board, self.hand, 1 - self.player, self.step)
-            probe.get_legal_actions()
-            if probe.game_state == "win":
+            if self._can_capture_king(1 - self.player):
                 check_count += 1  # current position is also in check
             if check_count >= 4:
                 # Perpetual check: the checker (opponent) loses, checked side wins
@@ -694,12 +794,12 @@ class KohakuShogiState:
 
         # Checkmate: current player is in check and every move
         # still leaves king capturable.
-        probe = KohakuShogiState(self.board, self.hand, 1 - self.player, self.step)
-        probe.get_legal_actions()
-        if probe.game_state == "win":  # we are in check
+        # Use _can_capture_king (board moves only, no drops/uchifuzume)
+        # to avoid exponential blowup from recursive legal action gen.
+        if self._can_capture_king(1 - self.player):  # we are in check
             for move in self.legal_actions:
-                child = self.next_state(move)
-                if child.game_state != "win":
+                child = self._apply_move_raw(move)
+                if not child._can_capture_king(self.player):
                     return (None, None)  # at least one escape
             return ("checkmate", 1 - self.player)
 
