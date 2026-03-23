@@ -1,9 +1,9 @@
-"""Connect6 game module for CLI -- board display, human input, game logic."""
+"""Connect6 (六子棋) game module for CLI."""
 
 import sys
 
 try:
-    from gui.games.connect6_engine import Connect6State, format_move
+    from gui.games.connect6_engine import Connect6State, format_move, BOARD_SIZE, WIN_LENGTH
 except ImportError:
     raise ImportError(
         "Connect6 CLI requires gui.games.connect6_engine. "
@@ -12,14 +12,11 @@ except ImportError:
 
 
 def print_board(state, game_ctx):
-    """Print Connect6 board with X and O markers.
-
-    state: dict with 'board' (2D list) and 'size'.
-    """
+    """Print Connect6 board."""
     board = state["board"]
     size = state["size"]
     print()
-    cols = "ABCDEFGHIJKLMNOPQRS"[:size]
+    cols = "ABCDEFGHIJKLMNO"[:size]
     print("    " + "  ".join(cols))
     for r in range(size):
         rank = str(size - r)
@@ -37,18 +34,34 @@ def print_board(state, game_ctx):
     print()
 
 
+def _parse_square(s, size):
+    """Parse 'E5' → (row, col) or None."""
+    s = s.strip().upper()
+    if len(s) < 2 or not s[0].isalpha():
+        return None
+    col = ord(s[0]) - ord("A")
+    try:
+        row_num = int(s[1:])
+    except ValueError:
+        return None
+    row = size - row_num
+    if 0 <= row < size and 0 <= col < size:
+        return (row, col)
+    return None
+
+
 def get_human_move(state, game_ctx):
-    """Prompt human player for a Connect6 move (e.g. 'E5')."""
+    """Prompt for Connect6 move: two squares (e.g. 'E5 F6')."""
     size = state["size"]
     player_num = state["player"]
-    player_name = "Player 1 (X)" if player_num == 1 else "Player 2 (O)"
+    player_name = "White (O)" if player_num == 0 else "Black (X)"
     board = state["board"]
 
-    print(f"  {player_name}'s turn.")
+    print(f"  {player_name}'s turn. Enter two squares (e.g. E5 F6):")
 
     while True:
         try:
-            raw = input("  Enter move (e.g. E5): ").strip().upper()
+            raw = input("  > ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nGame aborted.")
             sys.exit(0)
@@ -56,86 +69,102 @@ def get_human_move(state, game_ctx):
         if not raw:
             continue
 
-        if len(raw) >= 2 and raw[0].isalpha():
-            col = ord(raw[0]) - ord("A")
-            try:
-                row_num = int(raw[1:])
-            except ValueError:
-                print(
-                    "  Invalid move format. Use column letter + row number (e.g. E5)."
-                )
-                continue
+        parts = raw.split()
+        if len(parts) != 2:
+            print("  Enter exactly two squares separated by space (e.g. E5 F6)")
+            continue
 
-            row = size - row_num
-            if 0 <= row < size and 0 <= col < size:
-                if board[row][col] == 0:
-                    # Return UCI string (lowercase letter + number)
-                    return raw[0].lower() + raw[1:]
-                else:
-                    print("  That square is already occupied.")
-                    continue
-            else:
-                print(f"  Out of bounds. Use A-{chr(ord('A') + size - 1)}, 1-{size}.")
-                continue
+        sq1 = _parse_square(parts[0], size)
+        sq2 = _parse_square(parts[1], size)
 
-        print("  Invalid move format. Use column letter + row number (e.g. E5).")
+        if sq1 is None or sq2 is None:
+            print("  Invalid square. Use column letter + row number (e.g. E5).")
+            continue
+
+        if sq1 == sq2:
+            print("  Must place on two different squares.")
+            continue
+
+        if board[sq1[0]][sq1[1]] != 0 or board[sq2[0]][sq2[1]] != 0:
+            print("  One or both squares are occupied.")
+            continue
+
+        # Return as UCI string: "e5f6"
+        uci = (
+            chr(ord("a") + sq1[1]) + str(size - sq1[0])
+            + chr(ord("a") + sq2[1]) + str(size - sq2[0])
+        )
+        return uci
 
 
 def make_state(size):
     """Create initial Connect6 state dict."""
+    board = [[0] * size for _ in range(size)]
+    board[size // 2][size // 2] = 1  # black at center
     return {
-        "board": [[0] * size for _ in range(size)],
+        "board": board,
         "size": size,
-        "player": 1,  # player 1 = X goes first
+        "player": 0,  # white moves first
         "move_count": 0,
     }
 
 
 def uci_to_move(uci_str, size):
-    """Convert connect6 UCI string (e.g. 'e5') to ((r,c),(r,c)) tuple."""
-    if uci_str is None or len(uci_str) < 2:
+    """Convert Connect6 UCI 'e5f6' to ((r1,c1),(r2,c2))."""
+    if uci_str is None or len(uci_str) < 4:
         return None
-    col = ord(uci_str[0].lower()) - ord("a")
-    row = size - int(uci_str[1:])
-    return ((row, col), (row, col))
+    # Parse first square
+    pos = 0
+    c1 = ord(uci_str[pos].lower()) - ord("a")
+    pos += 1
+    num_start = pos
+    while pos < len(uci_str) and uci_str[pos].isdigit():
+        pos += 1
+    r1 = size - int(uci_str[num_start:pos])
+    # Parse second square
+    if pos >= len(uci_str):
+        return ((r1, c1), (r1, c1))
+    c2 = ord(uci_str[pos].lower()) - ord("a")
+    pos += 1
+    r2 = size - int(uci_str[pos:])
+    return ((r1, c1), (r2, c2))
 
 
 def move_to_uci(move, size):
-    """Convert ((r,c),(r,c)) tuple to connect6 UCI string (e.g. 'e5')."""
-    _, (r, c) = move
-    return chr(ord("a") + c) + str(size - r)
+    """Convert ((r1,c1),(r2,c2)) to 'e5f6'."""
+    (r1, c1), (r2, c2) = move
+    s = chr(ord("a") + c1) + str(size - r1)
+    if (r1, c1) != (r2, c2):
+        s += chr(ord("a") + c2) + str(size - r2)
+    return s
 
 
 def apply_move(state, uci_str, game_ctx):
-    """Apply a UCI move string to Connect6 state. Returns (new_state, uci_str).
-
-    Connect6 UCI move format: column letter + row number, e.g. 'e5'.
-    """
+    """Apply a UCI move to Connect6 state."""
     size = state["size"]
     board = [row[:] for row in state["board"]]
+    stone = 2 if state["player"] == 0 else 1
 
-    col = ord(uci_str[0].lower()) - ord("a")
-    try:
-        row_num = int(uci_str[1:])
-    except ValueError:
-        return state, uci_str  # invalid move, return unchanged
+    move = uci_to_move(uci_str, size)
+    if move is None:
+        return state, uci_str
 
-    row = size - row_num
-    if 0 <= row < size and 0 <= col < size:
-        board[row][col] = state["player"]
+    (r1, c1), (r2, c2) = move
+    board[r1][c1] = stone
+    if (r1, c1) != (r2, c2):
+        board[r2][c2] = stone
 
-    new_player = 2 if state["player"] == 1 else 1
     new_state = {
         "board": board,
         "size": size,
-        "player": new_player,
+        "player": 1 - state["player"],
         "move_count": state["move_count"] + 1,
     }
     return new_state, uci_str
 
 
-def _check_connect6_winner(board, size):
-    """Check for 5-in-a-row. Returns winning player (1 or 2) or 0 for none."""
+def _check_winner(board, size):
+    """Check for 6-in-a-row. Returns winner (1 or 2) or 0."""
     directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
     for r in range(size):
         for c in range(size):
@@ -149,23 +178,16 @@ def _check_connect6_winner(board, size):
                     count += 1
                     rr += dr
                     cc += dc
-                if count >= 5:
+                if count >= WIN_LENGTH:
                     return p
     return 0
 
 
 def check_game_over(state):
-    """Check if the game is over. Returns (result, winner).
-
-    result: 'win', 'draw', or None (game continues).
-    winner: 1 or 2 for 'win', None otherwise.
-    Maps to 'white'/'black' in the caller: player 1 = white, player 2 = black.
-    """
-    winner = _check_connect6_winner(state["board"], state["size"])
+    """Check if game is over. Returns (result, winner)."""
+    winner = _check_winner(state["board"], state["size"])
     if winner != 0:
         return ("win", winner)
-
-    # Check for full board (draw)
     full = all(
         state["board"][r][c] != 0
         for r in range(state["size"])
@@ -173,26 +195,19 @@ def check_game_over(state):
     )
     if full:
         return ("draw", None)
-
     return (None, None)
 
 
 def get_context(board_size=15):
-    """Return the game context dict for Connect6 with the given board size."""
+    """Return game context dict for Connect6."""
     size = board_size
-
-    def _uci_to_move(uci_str):
-        return uci_to_move(uci_str, size)
-
-    def _move_to_uci(move):
-        return move_to_uci(move, size)
 
     ctx = {
         "name": "connect6",
         "state_class": Connect6State,
         "format_move": format_move,
-        "uci_to_move": _uci_to_move,
-        "move_to_uci": _move_to_uci,
+        "uci_to_move": lambda uci: uci_to_move(uci, size),
+        "move_to_uci": lambda move: move_to_uci(move, size),
         "board_h": size,
         "board_w": size,
         "max_step": size * size,

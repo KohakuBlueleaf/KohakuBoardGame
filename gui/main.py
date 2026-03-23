@@ -294,6 +294,7 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
         self.legal_moves_for_selected = []
         self.last_move = None
         self._promotion_dialog = None
+        self._connect6_first_sq = None  # first stone of two-click Connect6 move
 
         # History
         self.move_history = []
@@ -543,15 +544,19 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
     def handle_board_click(self, row, col):
         player = self.game_state.player
 
+        # Connect6: two-click placement (click sq1, then sq2)
+        if self._game_name in ("Connect6", "connect6"):
+            self._handle_connect6_click(row, col)
+            return
+
         # Get the clicked piece; board layout differs per game
         try:
             clicked_piece = self.game_state.board[player][row][col]
         except (TypeError, IndexError):
-            # Non-chess games (e.g. Connect6) use board[row][col]
             clicked_piece = _cfg.EMPTY
 
         if self.selected_piece is None:
-            # For placement games (Connect6), check if any legal move targets (row,col)
+            # For placement games, check if any legal move targets (row,col)
             placement_move = None
             for m in self.game_state.legal_actions:
                 if m[1] == (row, col):
@@ -569,6 +574,51 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
                 self._select_piece(row, col)
             else:
                 self._deselect_piece()
+
+    def _handle_connect6_click(self, row, col):
+        """Two-click input for Connect6: click first square, then second."""
+        # Must be empty
+        try:
+            val = self.game_state.board[row][col]
+        except (TypeError, IndexError):
+            val = 0
+        if val != 0:
+            self._connect6_first_sq = None
+            return
+
+        if self._connect6_first_sq is None:
+            # First click: select first stone position
+            self._connect6_first_sq = (row, col)
+            # Show highlight
+            self.selected_piece = (row, col)
+            # Show which second squares are legal
+            self.legal_moves_for_selected = [
+                m for m in self.game_state.legal_actions
+                if m[0] == (row, col) or m[1] == (row, col)
+            ]
+        else:
+            # Second click: form the move pair
+            sq1 = self._connect6_first_sq
+            sq2 = (row, col)
+            self._connect6_first_sq = None
+            self.selected_piece = None
+            self.legal_moves_for_selected = []
+
+            if sq1 == sq2:
+                return  # can't place both on same square
+
+            # Ensure consistent ordering (sq1 < sq2 in raster order)
+            if sq1 > sq2:
+                sq1, sq2 = sq2, sq1
+
+            move = (sq1, sq2)
+            if move in self.game_state.legal_actions:
+                self.execute_move(move)
+            else:
+                # Try reverse order
+                move = (sq2, sq1)
+                if move in self.game_state.legal_actions:
+                    self.execute_move(move)
 
     def _select_piece(self, row, col):
         self.selected_piece = (row, col)
@@ -593,6 +643,7 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
         """Clear selection and hand highlight."""
         self.selected_piece = None
         self.legal_moves_for_selected = []
+        self._connect6_first_sq = None
         self._sync_hand_highlight(None)
 
     def _sync_hand_highlight(self, hand_key):
