@@ -408,7 +408,7 @@ std::vector<Move> PVS::extract_pv(State *state, int max_len){
         seen.push_back(hash);
 
         TTEntry* tte = tt_probe(hash);
-        if(!tte || tte->flag == TT_NONE || tte->flag == TT_UPPER){
+        if(!tte || tte->flag == TT_NONE){
             break;
         }
         Move mv = tte->get_move();
@@ -427,6 +427,7 @@ std::vector<Move> PVS::extract_pv(State *state, int max_len){
 
         pv.push_back(mv);
         State* next = cur->next_state(mv);
+        next->get_legal_actions();
         delete cur;
         cur = next;
     }
