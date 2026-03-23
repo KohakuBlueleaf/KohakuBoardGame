@@ -408,7 +408,7 @@ std::vector<Move> PVS::extract_pv(State *state, int max_len){
         seen.push_back(hash);
 
         TTEntry* tte = tt_probe(hash);
-        if(!tte || tte->flag == TT_NONE){
+        if(!tte || tte->flag == TT_NONE || tte->flag == TT_UPPER){
             break;
         }
         Move mv = tte->get_move();
