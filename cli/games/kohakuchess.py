@@ -3,7 +3,7 @@
 import sys
 
 try:
-    from gui.games.kohaku_chess_engine import (
+    from gui.games.kohakuchess_engine import (
         KohakuChessState,
         format_move,
         BOARD_H,
@@ -13,7 +13,7 @@ try:
     )
 except ImportError:
     raise ImportError(
-        "Kohaku Chess CLI requires gui.games.kohaku_chess_engine. "
+        "Kohaku Chess CLI requires gui.games.kohakuchess_engine. "
         "Make sure the gui package is on sys.path."
     )
 
@@ -172,7 +172,7 @@ def move_to_uci(move):
 def get_context():
     """Return the game context dict for Kohaku Chess."""
     ctx = {
-        "name": "kohaku_chess",
+        "name": "kohakuchess",
         "state_class": KohakuChessState,
         "format_move": format_move,
         "uci_to_move": uci_to_move,

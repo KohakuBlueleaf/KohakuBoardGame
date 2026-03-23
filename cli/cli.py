@@ -48,12 +48,12 @@ def _init_game(game_name, board_size=None):
         from cli.games.minishogi import get_context
 
         _game_ctx.update(get_context())
-    elif game_name == "kohaku_shogi":
-        from cli.games.kohaku_shogi import get_context
+    elif game_name == "kohakushogi":
+        from cli.games.kohakushogi import get_context
 
         _game_ctx.update(get_context())
-    elif game_name == "kohaku_chess":
-        from cli.games.kohaku_chess import get_context
+    elif game_name == "kohakuchess":
+        from cli.games.kohakuchess import get_context
 
         _game_ctx.update(get_context())
     else:
@@ -136,11 +136,11 @@ def format_move_display(move_or_uci, state=None):
     For generic: shows the raw UCI string.
     """
     game_name = _game_ctx.get("name", "generic")
-    if game_name in ("minichess", "kohaku_chess") and not isinstance(move_or_uci, str):
+    if game_name in ("minichess", "kohakuchess") and not isinstance(move_or_uci, str):
         return _game_ctx["format_move"](move_or_uci)
-    elif game_name in ("minishogi", "kohaku_shogi") and not isinstance(move_or_uci, str):
+    elif game_name in ("minishogi", "kohakushogi") and not isinstance(move_or_uci, str):
         return _game_ctx["format_move"](move_or_uci)
-    elif game_name in ("minishogi", "kohaku_shogi") and isinstance(move_or_uci, str):
+    elif game_name in ("minishogi", "kohakushogi") and isinstance(move_or_uci, str):
         return move_or_uci.upper()
     elif game_name == "gomoku" and isinstance(move_or_uci, str):
         # Gomoku UCI move is like "e5" (column letter + row number)
@@ -350,10 +350,10 @@ def run_game(
             check_fn = _game_ctx.get("check_game_over")
             result, winner = check_fn(state)
             if result in ("win", "checkmate", "perpetual_check", "stalemate_loss"):
-                if game_name in ("minichess", "kohaku_chess"):
+                if game_name in ("minichess", "kohakuchess"):
                     winner_str = "White" if winner == 0 else "Black"
                     color = "white" if winner == 0 else "black"
-                elif game_name in ("minishogi", "kohaku_shogi"):
+                elif game_name in ("minishogi", "kohakushogi"):
                     winner_str = "Sente" if winner == 0 else "Gote"
                     color = "white" if winner == 0 else "black"
                 elif game_name == "gomoku":
@@ -379,19 +379,19 @@ def run_game(
                 return "draw"
             elif result == "no_moves":
                 if verbose:
-                    if game_name in ("minishogi", "kohaku_shogi"):
+                    if game_name in ("minishogi", "kohakushogi"):
                         loser = "Sente" if winner == 1 else "Gote"
                     else:
                         loser = "White" if winner == 1 else "Black"
                     print(f"  >> {loser} has no legal moves!")
                 # winner value is the winning side
-                if game_name in ("minichess", "minishogi", "kohaku_chess", "kohaku_shogi"):
+                if game_name in ("minichess", "minishogi", "kohakuchess", "kohakushogi"):
                     return "white" if winner == 0 else "black"
                 else:
                     return "white" if winner == 1 else "black"
 
             # Determine which side to move
-            if game_name in ("minichess", "minishogi", "kohaku_chess", "kohaku_shogi"):
+            if game_name in ("minichess", "minishogi", "kohakuchess", "kohakushogi"):
                 is_white = state.player == 0
             elif game_name == "gomoku":
                 is_white = state["player"] == 1  # player 1 = "white" (first player)
@@ -415,11 +415,11 @@ def run_game(
             # Human move input
             human_fn = _game_ctx.get("get_human_move")
             if human_fn is not None:
-                if game_name in ("minichess", "minishogi", "kohaku_chess", "kohaku_shogi") and verbose:
+                if game_name in ("minichess", "minishogi", "kohakuchess", "kohakushogi") and verbose:
                     print(f"  Step {state.step}/{_game_ctx['max_step']}")
                 result = human_fn(state, _game_ctx)
                 # For chess/shogi variants, result is a move tuple; for gomoku, a UCI string
-                if game_name in ("minichess", "minishogi", "kohaku_chess", "kohaku_shogi"):
+                if game_name in ("minichess", "minishogi", "kohakuchess", "kohakushogi"):
                     bestmove_uci = _game_ctx["move_to_uci"](result)
                 else:
                     bestmove_uci = result
@@ -455,7 +455,7 @@ def run_game(
                         )
                     return "black" if is_white else "white"
 
-                if game_name in ("minichess", "minishogi", "kohaku_chess", "kohaku_shogi"):
+                if game_name in ("minichess", "minishogi", "kohakuchess", "kohakushogi"):
                     if move not in state.legal_actions:
                         if verbose:
                             print(
@@ -637,7 +637,7 @@ def main():
         "--game",
         default="minichess",
         help="Game type for board display and move input (default: minichess). "
-        "Built-in: minichess, minishogi, kohaku_chess, kohaku_shogi, gomoku. Use 'generic' for any other UBGI engine.",
+        "Built-in: minichess, minishogi, kohakuchess, kohakushogi, gomoku. Use 'generic' for any other UBGI engine.",
     )
     parser.add_argument(
         "--white", required=True, help='Path to UBGI/UCI engine for White, or "human".'

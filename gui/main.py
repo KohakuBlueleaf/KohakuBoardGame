@@ -83,9 +83,9 @@ def _get_game_module(game_name):
             PLAYER_LABELS,
             PLAYER_COLORS,
         )
-    if game_name in ("KohakuShogi", "kohaku_shogi", "kohakushogi"):
+    if game_name in ("KohakuShogi", "kohakushogi"):
         try:
-            from gui.games.kohaku_shogi_engine import (
+            from gui.games.kohakushogi_engine import (
                 KohakuShogiState,
                 format_move,
                 PLAYER_LABELS,
@@ -94,9 +94,9 @@ def _get_game_module(game_name):
                 CHAR_TO_DROP_PIECE,
                 PROMOTE_MAP,
             )
-            from gui.games.kohaku_shogi_renderer import KohakuShogiRenderer
+            from gui.games.kohakushogi_renderer import KohakuShogiRenderer
         except ImportError:
-            from games.kohaku_shogi_engine import (
+            from games.kohakushogi_engine import (
                 KohakuShogiState,
                 format_move,
                 PLAYER_LABELS,
@@ -105,7 +105,7 @@ def _get_game_module(game_name):
                 CHAR_TO_DROP_PIECE,
                 PROMOTE_MAP,
             )
-            from games.kohaku_shogi_renderer import KohakuShogiRenderer
+            from games.kohakushogi_renderer import KohakuShogiRenderer
         _cfg.DROP_PIECE_CHAR = DROP_PIECE_CHAR
         _cfg.CHAR_TO_DROP_PIECE = CHAR_TO_DROP_PIECE
         _cfg.PROMOTE_MAP = PROMOTE_MAP
@@ -116,23 +116,23 @@ def _get_game_module(game_name):
             PLAYER_LABELS,
             PLAYER_COLORS,
         )
-    if game_name in ("KohakuChess", "kohaku_chess", "kohakuchess"):
+    if game_name in ("KohakuChess", "kohakuchess"):
         try:
-            from gui.games.kohaku_chess_engine import (
+            from gui.games.kohakuchess_engine import (
                 KohakuChessState,
                 format_move,
                 PLAYER_LABELS,
                 PLAYER_COLORS,
             )
-            from gui.games.kohaku_chess_renderer import KohakuChessRenderer
+            from gui.games.kohakuchess_renderer import KohakuChessRenderer
         except ImportError:
-            from games.kohaku_chess_engine import (
+            from games.kohakuchess_engine import (
                 KohakuChessState,
                 format_move,
                 PLAYER_LABELS,
                 PLAYER_COLORS,
             )
-            from games.kohaku_chess_renderer import KohakuChessRenderer
+            from games.kohakuchess_renderer import KohakuChessRenderer
         return (
             KohakuChessState,
             format_move,
@@ -176,7 +176,7 @@ def _configure_board_size(game_name):
         _cfg.SCORE_PLOT_MAX_CP = 2000
         _cfg.SCORE_DISPLAY_DIV = 100
         _cfg.HAND_ROW_H = 60  # height of each hand row (gote top, sente bottom)
-    elif game_name in ("KohakuShogi", "kohaku_shogi", "kohakushogi"):
+    elif game_name in ("KohakuShogi", "kohakushogi"):
         _cfg.BOARD_H = 7
         _cfg.BOARD_W = 6
         _cfg.SQUARE_SIZE = 64  # medium squares for 7x6 board with kanji
@@ -184,7 +184,7 @@ def _configure_board_size(game_name):
         _cfg.SCORE_PLOT_MAX_CP = 2000
         _cfg.SCORE_DISPLAY_DIV = 100
         _cfg.HAND_ROW_H = 60  # height of each hand row (gote top, sente bottom)
-    elif game_name in ("KohakuChess", "kohaku_chess", "kohakuchess"):
+    elif game_name in ("KohakuChess", "kohakuchess"):
         _cfg.BOARD_H = 7
         _cfg.BOARD_W = 6
         _cfg.SQUARE_SIZE = 72  # medium squares for 7x6 chess board

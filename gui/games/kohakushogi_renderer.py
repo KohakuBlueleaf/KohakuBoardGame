@@ -10,7 +10,7 @@ except ImportError:
     import config as cfg
 
 try:
-    from gui.games.kohaku_shogi_engine import (
+    from gui.games.kohakushogi_engine import (
         EMPTY,
         PAWN,
         SILVER,
@@ -34,7 +34,7 @@ try:
         CHAR_TO_DROP_PIECE,
     )
 except ImportError:
-    from games.kohaku_shogi_engine import (
+    from games.kohakushogi_engine import (
         EMPTY,
         PAWN,
         SILVER,

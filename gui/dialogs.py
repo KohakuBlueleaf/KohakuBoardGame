@@ -22,11 +22,11 @@ def _discover_nnue_models(game_name):
     names.add(game_name.lower())
     names.add(game_name.replace(" ", ""))
     names.add(game_name.replace(" ", "").lower())
-    # CamelCase → snake_case: "KohakuShogi" → "kohaku_shogi"
+    # CamelCase → snake_case: "KohakuShogi" → "kohakushogi"
     import re
     snake = re.sub(r'(?<!^)(?=[A-Z])', '_', game_name).lower()
     names.add(snake)
-    # Also strip underscores: "kohaku_shogi" → "kohakushogi"
+    # Also strip underscores: "kohakushogi" → "kohakushogi"
     names.add(game_name.lower().replace("_", ""))
 
     patterns = []

@@ -9,7 +9,7 @@ except ImportError:
     import config as cfg
 
 try:
-    from gui.games.kohaku_chess_engine import (
+    from gui.games.kohakuchess_engine import (
         EMPTY,
         PAWN,
         ROOK,
@@ -22,7 +22,7 @@ try:
         PIECE_UNICODE,
     )
 except ImportError:
-    from games.kohaku_chess_engine import (
+    from games.kohakuchess_engine import (
         EMPTY,
         PAWN,
         ROOK,

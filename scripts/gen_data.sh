@@ -1,6 +1,6 @@
 #!/bin/bash
 # Generate training positions using parallel workers.
-# Supports: minichess, minishogi, gomoku, kohaku_shogi, kohaku_chess
+# Supports: minichess, minishogi, gomoku, kohakushogi, kohakuchess
 #
 # Usage: bash scripts/gen_data.sh [options]
 #   -g GAME         Game type: minichess, minishogi, gomoku (default: minichess)
@@ -41,15 +41,11 @@ while getopts "g:n:w:d:r:p:o:m:h" opt; do
   esac
 done
 
-# Normalize game name: accept kohaku_shogi, KohakuShogi, kohakushogi etc.
+# Normalize game name: accept kohakushogi, KohakuShogi, kohakushogi etc.
 GAME=$(echo "$GAME" | tr '[:upper:]' '[:lower:]' | tr -d '_')
 
-# Map normalized name to build binary name (Makefile uses underscores)
-case "$GAME" in
-  kohakushogi) BIN_GAME="kohaku_shogi" ;;
-  kohakuchess) BIN_GAME="kohaku_chess" ;;
-  *) BIN_GAME="$GAME" ;;
-esac
+# Binary name matches game name (no underscore)
+BIN_GAME="$GAME"
 
 # Per-game record size (header=12 bytes for v3, record = board + metadata)
 # v3 record: board(2*H*W) + player(1) + score(2) + result(1) + ply(2) + best_move(2) = 2*H*W + 8

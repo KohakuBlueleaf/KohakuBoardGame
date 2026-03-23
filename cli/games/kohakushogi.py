@@ -3,7 +3,7 @@
 import sys
 
 try:
-    from gui.games.kohaku_shogi_engine import (
+    from gui.games.kohakushogi_engine import (
         KohakuShogiState,
         format_move,
         BOARD_H,
@@ -30,7 +30,7 @@ try:
     )
 except ImportError:
     raise ImportError(
-        "Kohaku Shogi CLI requires gui.games.kohaku_shogi_engine. "
+        "Kohaku Shogi CLI requires gui.games.kohakushogi_engine. "
         "Make sure the gui package is on sys.path."
     )
 
@@ -309,7 +309,7 @@ def check_game_over(state):
 def get_context():
     """Return the game context dict for Kohaku Shogi."""
     ctx = {
-        "name": "kohaku_shogi",
+        "name": "kohakushogi",
         "state_class": KohakuShogiState,
         "format_move": format_move,
         "uci_to_move": uci_to_move,
