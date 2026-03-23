@@ -716,12 +716,16 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
     # ------------------------------------------------------------------
 
     def update(self):
-        # Force-kill engine if it exceeds the timeout
+        # Force-kill engine if it exceeds the timeout (time-based search only)
         if self.ai_thinking and not self.ai_result.get("ready"):
-            elapsed = time.time() - getattr(self, "_ai_start_time", 0)
-            kill_after = self.time_limit + 1.0  # 1s grace period
-            if elapsed > kill_after:
-                self._force_kill_ai_engine()
+            player = self.game_state.player
+            side = self.white if player == 0 else self.black
+            using_fixed_depth = (side.get("depth", 0) > 0)
+            if not using_fixed_depth:
+                elapsed = time.time() - getattr(self, "_ai_start_time", 0)
+                kill_after = self.time_limit + 2.0
+                if elapsed > kill_after:
+                    self._force_kill_ai_engine()
 
         if self.ai_result.get("ready"):
             move = self.ai_result["move"]

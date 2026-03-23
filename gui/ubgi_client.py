@@ -231,28 +231,20 @@ class UBGIEngine:
                 pass
 
     def _readline(self, timeout=None):
-        """Read a single line from stdout. Returns the line or None on EOF/error/timeout.
+        """Read a single line from stdout. Returns the line or None on EOF/error.
 
-        Uses a background thread to avoid blocking the caller indefinitely
-        when the engine process has stopped sending output.
+        Blocks until a line is available. The process kill in quit()
+        closes the pipe which unblocks the read.
         """
         if self._process is None or self._process.stdout is None:
             return None
-        if timeout is None:
-            timeout = 10.0
-        import threading as _threading
-        result = [None]
-        def _read():
-            try:
-                line = self._process.stdout.readline()
-                if line:
-                    result[0] = line.decode("utf-8", errors="replace").strip()
-            except (OSError, ValueError):
-                pass
-        t = _threading.Thread(target=_read, daemon=True)
-        t.start()
-        t.join(timeout=timeout)
-        return result[0]
+        try:
+            line = self._process.stdout.readline()
+            if not line:
+                return None
+            return line.decode("utf-8", errors="replace").strip()
+        except (OSError, ValueError):
+            return None
 
     def _wait_for(self, target, timeout=5.0):
         """Read lines until one equals *target* (or timeout).
