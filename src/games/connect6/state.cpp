@@ -168,8 +168,10 @@ int State::score_single_placement(int r, int c, int who) const {
     static const int dirs[4][2] = {{0, 1}, {1, 0}, {1, 1}, {1, -1}};
 
     int gain = 0;   /* how much our windows improve */
-    int damage = 0; /* how much opponent's windows are destroyed */
+    int damage = 0; /* how much opponent's windows we destroy */
 
+    /* Scan all windows passing through (r,c) BEFORE placing our stone.
+     * (r,c) is currently empty. */
     for(auto& d : dirs){
         for(int off = -5; off <= 0; off++){
             int sr = r + d[0] * off, sc = c + d[1] * off;
@@ -185,14 +187,16 @@ int State::score_single_placement(int r, int c, int who) const {
                 else if(v == other) opp_count++;
             }
 
-            if(opp_count == 0){
-                /* Pure my window: placing here improves it */
+            if(opp_count == 0 && my_count >= 0){
+                /* Pure our window (or empty): placing adds 1 stone.
+                 * Before: WINDOW_SCORE[my_count], After: WINDOW_SCORE[my_count+1] */
                 gain += WINDOW_SCORE[my_count + 1] - WINDOW_SCORE[my_count];
-            }else if(my_count == 0){
-                /* Pure opponent window: placing here KILLS it */
+            }
+            if(my_count == 0 && opp_count > 0){
+                /* Pure opponent window: our placement makes it mixed = dead.
+                 * We destroy WINDOW_SCORE[opp_count] worth of opponent value. */
                 damage += WINDOW_SCORE[opp_count];
             }
-            /* Mixed window: already dead, no change */
         }
     }
 
