@@ -99,15 +99,19 @@ bool State::check_win_at(int row, int col) const {
  * Weights use exponential scaling (following YoungHeonRo approach).
  *============================================================*/
 
-/* Window scores indexed by stone count 0..6 */
+/* Window scores indexed by stone count 0..6.
+ * Heavily exponential: each additional stone is ~20-50x more valuable.
+ * 5 stones = 1 from win = nearly terminal. 4 stones = 2 from win.
+ * The large gaps ensure the engine strongly prefers extending existing
+ * lines over creating new scattered windows. */
 static const int WINDOW_SCORE[7] = {
-    0,      /* 0 stones: empty window */
-    1,      /* 1 stone */
-    10,     /* 2 stones */
-    100,    /* 3 stones */
-    1000,   /* 4 stones: serious threat */
-    10000,  /* 5 stones: 1 from win */
-    100000, /* 6 stones: won */
+    0,          /* 0 stones: empty window */
+    1,          /* 1 stone: minimal */
+    5,          /* 2 stones: developing */
+    50,         /* 3 stones: building */
+    5000,       /* 4 stones: serious — 2 from win, 100x jump */
+    500000,     /* 5 stones: critical — 1 from win, 100x jump */
+    10000000,   /* 6 stones: won */
 };
 
 /* Scan all 6-cell windows and return total score for player `who`.
@@ -155,49 +159,44 @@ static int window_score_for(
 
 /*============================================================
  * Score a single placement for move ordering.
- * Uses sliding window: compute score delta from placing stone.
+ * Computes DELTA: (score with stone) - (score without stone)
+ * for all windows passing through (r,c).
+ * This measures the MARGINAL VALUE of placing here.
  *============================================================*/
 int State::score_single_placement(int r, int c, int who) const {
-    /* Temporarily place stone and compute the score change
-     * in all windows that include (r,c). */
-    const_cast<char&>(board.board[r][c]) = who;
-
-    int score = 0;
     int other = (who == 1) ? 2 : 1;
     static const int dirs[4][2] = {{0, 1}, {1, 0}, {1, 1}, {1, -1}};
 
+    int gain = 0;   /* how much our windows improve */
+    int damage = 0; /* how much opponent's windows are destroyed */
+
     for(auto& d : dirs){
-        /* Check 6 windows that include (r,c) — offsets -5 to 0 */
         for(int off = -5; off <= 0; off++){
             int sr = r + d[0] * off, sc = c + d[1] * off;
             int er = sr + d[0] * 5, ec = sc + d[1] * 5;
             if(sr < 0 || sr >= BOARD_H || sc < 0 || sc >= BOARD_W) continue;
             if(er < 0 || er >= BOARD_H || ec < 0 || ec >= BOARD_W) continue;
 
-            int mine = 0;
-            bool dead = false;
+            int my_count = 0, opp_count = 0;
             for(int k = 0; k < 6; k++){
                 int wr = sr + d[0] * k, wc = sc + d[1] * k;
                 char v = board.board[wr][wc];
-                if(v == other){
-                    dead = true;
-                    break;
-                }
-                if(v == who) mine++;
+                if(v == who) my_count++;
+                else if(v == other) opp_count++;
             }
-            if(!dead){
-                score += WINDOW_SCORE[mine];
+
+            if(opp_count == 0){
+                /* Pure my window: placing here improves it */
+                gain += WINDOW_SCORE[my_count + 1] - WINDOW_SCORE[my_count];
+            }else if(my_count == 0){
+                /* Pure opponent window: placing here KILLS it */
+                damage += WINDOW_SCORE[opp_count];
             }
+            /* Mixed window: already dead, no change */
         }
     }
 
-    /* Center bonus */
-    int dr = abs(r - BOARD_H / 2);
-    int dc = abs(c - BOARD_W / 2);
-    score += 50 - (dr + dc) * 3;
-
-    const_cast<char&>(board.board[r][c]) = 0;
-    return score;
+    return gain + damage;
 }
 
 
@@ -273,10 +272,13 @@ void State::get_legal_actions(){
     for(int r = 0; r < BOARD_H; r++){
         for(int c = 0; c < BOARD_W; c++){
             if(board.board[r][c] != 0 || !near[r][c]) continue;
-            int atk = score_single_placement(r, c, my_id);
-            int def = score_single_placement(r, c, opp_id);
-            int sc = atk + def * 9 / 10;
-            candidates.push_back({r, c, sc});
+            /* score_single_placement includes attack gain + defensive damage */
+            int sc = score_single_placement(r, c, my_id);
+            /* Skip very low-value squares — only include if the stone
+             * actually contributes to or blocks a meaningful window */
+            if(sc > 5){
+                candidates.push_back({r, c, sc});
+            }
         }
     }
 
