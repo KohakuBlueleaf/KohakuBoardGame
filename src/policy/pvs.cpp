@@ -394,7 +394,7 @@ SearchResult PVS::search(
  *============================================================*/
 std::vector<Move> PVS::extract_pv(State *state, int max_len){
     std::vector<Move> pv;
-    State* cur = new State(state->board, state->player);
+    State* cur = new State(*state);  /* copy the full state */
     cur->get_legal_actions();
 
     std::vector<uint64_t> seen;

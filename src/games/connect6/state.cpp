@@ -9,6 +9,7 @@
 
 static uint64_t c6_zobrist[3][BOARD_H][BOARD_W];
 static uint64_t c6_zobrist_side;
+static uint64_t c6_zobrist_stone2;  /* XOR when stones_left == 1 (mid-turn) */
 static bool c6_zobrist_ready = false;
 
 static void init_c6_zobrist(){
@@ -24,6 +25,7 @@ static void init_c6_zobrist(){
         }
     }
     c6_zobrist_side = rand64();
+    c6_zobrist_stone2 = rand64();
     c6_zobrist_ready = true;
 }
 
@@ -38,6 +40,7 @@ uint64_t State::compute_hash_full() const {
         }
     }
     if(player) h ^= c6_zobrist_side;
+    if(stones_left == 1) h ^= c6_zobrist_stone2;
     return h;
 }
 
@@ -258,7 +261,15 @@ State* State::next_state(const Move& move){
     /* Incremental hash */
     uint64_t h = this->hash();
     if(switch_player){
-        h ^= c6_zobrist_side;
+        h ^= c6_zobrist_side;  /* player flips */
+    }
+    /* Toggle stones_left key: parent had stones_left=N, child has different */
+    if(this->stones_left == 2){
+        /* parent was stone1 (no stone2 key), child is stone2 (add stone2 key) */
+        h ^= c6_zobrist_stone2;
+    }else{
+        /* parent was stone2 (had stone2 key), child is stone1 (remove stone2 key) */
+        h ^= c6_zobrist_stone2;
     }
     h ^= c6_zobrist[stone][r][c];
     ns->zobrist_hash = h;

@@ -20,7 +20,7 @@ int main(){
         
         tt_clear();
         SearchContext ctx;
-        int depth = 2;
+        int depth = 4;
         auto result = PVS::search(game, depth, history, ctx);
         
         auto m = result.best_move;
