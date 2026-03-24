@@ -36,6 +36,13 @@ public:
         const GameHistory* history = nullptr
     ) = 0;
 
+    /* === Multi-stone turns (Connect6 etc.) ===
+     * Returns true if this state's player is the SAME as the parent's.
+     * Standard games always return false (player alternates every move).
+     * Connect6 returns true for the first of 2 stones in a turn.
+     * Search uses this to skip score negation between same-player moves. */
+    virtual bool same_player_as_parent() const { return false; }
+
     /* === Game description === */
     virtual int board_h() const = 0;
     virtual int board_w() const = 0;

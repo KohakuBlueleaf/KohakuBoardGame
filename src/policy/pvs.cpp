@@ -12,6 +12,27 @@
 #include "pvs/quiescence.hpp"
 
 
+/* Helper: call eval_ctx with correct window direction based on
+ * whether the child has the same player as parent.
+ * For standard 2-player games this compiles to normal negamax. */
+static inline int call_eval(
+    State* child,
+    int depth,
+    int alpha,
+    int beta,
+    GameHistory& history,
+    int ply,
+    bool can_null,
+    SearchContext& ctx,
+    const PVSParams& p
+){
+    if(child->same_player_as_parent()){
+        return PVS::eval_ctx(child, depth, alpha, beta, history, ply, can_null, ctx, p);
+    }else{
+        return -PVS::eval_ctx(child, depth, -beta, -alpha, history, ply, can_null, ctx, p);
+    }
+}
+
 /*============================================================
  * PVS (Principal Variation Search) with ParamMap
  *
@@ -162,9 +183,9 @@ int PVS::eval_ctx(
 
         if(first_child){
             /* First move: full window, full depth */
-            score = -eval_ctx(
+            score = call_eval(
                 state->next_state(move), depth - 1,
-                -beta, -alpha, history, ply + 1, true, ctx, p
+                alpha, beta, history, ply + 1, true, ctx, p
             );
             first_child = false;
             best_move = move;
@@ -191,15 +212,15 @@ int PVS::eval_ctx(
 
             if(do_lmr){
                 /* LMR: null-window, reduced depth */
-                score = -eval_ctx(
+                score = call_eval(
                     state->next_state(move), depth - 2,
-                    -(alpha + 1), -alpha, history, ply + 1, true, ctx, p
+                    alpha, alpha + 1, history, ply + 1, true, ctx, p
                 );
                 if(score > alpha){
                     /* Re-search at full depth, null-window */
-                    score = -eval_ctx(
+                    score = call_eval(
                         state->next_state(move), depth - 1,
-                        -(alpha + 1), -alpha, history, ply + 1, true, ctx, p
+                        alpha, alpha + 1, history, ply + 1, true, ctx, p
                     );
                     if(score > alpha && score < beta){
                         /* Full window re-search */
@@ -308,34 +329,24 @@ SearchResult PVS::search(
         int score;
 
         if(first_child){
-            score = -eval_ctx(
+            score = call_eval(
                 state->next_state(move),
                 depth - 1,
-                -beta,
-                -alpha,
-                history,
-                1,
-                true,
-                ctx,
-                p
+                alpha, beta,
+                history, 1, true, ctx, p
             );
             first_child = false;
         }else{
-            score = -eval_ctx(
+            score = call_eval(
                 state->next_state(move),
                 depth - 1,
-                -(alpha + 1),
-                -alpha,
-                history,
-                1,
-                true,
-                ctx,
-                p
+                alpha, alpha + 1,
+                history, 1, true, ctx, p
             );
             if(score > alpha && score < beta){
-                score = -eval_ctx(
+                score = call_eval(
                     state->next_state(move), depth - 1,
-                    -beta, -alpha, history, 1, true, ctx, p
+                    alpha, beta, history, 1, true, ctx, p
                 );
             }
         }

@@ -19,6 +19,7 @@ public:
     Board board;
     int step = 0;
     int score = 0;
+    int stones_left = 2;  /* 2 = first stone of turn, 1 = second stone */
     mutable uint64_t zobrist_hash = 0;
     mutable bool zobrist_valid = false;
 
@@ -28,11 +29,12 @@ public:
     State(){
         player = 0;
         step = 0;
+        stones_left = 2;
     }
-    State(int player){
+    State(int player): stones_left(2){
         this->player = player;
     }
-    State(Board board, int player): board(board){
+    State(Board board, int player): board(board), stones_left(2){
         this->player = player;
     }
 
@@ -65,6 +67,13 @@ public:
 
     std::string encode_board() const override;
     void decode_board(const std::string& s, int side_to_move) override;
+
+    /* === Multi-stone turn: same player places 2 stones ===
+     * Returns true when this is the second stone of a turn
+     * (same player as parent, search should not negate score). */
+    bool same_player_as_parent() const override {
+        return stones_left == 1;
+    }
 
     /* === Game description === */
     int board_h() const override { return BOARD_H; }

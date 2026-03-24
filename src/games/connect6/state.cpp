@@ -138,14 +138,13 @@ int State::score_single_placement(int r, int c, int who) const {
 
 
 /*============================================================
- * Legal move generation for Connect6.
+ * Legal move generation for Connect6 (single-stone moves).
  *
- * Each move places 2 stones: Move = ((r1,c1), (r2,c2)).
- * Uses proximity pruning + threat scoring to limit branching:
- * 1. Find all empty squares near existing stones (Manhattan ≤ 2)
- * 2. Score each square by threat value
- * 3. Take top-K candidates
- * 4. Generate all pairs from top-K
+ * Each move places 1 stone: Move = ((r,c), (r,c)) with from==to.
+ * The stones_left counter tracks whether this is stone 1 or 2
+ * of the current turn. Player switches after stone 2.
+ *
+ * Uses proximity pruning (Chebyshev dist ≤ 3) + threat scoring.
  *============================================================*/
 void State::get_legal_actions(){
     legal_actions.clear();
@@ -153,28 +152,34 @@ void State::get_legal_actions(){
         return;
     }
 
-    int my_id = (player == 0) ? 2 : 1;
     int opp_id = (player == 0) ? 1 : 2;
 
-    /* Check if opponent's last stones created a win */
+    /* Check if opponent (or same player's previous stone) created a win */
     for(int r = 0; r < BOARD_H; r++){
         for(int c = 0; c < BOARD_W; c++){
-            if(board.board[r][c] == opp_id && check_win_at(r, c)){
-                game_state = WIN; /* opponent already won = current player lost */
+            if(board.board[r][c] != 0 && check_win_at(r, c)){
+                /* Someone has 6 in a row. If it's the opponent's stones,
+                 * current player lost. If same player's stones (from stone 1
+                 * of this turn), the current player already won. */
+                int winner_stone = board.board[r][c];
+                int my_id = (player == 0) ? 2 : 1;
+                if(winner_stone == my_id){
+                    /* Current player already has 6 — they won (from stone 1) */
+                    game_state = WIN;
+                }else{
+                    /* Opponent has 6 — current player lost */
+                    game_state = WIN;
+                }
                 return;
             }
         }
     }
 
-    /* Build proximity mask (Chebyshev distance ≤ 3 from any stone).
-     * Larger radius than Gomoku because Connect6 needs 6-in-a-row
-     * and each turn places 2 stones that can bridge gaps. */
+    /* Build proximity mask (Chebyshev distance ≤ 3) */
     bool near[BOARD_H][BOARD_W] = {};
-    int stone_count = 0;
     for(int r = 0; r < BOARD_H; r++){
         for(int c = 0; c < BOARD_W; c++){
             if(board.board[r][c] != 0){
-                stone_count++;
                 for(int dr = -3; dr <= 3; dr++){
                     for(int dc = -3; dc <= 3; dc++){
                         int nr = r + dr, nc = c + dc;
@@ -187,32 +192,29 @@ void State::get_legal_actions(){
         }
     }
 
-    /* Collect and score nearby empty squares */
-    struct ScoredSq {
-        int r, c, score;
-    };
+    /* Single-stone moves: each legal move places 1 stone.
+     * Move = ((r,c), (r,c)) with from == to (placement). */
+    int my_id = (player == 0) ? 2 : 1;
+    struct ScoredSq { int r, c, score; };
     std::vector<ScoredSq> candidates;
     candidates.reserve(128);
 
     for(int r = 0; r < BOARD_H; r++){
         for(int c = 0; c < BOARD_W; c++){
             if(board.board[r][c] != 0 || !near[r][c]) continue;
-
-            /* Score for both attacking and defending */
             int atk = score_single_placement(r, c, my_id);
             int def = score_single_placement(r, c, opp_id);
-            int sc = atk + def * 9 / 10; /* slight attack preference */
+            int sc = atk + def * 9 / 10;
             candidates.push_back({r, c, sc});
         }
     }
 
     if(candidates.empty()){
-        /* Board full */
         game_state = DRAW;
         return;
     }
 
-    /* Sort by score descending */
+    /* Sort by score, take top-K */
     std::sort(
         candidates.begin(), candidates.end(),
         [](const ScoredSq& a, const ScoredSq& b){
@@ -220,92 +222,45 @@ void State::get_legal_actions(){
         }
     );
 
-    /* Take top-K1 for first stone, top-K2 for second stone.
-     * The second stone candidates include ALL nearby squares (not just top-K1)
-     * because placing the first stone may make new positions relevant. */
-    constexpr int MAX_FIRST = 20;
-    constexpr int MAX_SECOND = 30;
-    int n1 = std::min((int)candidates.size(), MAX_FIRST);
-    int n2 = std::min((int)candidates.size(), MAX_SECOND);
+    constexpr int MAX_CANDIDATES = 40;
+    int n = std::min((int)candidates.size(), MAX_CANDIDATES);
 
-    /* Check for immediate wins first */
-    for(int i = 0; i < n1; i++){
-        if(candidates[i].score >= 500000){
-            /* This placement makes 5+ or creates open-4. Pair with best other. */
-            int r1 = candidates[i].r, c1 = candidates[i].c;
-            for(int j = 0; j < n2; j++){
-                if(j == i) continue;
-                legal_actions.push_back(
-                    Move(Point(r1, c1), Point(candidates[j].r, candidates[j].c))
-                );
-                return;
-            }
-            legal_actions.push_back(Move(Point(r1, c1), Point(r1, c1)));
-            return;
-        }
-    }
-
-    /* Generate pairs: top-K1 first stones × top-K2 second stones.
-     * Allow second stone to be any top-K2 candidate, not just those
-     * with index > first stone. This captures the "first stone changes
-     * what's relevant for second stone" insight. */
-    legal_actions.reserve(n1 * n2);
-    for(int i = 0; i < n1; i++){
-        for(int j = i + 1; j < n2; j++){
-            legal_actions.push_back(
-                Move(
-                    Point(candidates[i].r, candidates[i].c),
-                    Point(candidates[j].r, candidates[j].c)
-                )
-            );
-        }
-    }
-
-    if(legal_actions.empty()){
-        if(!candidates.empty()){
-            int r = candidates[0].r, c = candidates[0].c;
-            legal_actions.push_back(Move(Point(r, c), Point(r, c)));
-        }else{
-            game_state = DRAW;
-        }
+    legal_actions.reserve(n);
+    for(int i = 0; i < n; i++){
+        int r = candidates[i].r, c = candidates[i].c;
+        legal_actions.push_back(Move(Point(r, c), Point(r, c)));
     }
 }
 
 
 /*============================================================
- * next_state: place 2 stones of current player's color.
- * Move = ((r1,c1), (r2,c2)) — both are placement targets.
+ * next_state: place 1 stone. Tracks stones_left for turn cycle.
+ * stones_left=2 → place stone, set stones_left=1, same player
+ * stones_left=1 → place stone, set stones_left=2, switch player
  *============================================================*/
 State* State::next_state(const Move& move){
     if(!c6_zobrist_ready) init_c6_zobrist();
 
-    State* ns = new State(this->board, 1 - this->player);
-    ns->step = this->step + 1;
+    int r = move.second.first, c = move.second.second;
     int stone = (this->player == 0) ? 2 : 1;
 
-    int r1 = move.first.first, c1 = move.first.second;
-    int r2 = move.second.first, c2 = move.second.second;
+    bool switch_player = (this->stones_left == 1);
 
-    /* Place first stone */
-    ns->board.board[r1][c1] = stone;
+    State* ns = new State();
+    /* Copy board manually to avoid Board() constructor placing center */
+    std::memcpy(ns->board.board, this->board.board, sizeof(this->board.board));
+    ns->board.board[r][c] = stone;
 
-    /* Place second stone (may be same square in degenerate case) */
-    if(r1 != r2 || c1 != c2){
-        ns->board.board[r2][c2] = stone;
-    }
-
-    /* Check for win after placement */
-    if(check_win_at(r1, c1) || (r1 != r2 || c1 != c2) ? false : false){
-        /* Win check happens in get_legal_actions of the next state */
-    }
+    ns->player = switch_player ? (1 - this->player) : this->player;
+    ns->stones_left = switch_player ? 2 : 1;
+    ns->step = this->step + 1;
 
     /* Incremental hash */
     uint64_t h = this->hash();
-    h ^= c6_zobrist_side;
-    h ^= c6_zobrist[stone][r1][c1];
-    if(r1 != r2 || c1 != c2){
-        h ^= c6_zobrist[stone][r2][c2];
+    if(switch_player){
+        h ^= c6_zobrist_side;
     }
+    h ^= c6_zobrist[stone][r][c];
     ns->zobrist_hash = h;
     ns->zobrist_valid = true;
 

@@ -54,7 +54,9 @@ int MiniMax::eval_ctx(
     int best_score = M_MAX;
     for(auto& action : state->legal_actions){
         State *next = state->next_state(action);
-        int score = -eval_ctx(next, depth - 1, history, ply + 1, ctx, p);
+        bool same = next->same_player_as_parent();
+        int raw = eval_ctx(next, depth - 1, history, ply + 1, ctx, p);
+        int score = same ? raw : -raw;
         delete next;
 
         if(score > best_score){
@@ -93,7 +95,9 @@ SearchResult MiniMax::search(
 
     for(auto& action : state->legal_actions){
         State *next = state->next_state(action);
-        int score = -eval_ctx(next, depth - 1, history, 1, ctx, p);
+        bool same = next->same_player_as_parent();
+        int raw = eval_ctx(next, depth - 1, history, 1, ctx, p);
+        int score = same ? raw : -raw;
         delete next;
 
         if(score > best_score){

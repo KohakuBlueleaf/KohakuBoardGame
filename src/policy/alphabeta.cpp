@@ -57,7 +57,10 @@ int AlphaBeta::eval_ctx(
     /* === Alpha-beta loop === */
     for(auto& move : state->legal_actions){
         State *next = state->next_state(move);
-        int score = -eval_ctx(next, depth - 1, -beta, -alpha, history, ply + 1, ctx, p);
+        bool same = next->same_player_as_parent();
+        int score = same
+            ? eval_ctx(next, depth - 1, alpha, beta, history, ply + 1, ctx, p)
+            : -eval_ctx(next, depth - 1, -beta, -alpha, history, ply + 1, ctx, p);
         delete next;
 
         if(score > alpha){
@@ -102,7 +105,10 @@ SearchResult AlphaBeta::search(
 
     for(auto& move : all_moves){
         State *next = state->next_state(move);
-        int score = -eval_ctx(next, depth - 1, -(beta_root), -alpha, history, 1, ctx, p);
+        bool same = next->same_player_as_parent();
+        int score = same
+            ? eval_ctx(next, depth - 1, alpha, beta_root, history, 1, ctx, p)
+            : -eval_ctx(next, depth - 1, -(beta_root), -alpha, history, 1, ctx, p);
         delete next;
 
         if(score > alpha){

@@ -76,9 +76,11 @@ inline int quiescence_ctx(
     }
 
     for(auto& move : captures){
-        int score = -quiescence_ctx(
-            state->next_state(move), -beta, -alpha, qdepth + 1, history, ply + 1, ctx, p
-        );
+        State* qnext = state->next_state(move);
+        bool same = qnext->same_player_as_parent();
+        int score = same
+            ? quiescence_ctx(qnext, alpha, beta, qdepth + 1, history, ply + 1, ctx, p)
+            : -quiescence_ctx(qnext, -beta, -alpha, qdepth + 1, history, ply + 1, ctx, p);
         if(ctx.stop){
             delete state;
             return 0;
