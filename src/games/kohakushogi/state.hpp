@@ -42,7 +42,6 @@ public:
 class State : public BaseState {
 public:
     Board board;
-    int step = 0;
     mutable uint64_t zobrist_hash = 0;
     mutable bool zobrist_valid = false;
 

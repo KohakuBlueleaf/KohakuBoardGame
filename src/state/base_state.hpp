@@ -21,6 +21,7 @@ constexpr int M_MAX = -100000;
 class BaseState {
 public:
     int player = 0;
+    int step = 0;
     GameState game_state = UNKNOWN;
     std::vector<Move> legal_actions;
 

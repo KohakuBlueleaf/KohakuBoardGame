@@ -232,3 +232,5 @@ temp/
 wandb/
 lightning_logs/
 *.exe
+*.png
+REQUIREMENTS.md

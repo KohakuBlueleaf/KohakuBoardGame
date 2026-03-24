@@ -227,25 +227,29 @@ void set_position(
         g_history.push(start_state.hash());
     }
 
-    /* Replay any trailing moves */
+    /* Replay any trailing moves via chained next_state calls.
+     * This preserves game-specific state (e.g. stones_left for Connect6)
+     * that would be lost by constructing State(board, player) each step. */
     std::string moves_token;
     if(iss >> moves_token && moves_token == "moves"){
+        State* cur = new State(board, player);
+        cur->get_legal_actions();
         std::string move_str;
         while(iss >> move_str){
             if(move_str.size() < 2){
                 continue;
             }
             Move mv = str_to_move(move_str);
-            State current(board, player);
-            current.get_legal_actions();
-            State* next = current.next_state(mv);
-            board = next->board;
-            player = next->player;
-            step++;
-            /* Push each resulting position hash into history */
+            State* next = cur->next_state(mv);
+            next->get_legal_actions();
             g_history.push(next->hash());
-            delete next;
+            delete cur;
+            cur = next;
+            step++;
         }
+        board = cur->board;
+        player = cur->player;
+        delete cur;
     }
 }
 
@@ -276,9 +280,11 @@ static void do_search(
     SearchContext ctx,
     Board board,
     int player,
-    GameHistory history
+    GameHistory history,
+    int step
 ){
     State state(board, player);
+    state.step = step;
     state.get_legal_actions();
 
     auto alive = [&](){
@@ -509,7 +515,7 @@ static void cmd_go(std::istringstream& iss){
     uint32_t gen = g_search_gen.load();
     g_best_move = Move();
     g_search_thread = std::thread(
-        do_search, max_depth, movetime_ms, infinite, gen, ctx, g_board, g_player, g_history
+        do_search, max_depth, movetime_ms, infinite, gen, ctx, g_board, g_player, g_history, g_step
     );
 }
 

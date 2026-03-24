@@ -155,6 +155,13 @@ void State::get_legal_actions(){
         return;
     }
 
+    /* Ensure stones_left is consistent with step.
+     * This handles states constructed via State(board, player) + step
+     * where stones_left wasn't set by next_state (e.g. UBGI replay). */
+    if(step > 0){
+        stones_left = (step % 2 == 0) ? 2 : 1;
+    }
+
     int opp_id = (player == 0) ? 1 : 2;
 
     /* Check if opponent (or same player's previous stone) created a win */
@@ -178,13 +185,13 @@ void State::get_legal_actions(){
         }
     }
 
-    /* Build proximity mask (Chebyshev distance ≤ 3) */
+    /* Build proximity mask (Chebyshev distance ≤ 2) */
     bool near[BOARD_H][BOARD_W] = {};
     for(int r = 0; r < BOARD_H; r++){
         for(int c = 0; c < BOARD_W; c++){
             if(board.board[r][c] != 0){
-                for(int dr = -3; dr <= 3; dr++){
-                    for(int dc = -3; dc <= 3; dc++){
+                for(int dr = -2; dr <= 2; dr++){
+                    for(int dc = -2; dc <= 2; dc++){
                         int nr = r + dr, nc = c + dc;
                         if(nr >= 0 && nr < BOARD_H && nc >= 0 && nc < BOARD_W){
                             near[nr][nc] = true;
@@ -225,7 +232,7 @@ void State::get_legal_actions(){
         }
     );
 
-    constexpr int MAX_CANDIDATES = 40;
+    constexpr int MAX_CANDIDATES = 25;
     int n = std::min((int)candidates.size(), MAX_CANDIDATES);
 
     legal_actions.reserve(n);

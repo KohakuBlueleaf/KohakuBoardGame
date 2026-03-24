@@ -17,7 +17,6 @@ public:
 class State : public BaseState {
 public:
     Board board;
-    int step = 0;
     int score = 0;
     int stones_left = 2;  /* 2 = first stone of turn, 1 = second stone */
     mutable uint64_t zobrist_hash = 0;
