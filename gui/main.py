@@ -294,7 +294,6 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
         self.legal_moves_for_selected = []
         self.last_move = None
         self._promotion_dialog = None
-        self._connect6_first_sq = None  # first stone of two-click Connect6 move
 
         # History
         self.move_history = []
@@ -544,11 +543,6 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
     def handle_board_click(self, row, col):
         player = self.game_state.player
 
-        # Connect6: two-click placement (click sq1, then sq2)
-        if self._game_name in ("Connect6", "connect6"):
-            self._handle_connect6_click(row, col)
-            return
-
         # Get the clicked piece; board layout differs per game
         try:
             clicked_piece = self.game_state.board[player][row][col]
@@ -575,58 +569,6 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
             else:
                 self._deselect_piece()
 
-    def _handle_connect6_click(self, row, col):
-        """Two-click input for Connect6: click any empty square twice."""
-        # Must be empty
-        try:
-            val = self.game_state.board[row][col]
-        except (TypeError, IndexError):
-            val = 0
-        if val != 0:
-            # Clicked occupied square — deselect
-            self._connect6_first_sq = None
-            self.selected_piece = None
-            self.legal_moves_for_selected = []
-            return
-
-        if self._connect6_first_sq is None:
-            # First click: select first stone position
-            self._connect6_first_sq = (row, col)
-            self.selected_piece = (row, col)
-            # Show ALL other empty squares as valid second placements
-            self.legal_moves_for_selected = []
-            board = self.game_state.board
-            for r in range(len(board)):
-                for c in range(len(board[0])):
-                    if board[r][c] == 0 and (r, c) != (row, col):
-                        self.legal_moves_for_selected.append(
-                            ((row, col), (r, c))
-                        )
-        else:
-            # Second click: form the move pair
-            sq1 = self._connect6_first_sq
-            sq2 = (row, col)
-            self._connect6_first_sq = None
-            self.selected_piece = None
-            self.legal_moves_for_selected = []
-
-            if sq1 == sq2:
-                return
-
-            # Try both orderings against legal actions
-            move_a = (sq1, sq2) if sq1 < sq2 else (sq2, sq1)
-            move_b = (sq2, sq1) if sq1 < sq2 else (sq1, sq2)
-
-            if move_a in self.game_state.legal_actions:
-                self.execute_move(move_a)
-            elif move_b in self.game_state.legal_actions:
-                self.execute_move(move_b)
-            else:
-                # Not in engine's pruned move list — execute directly
-                # (GUI allows full board, engine may have pruned this pair)
-                move = (min(sq1, sq2), max(sq1, sq2))
-                self.execute_move(move)
-
     def _select_piece(self, row, col):
         self.selected_piece = (row, col)
         self.legal_moves_for_selected = [
@@ -650,7 +592,6 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
         """Clear selection and hand highlight."""
         self.selected_piece = None
         self.legal_moves_for_selected = []
-        self._connect6_first_sq = None
         self._sync_hand_highlight(None)
 
     def _sync_hand_highlight(self, hand_key):

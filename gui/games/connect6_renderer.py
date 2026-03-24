@@ -102,22 +102,26 @@ class Connect6Renderer:
             )
 
     def draw_pv(self, state, pv_moves):
-        """Draw ghost stones for the principal variation."""
+        """Draw ghost stones for the principal variation.
+        Each PV move is a single stone placement. Player switches every 2 stones."""
         if not pv_moves:
             return
 
-        current_player = state.current_player
-        stone_num = 1
+        player_turn = state.current_player
+        stones_left = getattr(state, "stones_left", 2)
 
-        for i, uci in enumerate(pv_moves[:8]):
+        for i, uci in enumerate(pv_moves[:16]):
             squares = _parse_c6_uci(uci)
-            player_turn = (current_player + i) % 2
-            alpha = max(80, 180 - i * 15)
+            alpha = max(80, 180 - i * 10)
 
-            for sq in squares:
-                r, c = sq
-                self._draw_ghost_stone(r, c, player_turn, alpha, label=stone_num)
-                stone_num += 1
+            for r, c in squares:
+                self._draw_ghost_stone(r, c, player_turn, alpha, label=i + 1)
+
+            # Advance turn counter
+            stones_left -= 1
+            if stones_left == 0:
+                player_turn = 1 - player_turn
+                stones_left = 2
 
     def draw_pv_multi(self, state, pv_multi):
         """Draw ghost stones for multiple PV lines."""
@@ -139,15 +143,19 @@ class Connect6Renderer:
 
             base_alpha = max(110, 200 - (mpv_idx - 1) * 50)
             border_color = pv_border_colors.get(mpv_idx, default_border)
-            stone_num = 1
+
+            player_turn = current_player
+            stones_left = getattr(state, "stones_left", 2)
 
             for i, uci in enumerate(pv_moves):
                 squares = _parse_c6_uci(uci)
-                player_turn = (current_player + i) % 2
-                alpha = max(60, base_alpha - i * 15)
+                alpha = max(60, base_alpha - i * 10)
 
-                for sq in squares:
-                    r, c = sq
-                    label = str(mpv_idx) if stone_num == 1 else str(stone_num)
+                for r, c in squares:
+                    label = str(mpv_idx) if i == 0 else str(i + 1)
                     self._draw_ghost_stone(r, c, player_turn, alpha, label=label, border_color=border_color)
-                    stone_num += 1
+
+                stones_left -= 1
+                if stones_left == 0:
+                    player_turn = 1 - player_turn
+                    stones_left = 2
