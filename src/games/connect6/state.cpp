@@ -82,51 +82,112 @@ bool State::check_win_at(int row, int col) const {
 
 
 /*============================================================
+ * 6-cell sliding window scoring.
+ *
+ * Scans all 6-cell windows in 4 directions across the board.
+ * A window is "pure" if it contains only one player's stones
+ * (+ empty cells). Mixed windows are dead (score 0).
+ *
+ * For a pure window with N stones of player `who`:
+ *   N=6: win (shouldn't happen — already detected)
+ *   N=5: 1 stone from win
+ *   N=4: 2 stones from win
+ *   N=3: building
+ *   N=2: developing
+ *   N=1: minimal
+ *
+ * Weights use exponential scaling (following YoungHeonRo approach).
+ *============================================================*/
+
+/* Window scores indexed by stone count 0..6 */
+static const int WINDOW_SCORE[7] = {
+    0,      /* 0 stones: empty window */
+    1,      /* 1 stone */
+    10,     /* 2 stones */
+    100,    /* 3 stones */
+    1000,   /* 4 stones: serious threat */
+    10000,  /* 5 stones: 1 from win */
+    100000, /* 6 stones: won */
+};
+
+/* Scan all 6-cell windows and return total score for player `who`.
+ * Only pure windows (containing only `who` stones + empty) count. */
+static int window_score_for(
+    const char brd[BOARD_H][BOARD_W],
+    int who
+){
+    int total = 0;
+    static const int dirs[4][2] = {{0, 1}, {1, 0}, {1, 1}, {1, -1}};
+    int other = (who == 1) ? 2 : 1;
+
+    for(int r = 0; r < BOARD_H; r++){
+        for(int c = 0; c < BOARD_W; c++){
+            for(auto& d : dirs){
+                /* Check if all 6 cells are in bounds */
+                int er = r + d[0] * 5, ec = c + d[1] * 5;
+                if(er < 0 || er >= BOARD_H || ec < 0 || ec >= BOARD_W){
+                    continue;
+                }
+
+                /* Count stones in this window */
+                int mine = 0;
+                bool dead = false;
+                for(int k = 0; k < 6; k++){
+                    int wr = r + d[0] * k, wc = c + d[1] * k;
+                    char v = brd[wr][wc];
+                    if(v == other){
+                        dead = true;
+                        break;
+                    }
+                    if(v == who){
+                        mine++;
+                    }
+                }
+                if(!dead && mine > 0){
+                    total += WINDOW_SCORE[mine];
+                }
+            }
+        }
+    }
+    return total;
+}
+
+
+/*============================================================
  * Score a single placement for move ordering.
- * Higher = more valuable (wins, blocks, creates threats).
- * who = stone color (1 or 2).
+ * Uses sliding window: compute score delta from placing stone.
  *============================================================*/
 int State::score_single_placement(int r, int c, int who) const {
-    int score = 0;
-
-    /* Temporarily place stone */
+    /* Temporarily place stone and compute the score change
+     * in all windows that include (r,c). */
     const_cast<char&>(board.board[r][c]) = who;
 
+    int score = 0;
+    int other = (who == 1) ? 2 : 1;
     static const int dirs[4][2] = {{0, 1}, {1, 0}, {1, 1}, {1, -1}};
+
     for(auto& d : dirs){
-        int fwd = count_dir(r, c, d[0], d[1]);
-        int bwd = count_dir(r, c, -d[0], -d[1]);
-        int total = 1 + fwd + bwd;
+        /* Check 6 windows that include (r,c) — offsets -5 to 0 */
+        for(int off = -5; off <= 0; off++){
+            int sr = r + d[0] * off, sc = c + d[1] * off;
+            int er = sr + d[0] * 5, ec = sc + d[1] * 5;
+            if(sr < 0 || sr >= BOARD_H || sc < 0 || sc >= BOARD_W) continue;
+            if(er < 0 || er >= BOARD_H || ec < 0 || ec >= BOARD_W) continue;
 
-        /* Count empty spaces beyond the run */
-        int er = r + d[0] * (fwd + 1), ec = c + d[1] * (fwd + 1);
-        int sr = r - d[0] * (bwd + 1), sc = c - d[1] * (bwd + 1);
-        bool end_open = (
-            er >= 0 && er < BOARD_H && ec >= 0 && ec < BOARD_W
-            && board.board[er][ec] == 0
-        );
-        bool start_open = (
-            sr >= 0 && sr < BOARD_H && sc >= 0 && sc < BOARD_W
-            && board.board[sr][sc] == 0
-        );
-        int opens = (end_open ? 1 : 0) + (start_open ? 1 : 0);
-
-        if(total >= 6){
-            score += 1000000; /* instant win */
-        }else if(total == 5 && opens >= 1){
-            score += 500000; /* 1 stone from win */
-        }else if(total == 4 && opens == 2){
-            score += 100000; /* open-4: 2 stones complete it */
-        }else if(total == 4 && opens == 1){
-            score += 20000; /* half-4 */
-        }else if(total == 3 && opens == 2){
-            score += 5000; /* open-3 */
-        }else if(total == 3 && opens == 1){
-            score += 1000; /* half-3 */
-        }else if(total == 2 && opens == 2){
-            score += 200; /* open-2 */
-        }else if(total == 2 && opens == 1){
-            score += 50;
+            int mine = 0;
+            bool dead = false;
+            for(int k = 0; k < 6; k++){
+                int wr = sr + d[0] * k, wc = sc + d[1] * k;
+                char v = board.board[wr][wc];
+                if(v == other){
+                    dead = true;
+                    break;
+                }
+                if(v == who) mine++;
+            }
+            if(!dead){
+                score += WINDOW_SCORE[mine];
+            }
         }
     }
 
@@ -287,17 +348,15 @@ State* State::next_state(const Move& move){
 
 
 /*============================================================
- * Evaluate — threat-based heuristic for Connect6.
+ * Evaluate — 6-cell sliding window heuristic for Connect6.
  *
- * Key difference from Gomoku: each player places 2 stones per turn.
- * This means:
- *   - 5 consecutive + any open end = INSTANT WIN (place 1 stone)
- *   - 4 consecutive + 2 open ends = INSTANT WIN (place 2 stones)
- *   - 4 consecutive + 1 open end  = very strong (extend to 5, then win)
- *   - Need 2 empty in a row to "fill gap" threats
+ * Scans every 6-cell window in all 4 directions.
+ * A pure window (only one player's stones + empty) is scored
+ * by stone count. Mixed windows are dead (score 0).
+ * This catches gap patterns like XX_X_X that consecutive-run
+ * evaluation misses.
  *
- * Scans all 4 directions for each run of consecutive stones.
- * Also counts empty spaces around runs for potential analysis.
+ * Score = my_windows - opp_windows * 1.2 (defensive bias)
  *============================================================*/
 int State::evaluate(
     bool /*use_nnue*/,
@@ -318,183 +377,14 @@ int State::evaluate(
     int my_id = (player == 0) ? 2 : 1;
     int opp_id = (player == 0) ? 1 : 2;
 
-    /* Count threats for one side.
-     * For each consecutive run of stones, check:
-     * - run length
-     * - number of open ends (0, 1, 2)
-     * - empty spaces beyond open ends (room to extend)
-     * A "potential" window is the total reachable length along the line
-     * (consecutive + empty on both sides, stopping at opponent/wall). */
+    int my_score = window_score_for(board.board, my_id);
+    int opp_score = window_score_for(board.board, opp_id);
 
-    struct Threats {
-        int six = 0;       /* 6+ in a row = already won */
-        int open5 = 0;     /* 5 + both ends open = instant win (1 stone) */
-        int half5 = 0;     /* 5 + one end open = instant win (1 stone) */
-        int open4 = 0;     /* 4 + both ends open = instant win (2 stones on ends) */
-        int half4 = 0;     /* 4 + one end open with room for 6 */
-        int open3 = 0;     /* 3 + both ends open with room for 6 */
-        int half3 = 0;     /* 3 + one end open */
-        int open2 = 0;     /* 2 + both ends open */
-    };
+    /* Check for decisive windows (6 or 5 stones) */
+    if(my_score >= 100000) return P_MAX - 1;
+    if(opp_score >= 100000) return -(P_MAX - 1);
 
-    auto count_threats = [&](int who) -> Threats {
-        Threats t;
-        static const int dirs[4][2] = {{0, 1}, {1, 0}, {1, 1}, {1, -1}};
-
-        for(int r = 0; r < BOARD_H; r++){
-            for(int c = 0; c < BOARD_W; c++){
-                if(board.board[r][c] != who) continue;
-
-                for(auto& d : dirs){
-                    /* Only count from the start of a run */
-                    int pr = r - d[0], pc = c - d[1];
-                    if(pr >= 0 && pr < BOARD_H && pc >= 0 && pc < BOARD_W
-                        && board.board[pr][pc] == who)
-                    {
-                        continue;
-                    }
-
-                    /* Count consecutive stones */
-                    int len = 1;
-                    int cr = r + d[0], cc = c + d[1];
-                    while(cr >= 0 && cr < BOARD_H && cc >= 0 && cc < BOARD_W
-                        && board.board[cr][cc] == who)
-                    {
-                        len++;
-                        cr += d[0];
-                        cc += d[1];
-                    }
-
-                    /* Count empty spaces at end (forward) */
-                    int end_empty = 0;
-                    int er = cr, ec = cc;
-                    while(er >= 0 && er < BOARD_H && ec >= 0 && ec < BOARD_W
-                        && board.board[er][ec] == 0)
-                    {
-                        end_empty++;
-                        er += d[0];
-                        ec += d[1];
-                    }
-
-                    /* Count empty spaces at start (backward) */
-                    int start_empty = 0;
-                    int sr = r - d[0], sc = c - d[1];
-                    while(sr >= 0 && sr < BOARD_H && sc >= 0 && sc < BOARD_W
-                        && board.board[sr][sc] == 0)
-                    {
-                        start_empty++;
-                        sr -= d[0];
-                        sc -= d[1];
-                    }
-
-                    bool end_open = (end_empty > 0);
-                    bool start_open = (start_empty > 0);
-                    int opens = (end_open ? 1 : 0) + (start_open ? 1 : 0);
-                    /* Total room: can this run potentially reach 6? */
-                    int potential = len + end_empty + start_empty;
-
-                    if(potential < 6) continue; /* dead — can never reach 6 */
-
-                    if(len >= 6){
-                        t.six++;
-                    }else if(len == 5){
-                        /* Need 1 more stone. Any open end = instant win (place 1 of 2) */
-                        if(opens >= 1) t.open5++;
-                        /* Even with 0 opens, if potential >= 6 via gap... but
-                         * we only count consecutive, so 0 opens + 5 = dead end */
-                    }else if(len == 4){
-                        if(opens == 2){
-                            t.open4++; /* instant win: place 2 stones on both ends */
-                        }else if(opens == 1){
-                            t.half4++;
-                        }
-                    }else if(len == 3){
-                        if(opens == 2){
-                            t.open3++;
-                        }else if(opens == 1){
-                            t.half3++;
-                        }
-                    }else if(len == 2){
-                        if(opens == 2){
-                            t.open2++;
-                        }
-                    }
-                }
-            }
-        }
-        return t;
-    };
-
-    Threats my = count_threats(my_id);
-    Threats opp = count_threats(opp_id);
-
-    /* === Decisive threats (from STM perspective) ===
-     *
-     * Connect6: 2 stones per turn changes threat evaluation:
-     * - open5/half5: need 1 stone = instant win (still have 1 stone left for anything)
-     * - open4: need 2 stones on both ends = instant win
-     * - 2x half4: opponent can only block 1 with their 2 stones, other extends
-     * - half4 + open3: block the 4, the open3 becomes unstoppable */
-
-    /* === Decisive threats (Connect6: 2 stones per turn) ===
-     *
-     * In Connect6, threats are much more severe than Gomoku:
-     * - open5/half5: 1 stone wins, still have 1 stone for anything = instant win
-     * - open4: 2 stones on both ends = instant win
-     * - single half4: extend to 5 with 1 stone + use 2nd stone = nearly winning
-     * - 2x half4: opponent blocks 1, other extends = winning
-     * - half4 + open3: block the 4, open3 becomes 2-turn win
-     * - 2x open3: 2 stones make one into open5 = winning
-     * - single open3: 2 stones → open5 (need opponent to block or lose) */
-
-    /* STM wins immediately */
-    if(my.six > 0) return P_MAX;
-    if(my.open5 > 0) return P_MAX - 1;
-    if(my.half5 > 0) return P_MAX - 1;  /* 1 stone extends to 6 */
-    if(my.open4 > 0) return P_MAX - 2;
-    if(my.half4 >= 2) return P_MAX - 3;
-    if(my.half4 >= 1 && my.open3 >= 1) return P_MAX - 4;
-    if(my.open3 >= 2) return P_MAX - 5;  /* 2 open3s: make one into open5 */
-
-    /* OPP threats (they get 2 stones next turn) */
-    if(opp.open5 > 0) return -(P_MAX - 1);
-    if(opp.half5 > 0) return -(P_MAX - 1);
-    if(opp.open4 > 0) return -(P_MAX - 2);
-    if(opp.half4 >= 2) return -(P_MAX - 3);
-    if(opp.half4 >= 1 && opp.open3 >= 1) return -(P_MAX - 4);
-    if(opp.open3 >= 2) return -(P_MAX - 5);
-
-    /* === Weighted scoring ===
-     * Weights reflect Connect6 threat severity:
-     * half4 is very dangerous (1 stone → 5, second stone free)
-     * open3 is serious (2 stones → open5 = guaranteed win next turn)
-     * Even half3 matters (2 stones can make it 5 with extension) */
-    auto threat_score = [](const Threats& t) -> int {
-        return (
-            t.open5 * 90000
-            + t.half5 * 80000
-            + t.open4 * 70000
-            + t.half4 * 30000
-            + t.open3 * 10000
-            + t.half3 * 3000
-            + t.open2 * 500
-        );
-    };
-
-    int sc = threat_score(my) - threat_score(opp) * 12 / 10;  /* 1.2x defensive bias */
-
-    /* Center bonus */
-    for(int r = 0; r < BOARD_H; r++){
-        for(int c = 0; c < BOARD_W; c++){
-            if(board.board[r][c] == my_id){
-                sc += 7 - abs(r - 7) - abs(c - 7);
-            }else if(board.board[r][c] == opp_id){
-                sc -= 7 - abs(r - 7) - abs(c - 7);
-            }
-        }
-    }
-
-    return sc;
+    return my_score - opp_score * 12 / 10;
 }
 
 
