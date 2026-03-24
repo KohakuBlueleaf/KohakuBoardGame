@@ -76,7 +76,6 @@ public:
     /* === NNUE feature extraction === */
     int extract_nnue_features(int perspective, int* features) const override;
 
-private:
     bool check_win_at(int row, int col) const;
     int count_dir(int row, int col, int dr, int dc) const;
     int score_single_placement(int r, int c, int who) const;

@@ -463,34 +463,52 @@ int State::evaluate(
      * - 2x half4: opponent can only block 1 with their 2 stones, other extends
      * - half4 + open3: block the 4, the open3 becomes unstoppable */
 
+    /* === Decisive threats (Connect6: 2 stones per turn) ===
+     *
+     * In Connect6, threats are much more severe than Gomoku:
+     * - open5/half5: 1 stone wins, still have 1 stone for anything = instant win
+     * - open4: 2 stones on both ends = instant win
+     * - single half4: extend to 5 with 1 stone + use 2nd stone = nearly winning
+     * - 2x half4: opponent blocks 1, other extends = winning
+     * - half4 + open3: block the 4, open3 becomes 2-turn win
+     * - 2x open3: 2 stones make one into open5 = winning
+     * - single open3: 2 stones → open5 (need opponent to block or lose) */
+
     /* STM wins immediately */
     if(my.six > 0) return P_MAX;
     if(my.open5 > 0) return P_MAX - 1;
+    if(my.half5 > 0) return P_MAX - 1;  /* 1 stone extends to 6 */
     if(my.open4 > 0) return P_MAX - 2;
-    /* STM has 2+ half4: opponent's 2 stones can block at most 2, but need to block all */
     if(my.half4 >= 2) return P_MAX - 3;
     if(my.half4 >= 1 && my.open3 >= 1) return P_MAX - 4;
+    if(my.open3 >= 2) return P_MAX - 5;  /* 2 open3s: make one into open5 */
 
     /* OPP threats (they get 2 stones next turn) */
     if(opp.open5 > 0) return -(P_MAX - 1);
+    if(opp.half5 > 0) return -(P_MAX - 1);
     if(opp.open4 > 0) return -(P_MAX - 2);
     if(opp.half4 >= 2) return -(P_MAX - 3);
     if(opp.half4 >= 1 && opp.open3 >= 1) return -(P_MAX - 4);
+    if(opp.open3 >= 2) return -(P_MAX - 5);
 
-    /* === Weighted scoring === */
+    /* === Weighted scoring ===
+     * Weights reflect Connect6 threat severity:
+     * half4 is very dangerous (1 stone → 5, second stone free)
+     * open3 is serious (2 stones → open5 = guaranteed win next turn)
+     * Even half3 matters (2 stones can make it 5 with extension) */
     auto threat_score = [](const Threats& t) -> int {
         return (
-            t.open5 * 50000
-            + t.half5 * 8000
-            + t.open4 * 6000
-            + t.half4 * 2000
-            + t.open3 * 800
-            + t.half3 * 200
-            + t.open2 * 50
+            t.open5 * 90000
+            + t.half5 * 80000
+            + t.open4 * 70000
+            + t.half4 * 30000
+            + t.open3 * 10000
+            + t.half3 * 3000
+            + t.open2 * 500
         );
     };
 
-    int sc = threat_score(my) - threat_score(opp) * 11 / 10;
+    int sc = threat_score(my) - threat_score(opp) * 12 / 10;  /* 1.2x defensive bias */
 
     /* Center bonus */
     for(int r = 0; r < BOARD_H; r++){
