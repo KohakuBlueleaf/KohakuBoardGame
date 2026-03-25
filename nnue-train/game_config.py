@@ -65,7 +65,7 @@ GAME_CONFIGS: Dict[str, dict] = {
         "num_hand_types": 7,
     },
     "kohakuchess": {
-        "board_h": 7,
+        "board_h": 6,
         "board_w": 6,
         "num_piece_types": 6,
         "num_pt_no_king": 5,

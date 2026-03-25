@@ -185,9 +185,9 @@ def _configure_board_size(game_name):
         _cfg.SCORE_DISPLAY_DIV = 100
         _cfg.HAND_ROW_H = 60  # height of each hand row (gote top, sente bottom)
     elif game_name in ("KohakuChess", "kohakuchess"):
-        _cfg.BOARD_H = 7
+        _cfg.BOARD_H = 6
         _cfg.BOARD_W = 6
-        _cfg.SQUARE_SIZE = 72  # medium squares for 7x6 chess board
+        _cfg.SQUARE_SIZE = 80  # medium squares for 6x6 chess board
         _cfg.MAX_STEP = 150
         _cfg.SCORE_PLOT_MAX_CP = 500
         _cfg.SCORE_DISPLAY_DIV = 100

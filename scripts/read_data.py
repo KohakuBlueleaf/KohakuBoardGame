@@ -64,7 +64,7 @@ GAME_CONFIGS = {
         "row_labels": ["7", "6", "5", "4", "3", "2", "1"],
     },
     "kohakuchess": {
-        "board_h": 7,
+        "board_h": 6,
         "board_w": 6,
         "piece_names": [".", "P", "R", "N", "B", "Q", "K"],
         "col_labels": "ABCDEF",

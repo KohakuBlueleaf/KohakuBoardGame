@@ -69,8 +69,8 @@ case "$GAME" in
     POS_PER_GAME=70
     ;;
   kohakuchess)
-    BOARD_CELLS=$((2 * 7 * 6))   # 84
-    POS_PER_GAME=50
+    BOARD_CELLS=$((2 * 6 * 6))   # 72
+    POS_PER_GAME=40
     ;;
   *)
     echo "Error: unknown game '$GAME'. Use: minichess, minishogi, connect6, kohakushogi, kohakuchess"

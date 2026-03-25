@@ -1,7 +1,7 @@
 """Kohaku Chess game engine -- Python state tracking for GUI.
 
-7x6 chess variant with 2 bishops per side, no castling, no en passant,
-no pawn double-move. Pawn promotes on last rank to Q, R, B, or N.
+6x6 chess variant with 2 bishops + 2 knights per side, no castling,
+no en passant, no pawn double-move. Pawn promotes on last rank to Q, R, B, or N.
 """
 
 try:
@@ -9,7 +9,7 @@ try:
 except ImportError:
     import config as cfg
 
-BOARD_H = 7
+BOARD_H = 6
 BOARD_W = 6
 
 # Piece codes
@@ -87,6 +87,8 @@ _material_table = [0, 2, 6, 7, 8, 20, 100]
 
 MAX_STEP = 150
 
+# Promotion zone: last rank (rank 6 for white = row 0, rank 1 for black = row 5)
+
 
 # ---------------------------------------------------------------------------
 # Initial board layout
@@ -96,54 +98,51 @@ MAX_STEP = 150
 def _make_initial_board():
     """Return the starting position as board[2][BOARD_H][BOARD_W].
 
-    White (player 0) -- bottom of board:
-      Row 6 (rank 1): K  Q  .  N  B  R
-      Row 5 (rank 2): B  .  P  P  P  P
-      Row 4 (rank 3): P  P  .  .  .  .
-
-    Black (player 1) -- top of board (180 degree rotated):
-      Row 0 (rank 7): R  B  N  .  Q  K
-      Row 1 (rank 6): P  P  P  P  .  B
-      Row 2 (rank 5): .  .  .  .  P  P
+    6x6 Kohaku Chess:
+      a b c d e f
+    6 r b q n b k   <- Black (row 0)
+    5 p p p p p n   <- Black (row 1)
+    4 . . . . . p   <- Black (row 2)
+    3 P . . . . .   <- White (row 3)
+    2 N P P P P P   <- White (row 4)
+    1 K B N Q B R   <- White (row 5)
     """
     board = [[[0] * BOARD_W for _ in range(BOARD_H)] for _ in range(2)]
 
     # White (player 0)
-    # Row 6: K Q . N B R
-    board[0][6][0] = KING
-    board[0][6][1] = QUEEN
-    # board[0][6][2] = EMPTY
-    board[0][6][3] = KNIGHT
-    board[0][6][4] = BISHOP
-    board[0][6][5] = ROOK
-    # Row 5: B . P P P P
-    board[0][5][0] = BISHOP
-    # board[0][5][1] = EMPTY
-    board[0][5][2] = PAWN
-    board[0][5][3] = PAWN
-    board[0][5][4] = PAWN
-    board[0][5][5] = PAWN
-    # Row 4: P P . . . .
-    board[0][4][0] = PAWN
+    # Row 5 (rank 1): K B N Q B R
+    board[0][5][0] = KING
+    board[0][5][1] = BISHOP
+    board[0][5][2] = KNIGHT
+    board[0][5][3] = QUEEN
+    board[0][5][4] = BISHOP
+    board[0][5][5] = ROOK
+    # Row 4 (rank 2): N P P P P P
+    board[0][4][0] = KNIGHT
     board[0][4][1] = PAWN
+    board[0][4][2] = PAWN
+    board[0][4][3] = PAWN
+    board[0][4][4] = PAWN
+    board[0][4][5] = PAWN
+    # Row 3 (rank 3): P . . . . .
+    board[0][3][0] = PAWN
 
     # Black (player 1) -- 180 degree rotation
-    # Row 0: R B N . Q K
+    # Row 0 (rank 6): r b q n b k
     board[1][0][0] = ROOK
     board[1][0][1] = BISHOP
-    board[1][0][2] = KNIGHT
-    # board[1][0][3] = EMPTY
-    board[1][0][4] = QUEEN
+    board[1][0][2] = QUEEN
+    board[1][0][3] = KNIGHT
+    board[1][0][4] = BISHOP
     board[1][0][5] = KING
-    # Row 1: P P P P . B
+    # Row 1 (rank 5): p p p p p n
     board[1][1][0] = PAWN
     board[1][1][1] = PAWN
     board[1][1][2] = PAWN
     board[1][1][3] = PAWN
-    # board[1][1][4] = EMPTY
-    board[1][1][5] = BISHOP
-    # Row 2: . . . . P P
-    board[1][2][4] = PAWN
+    board[1][1][4] = PAWN
+    board[1][1][5] = KNIGHT
+    # Row 2 (rank 4): . . . . . p
     board[1][2][5] = PAWN
 
     return board
@@ -160,7 +159,7 @@ def _deep_copy_board(board):
 
 
 class KohakuChessState:
-    """Game state for Kohaku Chess (7x6)."""
+    """Game state for Kohaku Chess (6x6)."""
 
     def __init__(self, board=None, player=0, step=1):
         if board is None:

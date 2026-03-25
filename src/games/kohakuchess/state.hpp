@@ -11,37 +11,34 @@
 class Board {
 public:
     /*
-     * Initial position (Kohaku Chess):
+     * Initial position (Kohaku Chess 6x6):
      *   a b c d e f
-     * 7 r b n . q k   <- Black (row 0)
-     * 6 p p p p . b   <- Black (row 1)
-     * 5 . . . . p p   <- Black (row 2)
-     * 4 . . . . . .   (row 3)
-     * 3 P P . . . .   <- White (row 4)
-     * 2 B . P P P P   <- White (row 5)
-     * 1 K Q . N B R   <- White (row 6)
+     * 6 r b q n b k   <- Black (row 0)
+     * 5 p p p p p n   <- Black (row 1)
+     * 4 . . . . . p   <- Black (row 2)
+     * 3 P . . . . .   <- White (row 3)
+     * 2 N P P P P P   <- White (row 4)
+     * 1 K B N Q B R   <- White (row 5)
      *
      * board[0] = White pieces, board[1] = Black pieces
      * Piece IDs: PAWN=1, ROOK=2, KNIGHT=3, BISHOP=4, QUEEN=5, KING=6
      */
     char board[2][BOARD_H][BOARD_W] = {{
         // White (player 0)
-        {0, 0, 0, 0, 0, 0},  // row 0 (rank 7)
-        {0, 0, 0, 0, 0, 0},  // row 1 (rank 6)
-        {0, 0, 0, 0, 0, 0},  // row 2 (rank 5)
-        {0, 0, 0, 0, 0, 0},  // row 3 (rank 4)
-        {1, 1, 0, 0, 0, 0},  // row 4 (rank 3): P P . . . .
-        {4, 0, 1, 1, 1, 1},  // row 5 (rank 2): B . P P P P
-        {6, 5, 0, 3, 4, 2},  // row 6 (rank 1): K Q . N B R
+        {0, 0, 0, 0, 0, 0},  // row 0 (rank 6)
+        {0, 0, 0, 0, 0, 0},  // row 1 (rank 5)
+        {0, 0, 0, 0, 0, 0},  // row 2 (rank 4)
+        {1, 0, 0, 0, 0, 0},  // row 3 (rank 3): P . . . . .
+        {3, 1, 1, 1, 1, 1},  // row 4 (rank 2): N P P P P P
+        {6, 4, 3, 5, 4, 2},  // row 5 (rank 1): K B N Q B R
     }, {
         // Black (player 1)
-        {2, 4, 3, 0, 5, 6},  // row 0 (rank 7): r b n . q k
-        {1, 1, 1, 1, 0, 4},  // row 1 (rank 6): p p p p . b
-        {0, 0, 0, 0, 1, 1},  // row 2 (rank 5): . . . . p p
-        {0, 0, 0, 0, 0, 0},  // row 3 (rank 4)
-        {0, 0, 0, 0, 0, 0},  // row 4 (rank 3)
-        {0, 0, 0, 0, 0, 0},  // row 5 (rank 2)
-        {0, 0, 0, 0, 0, 0},  // row 6 (rank 1)
+        {2, 4, 5, 3, 4, 6},  // row 0 (rank 6): r b q n b k
+        {1, 1, 1, 1, 1, 3},  // row 1 (rank 5): p p p p p n
+        {0, 0, 0, 0, 0, 1},  // row 2 (rank 4): . . . . . p
+        {0, 0, 0, 0, 0, 0},  // row 3 (rank 3)
+        {0, 0, 0, 0, 0, 0},  // row 4 (rank 2)
+        {0, 0, 0, 0, 0, 0},  // row 5 (rank 1)
     }};
 };
 

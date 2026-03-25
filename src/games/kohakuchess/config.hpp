@@ -1,15 +1,15 @@
 #pragma once
 #include "../../config.hpp"
 
-/* === Kohaku Chess Board (6x7) === */
+/* === Kohaku Chess Board (6x6) === */
 #ifndef BOARD_H
-#define BOARD_H 7
+#define BOARD_H 6
 #endif
 #ifndef BOARD_W
 #define BOARD_W 6
 #endif
 
-#define MAX_STEP 200
+#define MAX_STEP 150
 #define USE_BITBOARD
 
 /* === Piece types (same IDs as minichess) === */
