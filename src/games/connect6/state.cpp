@@ -226,9 +226,7 @@ void State::get_legal_actions(){
         stones_left = (step % 2 == 0) ? 2 : 1;
     }
 
-    int opp_id = (player == 0) ? 1 : 2;
-
-    /* Check if opponent (or same player's previous stone) created a win */
+    /* Check if someone created a win */
     for(int r = 0; r < BOARD_H; r++){
         for(int c = 0; c < BOARD_W; c++){
             if(board.board[r][c] != 0 && check_win_at(r, c)){
