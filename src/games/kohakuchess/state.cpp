@@ -402,6 +402,103 @@ State* State::next_state(const Move& move){
 }
 
 
+/*============================================================
+ * Make-unmake: in-place move application for search.
+ * Zero allocation — modifies `this` directly.
+ *============================================================*/
+bool State::make_move(const Move& move, UndoInfo& undo){
+    if(!zobrist_ready) init_zobrist();
+
+    Point from = move.first, to = move.second;
+    int pl = player;
+    int opp = 1 - pl;
+
+    int8_t orig_piece = board.board[pl][from.first][from.second];
+    int8_t moved = orig_piece;
+
+    /* Decode promotion */
+    size_t actual_to_row = to.first;
+    if(to.first >= static_cast<size_t>(BOARD_H)){
+        int promo_idx = static_cast<int>(to.first / BOARD_H);
+        actual_to_row = to.first % BOARD_H;
+        static const int promo_piece[5] = {0, QUEEN, ROOK, BISHOP, KNIGHT};
+        if(promo_idx >= 1 && promo_idx <= 4){
+            moved = promo_piece[promo_idx];
+        }
+    }
+
+    int8_t captured = board.board[opp][actual_to_row][to.second];
+
+    /* Save undo info */
+    undo.old_hash = zobrist_hash;
+    undo.old_game_state = game_state;
+    undo.old_step = step;
+    undo.old_player = pl;
+    undo.moved_piece = orig_piece;
+    undo.promoted_to = (moved != orig_piece) ? moved : 0;
+    undo.captured_piece = captured;
+    undo.captured_player = opp;
+    undo.captured_row = actual_to_row;
+    undo.captured_col = to.second;
+
+    /* Incremental hash */
+    uint64_t h = hash();
+    h ^= zobrist_side;
+    h ^= zobrist_piece[pl][orig_piece][from.first][from.second];
+    if(captured){
+        h ^= zobrist_piece[opp][captured][actual_to_row][to.second];
+    }
+    h ^= zobrist_piece[pl][moved][actual_to_row][to.second];
+
+    /* Apply move */
+    board.board[pl][from.first][from.second] = 0;
+    if(captured){
+        board.board[opp][actual_to_row][to.second] = 0;
+    }
+    board.board[pl][actual_to_row][to.second] = moved;
+
+    /* Update state */
+    player = opp;
+    step++;
+    zobrist_hash = h;
+    zobrist_valid = true;
+    game_state = UNKNOWN;
+    legal_actions.clear();
+
+    return true;
+}
+
+void State::unmake_move(const Move& move, const UndoInfo& undo){
+    Point from = move.first, to = move.second;
+    int pl = undo.old_player;
+    int opp = 1 - pl;
+
+    size_t actual_to_row = to.first;
+    if(to.first >= static_cast<size_t>(BOARD_H)){
+        actual_to_row = to.first % BOARD_H;
+    }
+
+    /* Restore piece at source */
+    board.board[pl][from.first][from.second] = undo.moved_piece;
+
+    /* Remove piece from destination */
+    board.board[pl][actual_to_row][to.second] = 0;
+
+    /* Restore captured piece */
+    if(undo.captured_piece){
+        board.board[opp][undo.captured_row][undo.captured_col] = undo.captured_piece;
+    }
+
+    /* Restore state */
+    player = undo.old_player;
+    step = undo.old_step;
+    zobrist_hash = undo.old_hash;
+    zobrist_valid = true;
+    game_state = undo.old_game_state;
+    legal_actions.clear();
+}
+
+
 static const int move_table_rook_bishop[8][7][2] = {
   {{0, 1}, {0, 2}, {0, 3}, {0, 4}, {0, 5}, {0, 6}, {0, 7}},
   {{0, -1}, {0, -2}, {0, -3}, {0, -4}, {0, -5}, {0, -6}, {0, -7}},

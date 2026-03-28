@@ -57,6 +57,31 @@ public:
         return false;
     }
 
+    /* === Make-unmake (in-place move application for search) ===
+     * UndoInfo stores minimal data to reverse a move.
+     * Games override make_move/unmake_move for zero-allocation search.
+     * Default: not supported (returns false). Search falls back to copy-make. */
+    struct UndoInfo {
+        int captured_piece = 0;
+        int captured_player = 0;
+        int captured_row = 0;
+        int captured_col = 0;
+        int moved_piece = 0;
+        int promoted_to = 0;
+        uint64_t old_hash = 0;
+        GameState old_game_state = UNKNOWN;
+        int old_step = 0;
+        int old_player = 0;
+        uint8_t extra[16] = {}; /* game-specific (castling, EP, etc.) */
+    };
+
+    virtual bool supports_make_unmake() const { return false; }
+
+    virtual bool make_move(const Move& /*m*/, UndoInfo& /*undo*/){
+        return false; /* not implemented */
+    }
+    virtual void unmake_move(const Move& /*m*/, const UndoInfo& /*undo*/){}
+
     /* === Null move: create a state with side-to-move flipped (pass) === */
     virtual BaseState* create_null_state() const { return nullptr; }
 
