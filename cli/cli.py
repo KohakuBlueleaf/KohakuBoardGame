@@ -56,6 +56,10 @@ def _init_game(game_name, board_size=None):
         from cli.games.kohakuchess import get_context
 
         _game_ctx.update(get_context())
+    elif game_name == "chess":
+        from cli.games.chess import get_context
+
+        _game_ctx.update(get_context())
     else:
         _game_ctx.update({"name": "generic"})
 
@@ -369,7 +373,9 @@ def run_game(
                         print(f"  >> Perpetual check! {winner_str} wins!")
                     elif result == "stalemate_loss":
                         loser_str = "Sente" if winner == 1 else "Gote"
-                        print(f"  >> {loser_str} has no legal moves! {winner_str} wins!")
+                        print(
+                            f"  >> {loser_str} has no legal moves! {winner_str} wins!"
+                        )
                     else:
                         print(f"  >> {winner_str} wins!")
                 return color
@@ -385,13 +391,25 @@ def run_game(
                         loser = "White" if winner == 1 else "Black"
                     print(f"  >> {loser} has no legal moves!")
                 # winner value is the winning side
-                if game_name in ("minichess", "minishogi", "kohakuchess", "kohakushogi"):
+                if game_name in (
+                    "minichess",
+                    "minishogi",
+                    "kohakuchess",
+                    "kohakushogi",
+                    "chess",
+                ):
                     return "white" if winner == 0 else "black"
                 else:
                     return "white" if winner == 1 else "black"
 
             # Determine which side to move
-            if game_name in ("minichess", "minishogi", "kohakuchess", "kohakushogi"):
+            if game_name in (
+                "minichess",
+                "minishogi",
+                "kohakuchess",
+                "kohakushogi",
+                "chess",
+            ):
                 is_white = state.player == 0
             elif game_name == "connect6":
                 is_white = state["player"] == 1  # player 1 = "white" (first player)
@@ -415,11 +433,27 @@ def run_game(
             # Human move input
             human_fn = _game_ctx.get("get_human_move")
             if human_fn is not None:
-                if game_name in ("minichess", "minishogi", "kohakuchess", "kohakushogi") and verbose:
+                if (
+                    game_name
+                    in (
+                        "minichess",
+                        "minishogi",
+                        "kohakuchess",
+                        "kohakushogi",
+                        "chess",
+                    )
+                    and verbose
+                ):
                     print(f"  Step {state.step}/{_game_ctx['max_step']}")
                 result = human_fn(state, _game_ctx)
                 # For chess/shogi variants, result is a move tuple; for connect6, a UCI string
-                if game_name in ("minichess", "minishogi", "kohakuchess", "kohakushogi"):
+                if game_name in (
+                    "minichess",
+                    "minishogi",
+                    "kohakuchess",
+                    "kohakushogi",
+                    "chess",
+                ):
                     bestmove_uci = _game_ctx["move_to_uci"](result)
                 else:
                     bestmove_uci = result
@@ -455,7 +489,13 @@ def run_game(
                         )
                     return "black" if is_white else "white"
 
-                if game_name in ("minichess", "minishogi", "kohakuchess", "kohakushogi"):
+                if game_name in (
+                    "minichess",
+                    "minishogi",
+                    "kohakuchess",
+                    "kohakushogi",
+                    "chess",
+                ):
                     if move not in state.legal_actions:
                         if verbose:
                             print(
