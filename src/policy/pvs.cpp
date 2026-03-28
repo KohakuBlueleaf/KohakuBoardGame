@@ -14,7 +14,9 @@
 
 /* Helper: call eval_ctx with correct window direction based on
  * whether the child has the same player as parent.
- * For standard 2-player games this compiles to normal negamax. */
+ * For standard 2-player games this compiles to normal negamax.
+ *
+ * copy-make version: takes ownership of child, deletes after. */
 static inline int call_eval(
     State* child,
     int depth,
@@ -31,6 +33,29 @@ static inline int call_eval(
     }else{
         return -PVS::eval_ctx(child, depth, -beta, -alpha, history, ply, can_null, ctx, p);
     }
+}
+
+/* make-unmake version: mutates state in place, restores after. */
+static inline int call_eval_mu(
+    State* state,
+    const Move& move,
+    int depth,
+    int alpha,
+    int beta,
+    GameHistory& history,
+    int ply,
+    bool can_null,
+    SearchContext& ctx,
+    const PVSParams& p
+){
+    BaseState::UndoInfo undo;
+    state->make_move(move, undo);
+    bool same = state->same_player_as_parent();
+    int score = same
+        ? PVS::eval_ctx(state, depth, alpha, beta, history, ply, can_null, ctx, p)
+        : -PVS::eval_ctx(state, depth, -beta, -alpha, history, ply, can_null, ctx, p);
+    state->unmake_move(move, undo);
+    return score;
 }
 
 /*============================================================
@@ -177,16 +202,18 @@ int PVS::eval_ctx(
     Move best_move;
     bool first_child = true;
     int move_index = 0;
+    /* PVS eval_ctx deletes state, so make-unmake can't be used here
+     * without a major refactor to ownership semantics. Use copy-make. */
+    auto do_eval = [&](const Move& m, int d, int a, int b, bool cn) -> int {
+        return call_eval(state->next_state(m), d, a, b, history, ply + 1, cn, ctx, p);
+    };
 
     for(auto& move : moves){
         int score;
 
         if(first_child){
             /* First move: full window, full depth */
-            score = call_eval(
-                state->next_state(move), depth - 1,
-                alpha, beta, history, ply + 1, true, ctx, p
-            );
+            score = do_eval(move, depth - 1, alpha, beta, true);
             first_child = false;
             best_move = move;
         }else{
@@ -212,35 +239,20 @@ int PVS::eval_ctx(
 
             if(do_lmr){
                 /* LMR: null-window, reduced depth */
-                score = call_eval(
-                    state->next_state(move), depth - 2,
-                    alpha, alpha + 1, history, ply + 1, true, ctx, p
-                );
+                score = do_eval(move, depth - 2, alpha, alpha + 1, true);
                 if(score > alpha){
                     /* Re-search at full depth, null-window */
-                    score = call_eval(
-                        state->next_state(move), depth - 1,
-                        alpha, alpha + 1, history, ply + 1, true, ctx, p
-                    );
+                    score = do_eval(move, depth - 1, alpha, alpha + 1, true);
                     if(score > alpha && score < beta){
                         /* Full window re-search */
-                        score = -eval_ctx(
-                            state->next_state(move), depth - 1,
-                            -beta, -alpha, history, ply + 1, true, ctx, p
-                        );
+                        score = do_eval(move, depth - 1, alpha, beta, true);
                     }
                 }
             }else{
                 /* Standard PVS null-window search */
-                score = -eval_ctx(
-                    state->next_state(move), depth - 1,
-                    -(alpha + 1), -alpha, history, ply + 1, true, ctx, p
-                );
+                score = do_eval(move, depth - 1, alpha, alpha + 1, true);
                 if(score > alpha && score < beta){
-                    score = -eval_ctx(
-                        state->next_state(move), depth - 1,
-                        -beta, -alpha, history, ply + 1, true, ctx, p
-                    );
+                    score = do_eval(move, depth - 1, alpha, beta, true);
                 }
             }
         }
@@ -325,29 +337,20 @@ SearchResult PVS::search(
     int move_index = 0;
     int total_moves = (int)moves.size();
 
+    auto do_eval_root = [&](const Move& m, int d, int a, int b) -> int {
+        return call_eval(state->next_state(m), d, a, b, history, 1, true, ctx, p);
+    };
+
     for(auto& move : moves){
         int score;
 
         if(first_child){
-            score = call_eval(
-                state->next_state(move),
-                depth - 1,
-                alpha, beta,
-                history, 1, true, ctx, p
-            );
+            score = do_eval_root(move, depth - 1, alpha, beta);
             first_child = false;
         }else{
-            score = call_eval(
-                state->next_state(move),
-                depth - 1,
-                alpha, alpha + 1,
-                history, 1, true, ctx, p
-            );
+            score = do_eval_root(move, depth - 1, alpha, alpha + 1);
             if(score > alpha && score < beta){
-                score = call_eval(
-                    state->next_state(move), depth - 1,
-                    alpha, beta, history, 1, true, ctx, p
-                );
+                score = do_eval_root(move, depth - 1, alpha, beta);
             }
         }
 

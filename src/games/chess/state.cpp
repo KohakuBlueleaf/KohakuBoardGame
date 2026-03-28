@@ -866,6 +866,170 @@ State* State::next_state(const Move& move){
 
 
 /*============================================================
+ * Make-unmake: in-place move for search. Zero allocation.
+ *============================================================*/
+bool State::make_move(const Move& move, UndoInfo& undo){
+    if(!zobrist_ready) init_zobrist();
+
+    int fr = move.first.first, fc = move.first.second;
+    int tr = move.second.first, tc = move.second.second;
+    int self = player, oppn = 1 - self;
+
+    bool promote = (tr >= 8);
+    int promo_piece = 0;
+    if(promote){ promo_piece = tr / 8; tr = tr % 8; }
+
+    int piece = board.board[self][fr][fc];
+    int captured = board.board[oppn][tr][tc];
+
+    /* Save undo */
+    undo.old_hash = zobrist_hash;
+    undo.old_game_state = game_state;
+    undo.old_step = step;
+    undo.old_player = self;
+    undo.moved_piece = piece;
+    undo.promoted_to = promote ? promo_piece : 0;
+    undo.captured_piece = captured;
+    undo.captured_player = oppn;
+    undo.captured_row = tr;
+    undo.captured_col = tc;
+    /* Store castling + ep in extra[] */
+    undo.extra[0] = board.castling;
+    undo.extra[1] = (uint8_t)(board.ep_col + 1); /* +1 so -1 maps to 0 */
+    undo.extra[2] = 0; /* flags: bit0 = was EP capture, bit1 = was castling KS, bit2 = QS */
+
+    /* Hash update */
+    uint64_t h = hash();
+    h ^= zobrist_side;
+    h ^= zobrist_castle[board.castling];
+    if(board.ep_col >= 0) h ^= zobrist_ep[board.ep_col];
+
+    h ^= zobrist_piece[self][piece][SQ(fr, fc)];
+    board.board[self][fr][fc] = 0;
+
+    /* En passant capture */
+    if(piece == PAWN && tc != fc && captured == 0){
+        undo.extra[2] |= 1; /* EP flag */
+        h ^= zobrist_piece[oppn][PAWN][SQ(fr, tc)];
+        board.board[oppn][fr][tc] = 0;
+    }
+
+    if(captured){
+        h ^= zobrist_piece[oppn][captured][SQ(tr, tc)];
+    }
+    board.board[oppn][tr][tc] = 0;
+
+    int placed;
+    if(promote){
+        static const int promo_map[5] = {0, QUEEN, ROOK, BISHOP, KNIGHT};
+        placed = promo_map[promo_piece];
+    }else{
+        placed = piece;
+    }
+    board.board[self][tr][tc] = placed;
+    h ^= zobrist_piece[self][placed][SQ(tr, tc)];
+
+    /* Castling rook move */
+    if(piece == KING){
+        int king_row = (self == 0) ? 7 : 0;
+        if(fr == king_row && fc == 4){
+            if(tc == 6){
+                undo.extra[2] |= 2;
+                h ^= zobrist_piece[self][ROOK][SQ(king_row, 7)];
+                board.board[self][king_row][7] = 0;
+                board.board[self][king_row][5] = ROOK;
+                h ^= zobrist_piece[self][ROOK][SQ(king_row, 5)];
+            }else if(tc == 2){
+                undo.extra[2] |= 4;
+                h ^= zobrist_piece[self][ROOK][SQ(king_row, 0)];
+                board.board[self][king_row][0] = 0;
+                board.board[self][king_row][3] = ROOK;
+                h ^= zobrist_piece[self][ROOK][SQ(king_row, 3)];
+            }
+        }
+    }
+
+    /* Update castling rights */
+    if(piece == KING){
+        if(self == 0) board.castling &= ~(CASTLE_WK | CASTLE_WQ);
+        else board.castling &= ~(CASTLE_BK | CASTLE_BQ);
+    }
+    if(piece == ROOK){
+        if(self == 0 && fr == 7 && fc == 0) board.castling &= ~CASTLE_WQ;
+        if(self == 0 && fr == 7 && fc == 7) board.castling &= ~CASTLE_WK;
+        if(self == 1 && fr == 0 && fc == 0) board.castling &= ~CASTLE_BQ;
+        if(self == 1 && fr == 0 && fc == 7) board.castling &= ~CASTLE_BK;
+    }
+    if(tr == 0 && tc == 0) board.castling &= ~CASTLE_BQ;
+    if(tr == 0 && tc == 7) board.castling &= ~CASTLE_BK;
+    if(tr == 7 && tc == 0) board.castling &= ~CASTLE_WQ;
+    if(tr == 7 && tc == 7) board.castling &= ~CASTLE_WK;
+    h ^= zobrist_castle[board.castling];
+
+    board.ep_col = -1;
+    if(piece == PAWN && std::abs(tr - fr) == 2){
+        board.ep_col = fc;
+        h ^= zobrist_ep[fc];
+    }
+
+    player = oppn;
+    step++;
+    zobrist_hash = h;
+    zobrist_valid = true;
+    game_state = UNKNOWN;
+    legal_actions.clear();
+    return true;
+}
+
+void State::unmake_move(const Move& move, const UndoInfo& undo){
+    int fr = move.first.first, fc = move.first.second;
+    int tr = move.second.first, tc = move.second.second;
+    if(tr >= 8) tr = tr % 8;
+
+    int pl = undo.old_player;
+    int opp = 1 - pl;
+
+    /* Remove placed piece */
+    board.board[pl][tr][tc] = 0;
+
+    /* Restore source piece */
+    board.board[pl][fr][fc] = undo.moved_piece;
+
+    /* Restore captured piece */
+    if(undo.captured_piece){
+        board.board[opp][undo.captured_row][undo.captured_col] = undo.captured_piece;
+    }
+
+    /* Undo EP capture */
+    if(undo.extra[2] & 1){
+        board.board[opp][fr][tc] = PAWN;
+    }
+
+    /* Undo castling rook */
+    if(undo.extra[2] & 2){ /* kingside */
+        int king_row = (pl == 0) ? 7 : 0;
+        board.board[pl][king_row][5] = 0;
+        board.board[pl][king_row][7] = ROOK;
+    }
+    if(undo.extra[2] & 4){ /* queenside */
+        int king_row = (pl == 0) ? 7 : 0;
+        board.board[pl][king_row][3] = 0;
+        board.board[pl][king_row][0] = ROOK;
+    }
+
+    /* Restore state */
+    board.castling = undo.extra[0];
+    board.ep_col = (int8_t)(undo.extra[1]) - 1;
+    player = undo.old_player;
+    step = undo.old_step;
+    zobrist_hash = undo.old_hash;
+    zobrist_valid = true;
+    game_state = undo.old_game_state;
+    legal_actions.clear();
+}
+
+
+/*============================================================
  * Display
  *============================================================*/
 std::string State::cell_display(int row, int col) const {
