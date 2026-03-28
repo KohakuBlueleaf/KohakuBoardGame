@@ -433,25 +433,25 @@ int State::evaluate(
     for(int r = 0; r < 8; r++){
         for(int c = 0; c < 8; c++){
             int pt;
-            /* Own pieces */
+            /* Own pieces — mirror row for Black (PST is White perspective) */
             if((pt = board.board[self][r][c])){
                 score += kp_material[pt];
                 if(use_kp_eval && pt >= 1 && pt <= 6){
-                    int pr = r, pc = c;
-                    score += pst[pt-1][pr][pc];
+                    int pr = (self == 0) ? r : 7 - r;
+                    score += pst[pt-1][pr][c];
                     if(use_mobility && pt != PAWN && pt != KING){
-                        score += king_tropism(pt, pr, pc, oppn_kr, oppn_kc);
+                        score += king_tropism(pt, r, c, oppn_kr, oppn_kc);
                     }
                 }
             }
-            /* Opponent pieces */
+            /* Opponent pieces — mirror row for White opp (PST is White perspective) */
             if((pt = board.board[oppn][r][c])){
                 score -= kp_material[pt];
                 if(use_kp_eval && pt >= 1 && pt <= 6){
-                    int pr = 7 - r, pc = c;
-                    score -= pst[pt-1][pr][pc];
+                    int pr = (oppn == 0) ? r : 7 - r;
+                    score -= pst[pt-1][pr][c];
                     if(use_mobility && pt != PAWN && pt != KING){
-                        score -= king_tropism(pt, 7-r, c, 7-self_kr, self_kc);
+                        score -= king_tropism(pt, r, c, self_kr, self_kc);
                     }
                 }
             }
