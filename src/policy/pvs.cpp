@@ -35,29 +35,6 @@ static inline int call_eval(
     }
 }
 
-/* make-unmake version: mutates state in place, restores after. */
-static inline int call_eval_mu(
-    State* state,
-    const Move& move,
-    int depth,
-    int alpha,
-    int beta,
-    GameHistory& history,
-    int ply,
-    bool can_null,
-    SearchContext& ctx,
-    const PVSParams& p
-){
-    BaseState::UndoInfo undo;
-    state->make_move(move, undo);
-    bool same = state->same_player_as_parent();
-    int score = same
-        ? PVS::eval_ctx(state, depth, alpha, beta, history, ply, can_null, ctx, p)
-        : -PVS::eval_ctx(state, depth, -beta, -alpha, history, ply, can_null, ctx, p);
-    state->unmake_move(move, undo);
-    return score;
-}
-
 /*============================================================
  * PVS (Principal Variation Search) with ParamMap
  *
@@ -202,18 +179,15 @@ int PVS::eval_ctx(
     Move best_move;
     bool first_child = true;
     int move_index = 0;
-    /* PVS eval_ctx deletes state, so make-unmake can't be used here
-     * without a major refactor to ownership semantics. Use copy-make. */
-    auto do_eval = [&](const Move& m, int d, int a, int b, bool cn) -> int {
-        return call_eval(state->next_state(m), d, a, b, history, ply + 1, cn, ctx, p);
-    };
-
     for(auto& move : moves){
         int score;
 
         if(first_child){
             /* First move: full window, full depth */
-            score = do_eval(move, depth - 1, alpha, beta, true);
+            score = call_eval(
+                state->next_state(move), depth - 1,
+                alpha, beta, history, ply + 1, true, ctx, p
+            );
             first_child = false;
             best_move = move;
         }else{
@@ -239,20 +213,33 @@ int PVS::eval_ctx(
 
             if(do_lmr){
                 /* LMR: null-window, reduced depth */
-                score = do_eval(move, depth - 2, alpha, alpha + 1, true);
+                score = call_eval(
+                    state->next_state(move), depth - 2,
+                    alpha, alpha + 1, history, ply + 1, true, ctx, p
+                );
                 if(score > alpha){
-                    /* Re-search at full depth, null-window */
-                    score = do_eval(move, depth - 1, alpha, alpha + 1, true);
+                    score = call_eval(
+                        state->next_state(move), depth - 1,
+                        alpha, alpha + 1, history, ply + 1, true, ctx, p
+                    );
                     if(score > alpha && score < beta){
-                        /* Full window re-search */
-                        score = do_eval(move, depth - 1, alpha, beta, true);
+                        score = call_eval(
+                            state->next_state(move), depth - 1,
+                            alpha, beta, history, ply + 1, true, ctx, p
+                        );
                     }
                 }
             }else{
                 /* Standard PVS null-window search */
-                score = do_eval(move, depth - 1, alpha, alpha + 1, true);
+                score = call_eval(
+                    state->next_state(move), depth - 1,
+                    alpha, alpha + 1, history, ply + 1, true, ctx, p
+                );
                 if(score > alpha && score < beta){
-                    score = do_eval(move, depth - 1, alpha, beta, true);
+                    score = call_eval(
+                        state->next_state(move), depth - 1,
+                        alpha, beta, history, ply + 1, true, ctx, p
+                    );
                 }
             }
         }
@@ -337,20 +324,25 @@ SearchResult PVS::search(
     int move_index = 0;
     int total_moves = (int)moves.size();
 
-    auto do_eval_root = [&](const Move& m, int d, int a, int b) -> int {
-        return call_eval(state->next_state(m), d, a, b, history, 1, true, ctx, p);
-    };
-
     for(auto& move : moves){
         int score;
 
         if(first_child){
-            score = do_eval_root(move, depth - 1, alpha, beta);
+            score = call_eval(
+                state->next_state(move), depth - 1,
+                alpha, beta, history, 1, true, ctx, p
+            );
             first_child = false;
         }else{
-            score = do_eval_root(move, depth - 1, alpha, alpha + 1);
+            score = call_eval(
+                state->next_state(move), depth - 1,
+                alpha, alpha + 1, history, 1, true, ctx, p
+            );
             if(score > alpha && score < beta){
-                score = do_eval_root(move, depth - 1, alpha, beta);
+                score = call_eval(
+                    state->next_state(move), depth - 1,
+                    alpha, beta, history, 1, true, ctx, p
+                );
             }
         }
 

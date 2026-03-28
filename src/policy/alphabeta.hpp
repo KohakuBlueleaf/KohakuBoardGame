@@ -30,16 +30,6 @@ public:
         SearchContext& ctx,
         const ABParams& p
     );
-    static int eval_ctx_mu(
-        State *state,
-        int depth,
-        int alpha,
-        int beta,
-        GameHistory& history,
-        int ply,
-        SearchContext& ctx,
-        const ABParams& p
-    );
     static SearchResult search(
         State *state,
         int depth,

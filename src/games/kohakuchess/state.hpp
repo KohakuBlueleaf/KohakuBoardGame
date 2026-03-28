@@ -98,9 +98,4 @@ public:
     int board_h() const override { return BOARD_H; }
     int board_w() const override { return BOARD_W; }
     const char* game_name() const override { return "KohakuChess"; }
-
-    /* === Make-unmake for search === */
-    bool supports_make_unmake() const override { return true; }
-    bool make_move(const Move& m, UndoInfo& undo) override;
-    void unmake_move(const Move& m, const UndoInfo& undo) override;
 };
