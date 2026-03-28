@@ -49,7 +49,13 @@ def _get_game_module(game_name):
                 PLAYER_COLORS,
             )
             from games.connect6_renderer import Connect6Renderer
-        return Connect6State, format_move, Connect6Renderer, PLAYER_LABELS, PLAYER_COLORS
+        return (
+            Connect6State,
+            format_move,
+            Connect6Renderer,
+            PLAYER_LABELS,
+            PLAYER_COLORS,
+        )
     if game_name in ("MiniShogi", "minishogi"):
         try:
             from gui.games.minishogi_engine import (
@@ -140,6 +146,30 @@ def _get_game_module(game_name):
             PLAYER_LABELS,
             PLAYER_COLORS,
         )
+    if game_name in ("Chess", "chess"):
+        try:
+            from gui.games.chess_engine import (
+                ChessState,
+                format_move,
+                PLAYER_LABELS,
+                PLAYER_COLORS,
+            )
+            from gui.games.chess_renderer import ChessRenderer
+        except ImportError:
+            from games.chess_engine import (
+                ChessState,
+                format_move,
+                PLAYER_LABELS,
+                PLAYER_COLORS,
+            )
+            from games.chess_renderer import ChessRenderer
+        return (
+            ChessState,
+            format_move,
+            ChessRenderer,
+            PLAYER_LABELS,
+            PLAYER_COLORS,
+        )
     try:
         from gui.games.minichess_engine import (
             MiniChessState,
@@ -189,6 +219,13 @@ def _configure_board_size(game_name):
         _cfg.BOARD_W = 6
         _cfg.SQUARE_SIZE = 80  # medium squares for 6x6 chess board
         _cfg.MAX_STEP = 150
+        _cfg.SCORE_PLOT_MAX_CP = 500
+        _cfg.SCORE_DISPLAY_DIV = 100
+    elif game_name in ("Chess", "chess"):
+        _cfg.BOARD_H = 8
+        _cfg.BOARD_W = 8
+        _cfg.SQUARE_SIZE = 60  # 8x8 board fits well with 60px squares
+        _cfg.MAX_STEP = 300
         _cfg.SCORE_PLOT_MAX_CP = 500
         _cfg.SCORE_DISPLAY_DIV = 100
     else:
@@ -318,7 +355,7 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
         self._undo_stack = []
 
         # MultiPV and PV display settings
-        self.multi_pv = 1          # Number of PVs to search (1-10)
+        self.multi_pv = 1  # Number of PVs to search (1-10)
         self.pv_display_steps = 3  # How many moves to show per PV line
 
         # AI vs AI pacing
@@ -638,9 +675,7 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
 
         if promo_moves and normal_move:
             # Shogi-style promotion: promote or keep
-            self._show_promotion_dialog(
-                dest_row, dest_col, promo_moves[0], normal_move
-            )
+            self._show_promotion_dialog(dest_row, dest_col, promo_moves[0], normal_move)
             return None  # don't execute yet — dialog handles it
         if promo_moves:
             return promo_moves[0]
@@ -659,14 +694,14 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
 
         # Save undo snapshot (always — allows undo during games too)
         self._undo_stack.append(
-                {
-                    "game_state": self.game_state,
-                    "uci_moves": list(self.uci_moves),
-                    "move_history": list(self.move_history),
-                    "score_history": list(self.score_history),
-                    "last_move": self.last_move,
-                }
-            )
+            {
+                "game_state": self.game_state,
+                "uci_moves": list(self.uci_moves),
+                "move_history": list(self.move_history),
+                "score_history": list(self.score_history),
+                "last_move": self.last_move,
+            }
+        )
 
         mover = self.game_state.player
         prefix = "W" if mover == 0 else "B"
@@ -704,7 +739,9 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
             if result == "checkmate":
                 self.game_result = "p0_checkmate" if winner == 0 else "p1_checkmate"
             elif result == "perpetual_check":
-                self.game_result = "p0_perpetual_check" if winner == 0 else "p1_perpetual_check"
+                self.game_result = (
+                    "p0_perpetual_check" if winner == 0 else "p1_perpetual_check"
+                )
             else:
                 self.game_result = "p0_wins" if winner == 0 else "p1_wins"
             return
@@ -721,7 +758,12 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
             self._trigger_ai_if_needed()
 
     def _trigger_ai_if_needed(self):
-        if not self._game_started or self.game_result is not None or self.ai_thinking or self._paused:
+        if (
+            not self._game_started
+            or self.game_result is not None
+            or self.ai_thinking
+            or self._paused
+        ):
             return
         player = self.game_state.player
         side = self.white if player == 0 else self.black
@@ -738,7 +780,7 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
         if self.ai_thinking and not self.ai_result.get("ready"):
             player = self.game_state.player
             side = self.white if player == 0 else self.black
-            using_fixed_depth = (side.get("depth", 0) > 0)
+            using_fixed_depth = side.get("depth", 0) > 0
             if not using_fixed_depth:
                 elapsed = time.time() - getattr(self, "_ai_start_time", 0)
                 kill_after = self.time_limit + 2.0
@@ -797,10 +839,10 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
                 # Always use pv_multi (handles drops correctly)
                 pv_multi = {}
                 for idx, moves in pv_multi_raw.items():
-                    pv_multi[idx] = moves[:self.pv_display_steps] if moves else []
+                    pv_multi[idx] = moves[: self.pv_display_steps] if moves else []
             # Also truncate main PV as fallback
             if pv:
-                pv = pv[:self.pv_display_steps]
+                pv = pv[: self.pv_display_steps]
         self.board_renderer.draw(
             self.game_state,
             selected=self.selected_piece,
@@ -887,7 +929,7 @@ def main():
     parser.add_argument(
         "--game",
         default="minichess",
-        help="Game type: minichess, minishogi, connect6, kohakushogi, kohakuchess (default: minichess)",
+        help="Game type: minichess, minishogi, connect6, kohakushogi, kohakuchess, chess (default: minichess)",
     )
     args = parser.parse_args()
 

@@ -27,10 +27,10 @@ CHESS_INC = -Isrc/games/chess -Isrc/state -Isrc
 
 .PHONY: all clean minichess connect6 minishogi kohakushogi kohakuchess chess
 .PHONY: datagen selfplay benchmark nnue_bench
-.PHONY: minichess-datagen minishogi-datagen connect6-datagen kohakushogi-datagen kohakuchess-datagen
-.PHONY: minichess-selfplay minishogi-selfplay connect6-selfplay kohakushogi-selfplay kohakuchess-selfplay
-.PHONY: minichess-benchmark minishogi-benchmark connect6-benchmark kohakushogi-benchmark kohakuchess-benchmark
-all: |$(BUILD_DIR) minichess minishogi connect6 kohakushogi kohakuchess minichess-datagen minishogi-datagen connect6-datagen kohakushogi-datagen kohakuchess-datagen minichess-selfplay minishogi-selfplay connect6-selfplay kohakushogi-selfplay kohakuchess-selfplay minichess-benchmark minishogi-benchmark connect6-benchmark kohakushogi-benchmark kohakuchess-benchmark selfplay benchmark nnue_bench
+.PHONY: minichess-datagen minishogi-datagen connect6-datagen kohakushogi-datagen kohakuchess-datagen chess-datagen
+.PHONY: minichess-selfplay minishogi-selfplay connect6-selfplay kohakushogi-selfplay kohakuchess-selfplay chess-selfplay
+.PHONY: minichess-benchmark minishogi-benchmark connect6-benchmark kohakushogi-benchmark kohakuchess-benchmark chess-benchmark
+all: |$(BUILD_DIR) minichess minishogi connect6 kohakushogi kohakuchess chess minichess-datagen minishogi-datagen connect6-datagen kohakushogi-datagen kohakuchess-datagen chess-datagen minichess-selfplay minishogi-selfplay connect6-selfplay kohakushogi-selfplay kohakuchess-selfplay chess-selfplay minichess-benchmark minishogi-benchmark connect6-benchmark kohakushogi-benchmark kohakuchess-benchmark chess-benchmark selfplay benchmark nnue_bench
 
 $(BUILD_DIR):
 	mkdir "$(BUILD_DIR)"
@@ -62,6 +62,8 @@ kohakushogi-datagen:
 	$(CXX) $(CXXFLAGS) $(KOHAKU_SHOGI_INC) -o $(BUILD_DIR)/kohakushogi-datagen.exe $(STATE_SOURCE_KS) $(NNUE_SOURCE) $(POLICY_SRC) src/datagen.cpp
 kohakuchess-datagen:
 	$(CXX) $(CXXFLAGS) $(KOHAKU_CHESS_INC) -o $(BUILD_DIR)/kohakuchess-datagen.exe $(STATE_SOURCE_KC) $(NNUE_SOURCE) $(POLICY_SRC) src/datagen.cpp
+chess-datagen:
+	$(CXX) $(CXXFLAGS) $(CHESS_INC) -o $(BUILD_DIR)/chess-datagen.exe $(STATE_SOURCE_CH) $(NNUE_SOURCE) $(POLICY_SRC) src/datagen.cpp
 
 # === Per-game selfplay (Windows) ===
 minichess-selfplay:
@@ -74,6 +76,8 @@ kohakushogi-selfplay:
 	$(CXX) $(CXXFLAGS) $(KOHAKU_SHOGI_INC) -o $(BUILD_DIR)/kohakushogi-selfplay.exe $(STATE_SOURCE_KS) $(NNUE_SOURCE) $(POLICY_SRC) src/selfplay.cpp
 kohakuchess-selfplay:
 	$(CXX) $(CXXFLAGS) $(KOHAKU_CHESS_INC) -o $(BUILD_DIR)/kohakuchess-selfplay.exe $(STATE_SOURCE_KC) $(NNUE_SOURCE) $(POLICY_SRC) src/selfplay.cpp
+chess-selfplay:
+	$(CXX) $(CXXFLAGS) $(CHESS_INC) -o $(BUILD_DIR)/chess-selfplay.exe $(STATE_SOURCE_CH) $(NNUE_SOURCE) $(POLICY_SRC) src/selfplay.cpp
 
 # === Per-game benchmark (Windows) ===
 minichess-benchmark:
@@ -86,6 +90,8 @@ kohakushogi-benchmark:
 	$(CXX) $(CXXFLAGS) $(KOHAKU_SHOGI_INC) -o $(BUILD_DIR)/kohakushogi-benchmark.exe $(STATE_SOURCE_KS) $(NNUE_SOURCE) $(POLICY_SRC) src/benchmark.cpp
 kohakuchess-benchmark:
 	$(CXX) $(CXXFLAGS) $(KOHAKU_CHESS_INC) -o $(BUILD_DIR)/kohakuchess-benchmark.exe $(STATE_SOURCE_KC) $(NNUE_SOURCE) $(POLICY_SRC) src/benchmark.cpp
+chess-benchmark:
+	$(CXX) $(CXXFLAGS) $(CHESS_INC) -o $(BUILD_DIR)/chess-benchmark.exe $(STATE_SOURCE_CH) $(NNUE_SOURCE) $(POLICY_SRC) src/benchmark.cpp
 
 # === nnue_bench (Windows, minichess only) ===
 nnue_bench:
@@ -112,6 +118,8 @@ kohakushogi:
 	$(CXX) $(CXXFLAGS) $(KOHAKU_SHOGI_INC) -o $(BUILD_DIR)/kohakushogi-ubgi $(STATE_SOURCE_KS) $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
 kohakuchess:
 	$(CXX) $(CXXFLAGS) $(KOHAKU_CHESS_INC) -o $(BUILD_DIR)/kohakuchess-ubgi $(STATE_SOURCE_KC) $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
+chess:
+	$(CXX) $(CXXFLAGS) $(CHESS_INC) -o $(BUILD_DIR)/chess-ubgi $(STATE_SOURCE_CH) $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
 
 # === Per-game datagen (Unix) ===
 minichess-datagen:
@@ -124,6 +132,8 @@ kohakushogi-datagen:
 	$(CXX) $(CXXFLAGS) $(KOHAKU_SHOGI_INC) -o $(BUILD_DIR)/kohakushogi-datagen $(STATE_SOURCE_KS) $(NNUE_SOURCE) $(POLICY_SRC) src/datagen.cpp
 kohakuchess-datagen:
 	$(CXX) $(CXXFLAGS) $(KOHAKU_CHESS_INC) -o $(BUILD_DIR)/kohakuchess-datagen $(STATE_SOURCE_KC) $(NNUE_SOURCE) $(POLICY_SRC) src/datagen.cpp
+chess-datagen:
+	$(CXX) $(CXXFLAGS) $(CHESS_INC) -o $(BUILD_DIR)/chess-datagen $(STATE_SOURCE_CH) $(NNUE_SOURCE) $(POLICY_SRC) src/datagen.cpp
 
 # === Per-game selfplay (Unix) ===
 minichess-selfplay:
@@ -136,6 +146,8 @@ kohakushogi-selfplay:
 	$(CXX) $(CXXFLAGS) $(KOHAKU_SHOGI_INC) -o $(BUILD_DIR)/kohakushogi-selfplay $(STATE_SOURCE_KS) $(NNUE_SOURCE) $(POLICY_SRC) src/selfplay.cpp
 kohakuchess-selfplay:
 	$(CXX) $(CXXFLAGS) $(KOHAKU_CHESS_INC) -o $(BUILD_DIR)/kohakuchess-selfplay $(STATE_SOURCE_KC) $(NNUE_SOURCE) $(POLICY_SRC) src/selfplay.cpp
+chess-selfplay:
+	$(CXX) $(CXXFLAGS) $(CHESS_INC) -o $(BUILD_DIR)/chess-selfplay $(STATE_SOURCE_CH) $(NNUE_SOURCE) $(POLICY_SRC) src/selfplay.cpp
 
 # === Per-game benchmark (Unix) ===
 minichess-benchmark:
@@ -148,6 +160,8 @@ kohakushogi-benchmark:
 	$(CXX) $(CXXFLAGS) $(KOHAKU_SHOGI_INC) -o $(BUILD_DIR)/kohakushogi-benchmark $(STATE_SOURCE_KS) $(NNUE_SOURCE) $(POLICY_SRC) src/benchmark.cpp
 kohakuchess-benchmark:
 	$(CXX) $(CXXFLAGS) $(KOHAKU_CHESS_INC) -o $(BUILD_DIR)/kohakuchess-benchmark $(STATE_SOURCE_KC) $(NNUE_SOURCE) $(POLICY_SRC) src/benchmark.cpp
+chess-benchmark:
+	$(CXX) $(CXXFLAGS) $(CHESS_INC) -o $(BUILD_DIR)/chess-benchmark $(STATE_SOURCE_CH) $(NNUE_SOURCE) $(POLICY_SRC) src/benchmark.cpp
 
 # === nnue_bench (Unix, minichess only) ===
 nnue_bench:
@@ -165,4 +179,4 @@ $(TARGET_UNITTEST): %: $(UNITTEST_DIR)/%_test.cpp
 endif
 
 clean:
-	rm -f $(BUILD_DIR)/minichess-ubgi* $(BUILD_DIR)/connect6-ubgi* $(BUILD_DIR)/minishogi-ubgi* $(BUILD_DIR)/kohakushogi-ubgi* $(BUILD_DIR)/kohakuchess-ubgi* $(BUILD_DIR)/minichess-selfplay* $(BUILD_DIR)/minishogi-selfplay* $(BUILD_DIR)/connect6-selfplay* $(BUILD_DIR)/kohakushogi-selfplay* $(BUILD_DIR)/kohakuchess-selfplay* $(BUILD_DIR)/minichess-benchmark* $(BUILD_DIR)/minishogi-benchmark* $(BUILD_DIR)/connect6-benchmark* $(BUILD_DIR)/kohakushogi-benchmark* $(BUILD_DIR)/kohakuchess-benchmark* $(BUILD_DIR)/minichess-datagen* $(BUILD_DIR)/minishogi-datagen* $(BUILD_DIR)/connect6-datagen* $(BUILD_DIR)/kohakushogi-datagen* $(BUILD_DIR)/kohakuchess-datagen* $(BUILD_DIR)/nnue_bench*
+	rm -f $(BUILD_DIR)/minichess-ubgi* $(BUILD_DIR)/connect6-ubgi* $(BUILD_DIR)/minishogi-ubgi* $(BUILD_DIR)/kohakushogi-ubgi* $(BUILD_DIR)/kohakuchess-ubgi* $(BUILD_DIR)/chess-ubgi* $(BUILD_DIR)/minichess-selfplay* $(BUILD_DIR)/minishogi-selfplay* $(BUILD_DIR)/connect6-selfplay* $(BUILD_DIR)/kohakushogi-selfplay* $(BUILD_DIR)/kohakuchess-selfplay* $(BUILD_DIR)/chess-selfplay* $(BUILD_DIR)/minichess-benchmark* $(BUILD_DIR)/minishogi-benchmark* $(BUILD_DIR)/connect6-benchmark* $(BUILD_DIR)/kohakushogi-benchmark* $(BUILD_DIR)/kohakuchess-benchmark* $(BUILD_DIR)/chess-benchmark* $(BUILD_DIR)/minichess-datagen* $(BUILD_DIR)/minishogi-datagen* $(BUILD_DIR)/connect6-datagen* $(BUILD_DIR)/kohakushogi-datagen* $(BUILD_DIR)/kohakuchess-datagen* $(BUILD_DIR)/chess-datagen* $(BUILD_DIR)/nnue_bench*
