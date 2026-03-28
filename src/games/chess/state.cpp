@@ -435,77 +435,14 @@ uint64_t State::compute_hash_full() const {
 
 
 /*============================================================
- * Evaluate — tapered eval
+ * Evaluate — tapered eval (material + PST MG/EG + tropism)
  *
- * Terms: material, PST, tropism, passed pawns, bishop pair,
- *        rook on open/semi-open file, pawn structure.
- * Only this file is changed; search/base_state interface
- * is unchanged (returns int from side-to-move POV).
+ * Game-agnostic: only this file is changed; search/base_state
+ * interface is unchanged (returns int from side-to-move POV).
  *============================================================*/
 
 /* Tropism: bonus for pieces close to enemy king (MG only) */
 static const int tropism_weight[7] = {0, 0, 1, 2, 1, 3, 0};
-
-/* Passed pawn bonus by rank distance from promotion (index 0 = on promo rank).
- * White perspective: row 0 = rank 8 (promo), row 7 = rank 1.
- * Index = distance from promotion rank. */
-static const int passed_mg[8] = {0, 80, 50, 25, 12,  5,  0, 0};
-static const int passed_eg[8] = {0,150,100, 60, 30, 15,  5, 0};
-
-/* Bishop pair bonus */
-static constexpr int BISHOP_PAIR_MG = 40;
-static constexpr int BISHOP_PAIR_EG = 55;
-
-/* Rook on open / semi-open file */
-static constexpr int ROOK_OPEN_MG   = 35;
-static constexpr int ROOK_OPEN_EG   = 15;
-static constexpr int ROOK_SEMI_MG   = 15;
-static constexpr int ROOK_SEMI_EG   = 8;
-
-/* Pawn structure penalties */
-static constexpr int ISOLATED_MG    = -10;
-static constexpr int ISOLATED_EG    = -18;
-static constexpr int DOUBLED_MG     = -8;
-static constexpr int DOUBLED_EG     = -20;
-
-/* File masks for pawn analysis */
-static uint64_t file_mask[8];
-static uint64_t adj_file_mask[8];     /* adjacent files combined */
-static uint64_t fwd_file_mask[2][64]; /* forward spans for passed pawn detection */
-static bool eval_masks_ready = false;
-
-static void init_eval_masks(){
-    for(int f = 0; f < 8; f++){
-        file_mask[f] = 0;
-        for(int r = 0; r < 8; r++)
-            file_mask[f] |= 1ULL << SQ(r, f);
-    }
-    for(int f = 0; f < 8; f++){
-        adj_file_mask[f] = 0;
-        if(f > 0) adj_file_mask[f] |= file_mask[f-1];
-        if(f < 7) adj_file_mask[f] |= file_mask[f+1];
-    }
-    /* Forward file masks: all squares ahead on same + adjacent files */
-    for(int sq = 0; sq < 64; sq++){
-        int r = ROW(sq), c = COL(sq);
-        fwd_file_mask[0][sq] = 0; /* White: rows 0..(r-1) */
-        fwd_file_mask[1][sq] = 0; /* Black: rows (r+1)..7 */
-        for(int rr = 0; rr < r; rr++){
-            fwd_file_mask[0][sq] |= 1ULL << SQ(rr, c);
-            if(c > 0) fwd_file_mask[0][sq] |= 1ULL << SQ(rr, c-1);
-            if(c < 7) fwd_file_mask[0][sq] |= 1ULL << SQ(rr, c+1);
-        }
-        for(int rr = r+1; rr < 8; rr++){
-            fwd_file_mask[1][sq] |= 1ULL << SQ(rr, c);
-            if(c > 0) fwd_file_mask[1][sq] |= 1ULL << SQ(rr, c-1);
-            if(c < 7) fwd_file_mask[1][sq] |= 1ULL << SQ(rr, c+1);
-        }
-    }
-    eval_masks_ready = true;
-}
-
-/* popcount helper */
-static inline int popcnt(uint64_t x){ return __builtin_popcountll(x); }
 
 int State::evaluate(
     bool use_nnue,
@@ -525,16 +462,9 @@ int State::evaluate(
     (void)use_nnue;
 #endif
 
-    if(!eval_masks_ready) init_eval_masks();
-
     int self = player, oppn = 1 - player;
     int mg = 0, eg = 0;
     int phase = 0;
-    int self_bishops = 0, oppn_bishops = 0;
-
-    /* Build pawn bitboards for structure analysis */
-    uint64_t self_pawns = 0, oppn_pawns = 0;
-    uint64_t self_rooks = 0, oppn_rooks = 0;
 
     /* Find king positions (for tropism) */
     int self_kr = 0, self_kc = 0, oppn_kr = 0, oppn_kc = 0;
@@ -545,36 +475,30 @@ int State::evaluate(
         }
     }
 
-    /* === Main piece loop: material + PST + tropism + collect bitboards === */
     for(int r = 0; r < 8; r++){
         for(int c = 0; c < 8; c++){
             int pt;
-            /* Own pieces */
+            /* === Own pieces === */
             if((pt = board.board[self][r][c])){
                 mg += mat_mg[pt];
                 eg += mat_eg[pt];
                 phase += phase_weight[pt];
-                if(pt == PAWN)   self_pawns |= 1ULL << SQ(r, c);
-                if(pt == ROOK)   self_rooks |= 1ULL << SQ(r, c);
-                if(pt == BISHOP) self_bishops++;
                 if(use_kp_eval && pt >= 1 && pt <= 6){
                     int pr = (self == 0) ? r : 7 - r;
                     mg += pst_mg[pt-1][pr][c];
                     eg += pst_eg[pt-1][pr][c];
+                    /* King tropism (MG only) */
                     if(use_mobility && tropism_weight[pt]){
                         int dist = std::abs(r - oppn_kr) + std::abs(c - oppn_kc);
                         mg += tropism_weight[pt] * (14 - dist);
                     }
                 }
             }
-            /* Opponent pieces */
+            /* === Opponent pieces === */
             if((pt = board.board[oppn][r][c])){
                 mg -= mat_mg[pt];
                 eg -= mat_eg[pt];
                 phase += phase_weight[pt];
-                if(pt == PAWN)   oppn_pawns |= 1ULL << SQ(r, c);
-                if(pt == ROOK)   oppn_rooks |= 1ULL << SQ(r, c);
-                if(pt == BISHOP) oppn_bishops++;
                 if(use_kp_eval && pt >= 1 && pt <= 6){
                     int pr = (oppn == 0) ? r : 7 - r;
                     mg -= pst_mg[pt-1][pr][c];
@@ -588,95 +512,8 @@ int State::evaluate(
         }
     }
 
-    if(use_kp_eval){
-        /* === Bishop pair === */
-        if(self_bishops >= 2){ mg += BISHOP_PAIR_MG; eg += BISHOP_PAIR_EG; }
-        if(oppn_bishops >= 2){ mg -= BISHOP_PAIR_MG; eg -= BISHOP_PAIR_EG; }
-
-        /* === Passed pawns === */
-        /* Self passed pawns */
-        uint64_t sp = self_pawns;
-        while(sp){
-            int sq = __builtin_ctzll(sp);
-            sp &= sp - 1;
-            int r = ROW(sq);
-            uint64_t fwd = fwd_file_mask[self][sq];
-            if(!(fwd & oppn_pawns)){
-                int dist = (self == 0) ? r : 7 - r;
-                mg += passed_mg[dist];
-                eg += passed_eg[dist];
-            }
-        }
-        /* Opponent passed pawns */
-        uint64_t op = oppn_pawns;
-        while(op){
-            int sq = __builtin_ctzll(op);
-            op &= op - 1;
-            int r = ROW(sq);
-            uint64_t fwd = fwd_file_mask[oppn][sq];
-            if(!(fwd & self_pawns)){
-                int dist = (oppn == 0) ? r : 7 - r;
-                mg -= passed_mg[dist];
-                eg -= passed_eg[dist];
-            }
-        }
-
-        /* === Rook on open / semi-open file === */
-        uint64_t sr = self_rooks;
-        while(sr){
-            int sq = __builtin_ctzll(sr);
-            sr &= sr - 1;
-            int f = COL(sq);
-            bool own_pawn_on_file  = (self_pawns & file_mask[f]) != 0;
-            bool opp_pawn_on_file  = (oppn_pawns & file_mask[f]) != 0;
-            if(!own_pawn_on_file && !opp_pawn_on_file){
-                mg += ROOK_OPEN_MG; eg += ROOK_OPEN_EG;
-            } else if(!own_pawn_on_file){
-                mg += ROOK_SEMI_MG; eg += ROOK_SEMI_EG;
-            }
-        }
-        uint64_t or_ = oppn_rooks;
-        while(or_){
-            int sq = __builtin_ctzll(or_);
-            or_ &= or_ - 1;
-            int f = COL(sq);
-            bool own_pawn_on_file  = (oppn_pawns & file_mask[f]) != 0;
-            bool opp_pawn_on_file  = (self_pawns & file_mask[f]) != 0;
-            if(!own_pawn_on_file && !opp_pawn_on_file){
-                mg -= ROOK_OPEN_MG; eg -= ROOK_OPEN_EG;
-            } else if(!own_pawn_on_file){
-                mg -= ROOK_SEMI_MG; eg -= ROOK_SEMI_EG;
-            }
-        }
-
-        /* === Pawn structure: isolated + doubled === */
-        for(int f = 0; f < 8; f++){
-            int self_on_file = popcnt(self_pawns & file_mask[f]);
-            int oppn_on_file = popcnt(oppn_pawns & file_mask[f]);
-
-            /* Doubled pawns */
-            if(self_on_file > 1){
-                mg += DOUBLED_MG * (self_on_file - 1);
-                eg += DOUBLED_EG * (self_on_file - 1);
-            }
-            if(oppn_on_file > 1){
-                mg -= DOUBLED_MG * (oppn_on_file - 1);
-                eg -= DOUBLED_EG * (oppn_on_file - 1);
-            }
-
-            /* Isolated pawns (no friendly pawn on adjacent files) */
-            if(self_on_file && !(self_pawns & adj_file_mask[f])){
-                mg += ISOLATED_MG * self_on_file;
-                eg += ISOLATED_EG * self_on_file;
-            }
-            if(oppn_on_file && !(oppn_pawns & adj_file_mask[f])){
-                mg -= ISOLATED_MG * oppn_on_file;
-                eg -= ISOLATED_EG * oppn_on_file;
-            }
-        }
-    }
-
     /* === Taper: interpolate between MG and EG === */
+    /* phase: 0 = all pieces gone (endgame), TOTAL_PHASE = opening */
     if(phase > TOTAL_PHASE) phase = TOTAL_PHASE;
     int score = (mg * phase + eg * (TOTAL_PHASE - phase)) / TOTAL_PHASE;
 
