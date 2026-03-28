@@ -491,63 +491,83 @@ BaseState* State::create_null_state() const {
 
 
 /*============================================================
- * is_square_attacked — check if `sq` is attacked by `attacker`
+ * Build per-piece-type bitboards from board array
  *============================================================*/
+struct PieceBB {
+    uint64_t occ[2];     /* occupancy per player */
+    uint64_t pawns[2];
+    uint64_t knights[2];
+    uint64_t bishops[2];
+    uint64_t rooks[2];
+    uint64_t queens[2];
+    uint64_t kings[2];
+    uint64_t all;
+};
+
+static PieceBB build_piece_bb(const Board& board){
+    PieceBB bb = {};
+    for(int p = 0; p < 2; p++){
+        for(int r = 0; r < 8; r++){
+            for(int c = 0; c < 8; c++){
+                int pt = board.board[p][r][c];
+                if(!pt) continue;
+                uint64_t bit = 1ULL << SQ(r, c);
+                bb.occ[p] |= bit;
+                switch(pt){
+                    case PAWN:   bb.pawns[p]   |= bit; break;
+                    case KNIGHT: bb.knights[p]  |= bit; break;
+                    case BISHOP: bb.bishops[p]  |= bit; break;
+                    case ROOK:   bb.rooks[p]    |= bit; break;
+                    case QUEEN:  bb.queens[p]   |= bit; break;
+                    case KING:   bb.kings[p]    |= bit; break;
+                }
+            }
+        }
+    }
+    bb.all = bb.occ[0] | bb.occ[1];
+    return bb;
+}
+
+
+/*============================================================
+ * is_square_attacked — using precomputed piece bitboards
+ *============================================================*/
+static bool is_square_attacked_bb(
+    int sq,
+    int attacker,
+    const PieceBB& bb
+){
+    /* Pawn attacks: from defender's perspective */
+    int defender = 1 - attacker;
+    if(pawn_attacks[defender][sq] & bb.pawns[attacker]) return true;
+
+    /* Knight */
+    if(knight_attacks[sq] & bb.knights[attacker]) return true;
+
+    /* King */
+    if(king_attacks[sq] & bb.kings[attacker]) return true;
+
+    /* Rook + Queen (orthogonal) */
+    uint64_t rq = bb.rooks[attacker] | bb.queens[attacker];
+    if(rook_attacks_bb(sq, bb.all) & rq) return true;
+
+    /* Bishop + Queen (diagonal) */
+    uint64_t bq = bb.bishops[attacker] | bb.queens[attacker];
+    if(bishop_attacks_bb(sq, bb.all) & bq) return true;
+
+    return false;
+}
+
+/* Convenience wrapper (builds bitboards on the fly — avoid in hot path) */
+[[maybe_unused]]
 static bool is_square_attacked(
     const Board& board,
     int sq,
     int attacker
 ){
     if(!magic_ready) init_magics();
-    (void)sq; /* used by attack lookups below */
-
-    /* Knight */
-    uint64_t knights = 0;
-    for(int rr = 0; rr < 8; rr++)
-        for(int cc = 0; cc < 8; cc++)
-            if(board.board[attacker][rr][cc] == KNIGHT)
-                knights |= 1ULL << SQ(rr, cc);
-    if(knight_attacks[sq] & knights) return true;
-
-    /* King */
-    for(int rr = 0; rr < 8; rr++)
-        for(int cc = 0; cc < 8; cc++)
-            if(board.board[attacker][rr][cc] == KING)
-                if(king_attacks[sq] & (1ULL << SQ(rr, cc))) return true;
-
-    /* Pawn */
-    int defender = 1 - attacker;
-    if(pawn_attacks[defender][sq]){
-        for(int rr = 0; rr < 8; rr++)
-            for(int cc = 0; cc < 8; cc++)
-                if(board.board[attacker][rr][cc] == PAWN)
-                    if(pawn_attacks[defender][sq] & (1ULL << SQ(rr, cc))) return true;
-    }
-
-    /* Sliding: rook/queen on orthogonal, bishop/queen on diagonal */
-    uint64_t all_occ = 0;
-    for(int p = 0; p < 2; p++)
-        for(int rr = 0; rr < 8; rr++)
-            for(int cc = 0; cc < 8; cc++)
-                if(board.board[p][rr][cc]) all_occ |= 1ULL << SQ(rr, cc);
-
-    uint64_t rook_atk = rook_attacks_bb(sq, all_occ);
-    for(int rr = 0; rr < 8; rr++)
-        for(int cc = 0; cc < 8; cc++){
-            int pt = board.board[attacker][rr][cc];
-            if((pt == ROOK || pt == QUEEN) && (rook_atk & (1ULL << SQ(rr, cc))))
-                return true;
-        }
-
-    uint64_t bishop_atk = bishop_attacks_bb(sq, all_occ);
-    for(int rr = 0; rr < 8; rr++)
-        for(int cc = 0; cc < 8; cc++){
-            int pt = board.board[attacker][rr][cc];
-            if((pt == BISHOP || pt == QUEEN) && (bishop_atk & (1ULL << SQ(rr, cc))))
-                return true;
-        }
-
-    return false;
+    PieceBB bb = build_piece_bb(board);
+    return is_square_attacked_bb(sq, attacker, bb);
 }
 
 
@@ -555,6 +575,7 @@ static bool is_square_attacked(
  * Move generation — naive (with castling, en passant, promotion)
  *============================================================*/
 void State::get_legal_actions_naive(){
+    if(!magic_ready) init_magics();
     game_state = NONE;
     legal_actions.clear();
     legal_actions.reserve(256);
@@ -567,6 +588,9 @@ void State::get_legal_actions_naive(){
     int self = player, oppn = 1 - player;
     auto& self_board = board.board[self];
     auto& oppn_board = board.board[oppn];
+
+    /* Precompute piece bitboards once for castling checks */
+    PieceBB pbb = build_piece_bb(board);
     int pawn_dir = (self == 0) ? -1 : 1;
     int start_rank = (self == 0) ? 6 : 1;
     int promo_rank = (self == 0) ? 0 : 7;
@@ -659,9 +683,9 @@ void State::get_legal_actions_naive(){
                             && !self_board[king_row][5] && !oppn_board[king_row][5]
                             && !self_board[king_row][6] && !oppn_board[king_row][6]
                             && self_board[king_row][7] == ROOK
-                            && !is_square_attacked(board, SQ(king_row, 4), oppn)
-                            && !is_square_attacked(board, SQ(king_row, 5), oppn)
-                            && !is_square_attacked(board, SQ(king_row, 6), oppn)
+                            && !is_square_attacked_bb(SQ(king_row, 4), oppn, pbb)
+                            && !is_square_attacked_bb(SQ(king_row, 5), oppn, pbb)
+                            && !is_square_attacked_bb(SQ(king_row, 6), oppn, pbb)
                         ){
                             all_actions.push_back(Move(Point(r,c), Point(king_row, 6)));
                         }
@@ -672,9 +696,9 @@ void State::get_legal_actions_naive(){
                             && !self_board[king_row][2] && !oppn_board[king_row][2]
                             && !self_board[king_row][1] && !oppn_board[king_row][1]
                             && self_board[king_row][0] == ROOK
-                            && !is_square_attacked(board, SQ(king_row, 4), oppn)
-                            && !is_square_attacked(board, SQ(king_row, 3), oppn)
-                            && !is_square_attacked(board, SQ(king_row, 2), oppn)
+                            && !is_square_attacked_bb(SQ(king_row, 4), oppn, pbb)
+                            && !is_square_attacked_bb(SQ(king_row, 3), oppn, pbb)
+                            && !is_square_attacked_bb(SQ(king_row, 2), oppn, pbb)
                         ){
                             all_actions.push_back(Move(Point(r,c), Point(king_row, 2)));
                         }
