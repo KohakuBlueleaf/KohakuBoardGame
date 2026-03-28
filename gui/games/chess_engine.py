@@ -360,8 +360,24 @@ class ChessState:
             if b_mat > w_mat:
                 return ("win", 1)
             return ("draw", None)
+
+        # Checkmate: probe whether opponent could capture our king (= in check),
+        # then verify every pseudo-legal move still leaves king capturable.
+        probe = ChessState(self.board, 1 - self.player, self.step)
+        probe.castling = self.castling
+        probe.ep_col = self.ep_col
+        probe.get_legal_actions()
+        if probe.game_state == "win":  # we are in check
+            for move in self.legal_actions:
+                child = self.next_state(move)
+                if child.game_state != "win":
+                    return (None, None)  # at least one escape exists
+            return ("checkmate", 1 - self.player)
+
+        # Stalemate: no legal moves and NOT in check
         if not self.legal_actions:
             return ("stalemate", None)
+
         return (None, None)
 
     def _position_key(self):
