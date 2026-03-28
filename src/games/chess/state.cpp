@@ -780,36 +780,53 @@ State* State::next_state(const Move& move){
     int piece = next.board[self][fr][fc];
     int captured = next.board[oppn][tr][tc];
 
-    /* Remove piece from source */
+    /* Start incremental hash from current */
+    uint64_t h = this->hash();
+    h ^= zobrist_side; /* toggle side */
+    h ^= zobrist_castle[board.castling]; /* will re-XOR new castling later */
+    if(board.ep_col >= 0) h ^= zobrist_ep[board.ep_col]; /* remove old EP */
+
+    /* XOR out piece from source */
+    h ^= zobrist_piece[self][piece][SQ(fr, fc)];
     next.board[self][fr][fc] = 0;
 
     /* Handle en passant capture */
     if(piece == PAWN && tc != fc && captured == 0){
-        /* En passant capture: remove pawn on same row as source */
+        h ^= zobrist_piece[oppn][PAWN][SQ(fr, tc)];
         next.board[oppn][fr][tc] = 0;
     }
 
-    /* Remove captured piece at destination */
+    /* XOR out captured piece at destination */
+    if(captured){
+        h ^= zobrist_piece[oppn][captured][SQ(tr, tc)];
+    }
     next.board[oppn][tr][tc] = 0;
 
     /* Place piece (or promoted piece) at destination */
+    int placed;
     if(promote){
         static const int promo_map[5] = {0, QUEEN, ROOK, BISHOP, KNIGHT};
-        next.board[self][tr][tc] = promo_map[promo_piece];
+        placed = promo_map[promo_piece];
     }else{
-        next.board[self][tr][tc] = piece;
+        placed = piece;
     }
+    next.board[self][tr][tc] = placed;
+    h ^= zobrist_piece[self][placed][SQ(tr, tc)];
 
     /* Castling: move rook */
     if(piece == KING){
         int king_row = (self == 0) ? 7 : 0;
         if(fr == king_row && fc == 4){
             if(tc == 6){ /* kingside */
+                h ^= zobrist_piece[self][ROOK][SQ(king_row, 7)];
                 next.board[self][king_row][7] = 0;
                 next.board[self][king_row][5] = ROOK;
+                h ^= zobrist_piece[self][ROOK][SQ(king_row, 5)];
             }else if(tc == 2){ /* queenside */
+                h ^= zobrist_piece[self][ROOK][SQ(king_row, 0)];
                 next.board[self][king_row][0] = 0;
                 next.board[self][king_row][3] = ROOK;
+                h ^= zobrist_piece[self][ROOK][SQ(king_row, 3)];
             }
         }
     }
@@ -825,21 +842,24 @@ State* State::next_state(const Move& move){
         if(self == 1 && fr == 0 && fc == 0) next.castling &= ~CASTLE_BQ;
         if(self == 1 && fr == 0 && fc == 7) next.castling &= ~CASTLE_BK;
     }
-    /* Rook captured */
     if(tr == 0 && tc == 0) next.castling &= ~CASTLE_BQ;
     if(tr == 0 && tc == 7) next.castling &= ~CASTLE_BK;
     if(tr == 7 && tc == 0) next.castling &= ~CASTLE_WQ;
     if(tr == 7 && tc == 7) next.castling &= ~CASTLE_WK;
 
+    h ^= zobrist_castle[next.castling]; /* XOR in new castling */
+
     /* En passant target */
     next.ep_col = -1;
     if(piece == PAWN && std::abs(tr - fr) == 2){
         next.ep_col = fc;
+        h ^= zobrist_ep[fc];
     }
 
     State* ns = new State(next, oppn);
     ns->step = step + 1;
-    ns->zobrist_valid = false; /* recompute hash (TODO: incremental) */
+    ns->zobrist_hash = h;
+    ns->zobrist_valid = true;
 
     return ns;
 }
