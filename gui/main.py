@@ -511,6 +511,11 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
         if self._handle_promotion_click(x, y):
             return
 
+        # Flip icon (upper-left corner of board area)
+        if self.board_renderer.hit_flip_icon(x, y):
+            _cfg.FLIPPED = not _cfg.FLIPPED
+            return
+
         board_pos = self.board_renderer.screen_to_board(x, y)
         if board_pos is not None:
             if self._is_human_turn():
@@ -534,8 +539,6 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
             self.open_settings()
         elif action == "undo":
             self.undo_move()
-        elif action == "flip":
-            _cfg.FLIPPED = not _cfg.FLIPPED
         elif action == "analyze":
             self.toggle_analyze()
         elif action == "stop":

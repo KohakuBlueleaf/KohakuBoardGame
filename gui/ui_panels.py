@@ -92,34 +92,25 @@ class SidePanel:
 
         btn2_w = (cfg.PANEL_WIDTH - 2 * self._PAD_LEFT - self._BTN_GAP) // 2
         btn3_w = (cfg.PANEL_WIDTH - 2 * self._PAD_LEFT - 2 * self._BTN_GAP) // 3
-        btn4_w = (cfg.PANEL_WIDTH - 2 * self._PAD_LEFT - 3 * self._BTN_GAP) // 4
         bx = cfg.PANEL_X + self._PAD_LEFT
 
-        # Bottom row: Analyze | Undo | Flip | Settings
+        # Bottom row: Analyze | Undo | Settings
         btn_y2 = cfg.PANEL_Y + cfg.PANEL_H - self._BTN_BOTTOM_MARGIN - self._BTN_HEIGHT
         self.btn_analyze = Button(
-            bx, btn_y2, btn4_w, self._BTN_HEIGHT, "Analyze", self.font_btn
+            bx, btn_y2, btn3_w, self._BTN_HEIGHT, "Analyze", self.font_btn
         )
         self.btn_undo = Button(
-            bx + btn4_w + self._BTN_GAP,
+            bx + btn3_w + self._BTN_GAP,
             btn_y2,
-            btn4_w,
+            btn3_w,
             self._BTN_HEIGHT,
             "Undo",
             self.font_btn,
         )
-        self.btn_flip = Button(
-            bx + 2 * (btn4_w + self._BTN_GAP),
-            btn_y2,
-            btn4_w,
-            self._BTN_HEIGHT,
-            "Flip",
-            self.font_btn,
-        )
         self.btn_settings = Button(
-            bx + 3 * (btn4_w + self._BTN_GAP),
+            bx + 2 * (btn3_w + self._BTN_GAP),
             btn_y2,
-            btn4_w,
+            btn3_w,
             self._BTN_HEIGHT,
             "Settings",
             self.font_btn,
@@ -302,13 +293,11 @@ class SidePanel:
         x2 = cfg.PANEL_X + cfg.PANEL_WIDTH - self._SEPARATOR_INSET
         pygame.draw.line(self.surface, cfg.COLOR_TEXT_DIM, (x1, sep_y), (x2, sep_y), 1)
 
-        # Bottom row: Analyze | Undo | Flip | Settings
+        # Bottom row: Analyze | Undo | Settings
         self.btn_analyze.enabled = not gaming
         self.btn_analyze.active = analyze_enabled
         self.btn_analyze.draw(self.surface, mouse_pos)
         self.btn_undo.draw(self.surface, mouse_pos)
-        self.btn_flip.active = cfg.FLIPPED
-        self.btn_flip.draw(self.surface, mouse_pos)
         self.btn_settings.draw(self.surface, mouse_pos)
 
     # ==================================================================
@@ -541,8 +530,6 @@ class SidePanel:
             return "settings"
         if self.btn_undo.is_clicked(x, y):
             return "undo"
-        if self.btn_flip.is_clicked(x, y):
-            return "flip"
         if self.btn_analyze.is_clicked(x, y):
             return "analyze"
         if self.btn_stop.is_clicked(x, y):

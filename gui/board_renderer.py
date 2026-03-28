@@ -41,6 +41,21 @@ class BoardRenderer:
 
         self._num_font = pygame.font.SysFont("Arial", 14, bold=True)
 
+        # Flip icon (small button in upper-left corner of the board area)
+        self._flip_icon_font = None
+        for name in self._FONT_CANDIDATES:
+            try:
+                font = pygame.freetype.SysFont(name, 16)
+                if name is not None and "freesansbold" in getattr(font, "path", ""):
+                    continue
+                self._flip_icon_font = font
+                break
+            except Exception:
+                continue
+        if self._flip_icon_font is None:
+            self._flip_icon_font = pygame.freetype.Font(None, 16)
+        self._flip_icon_rect = None  # set during draw
+
     # -----------------------------------------------------------------
     # Piece lookup (handles both chess and placement game board layouts)
     # -----------------------------------------------------------------
@@ -86,6 +101,13 @@ class BoardRenderer:
             else:
                 self._draw_pv_arrows(pv_arrows)
         self._draw_labels()
+        self._draw_flip_icon()
+
+    def hit_flip_icon(self, x, y):
+        """Return True if (x, y) clicks the flip icon."""
+        return self._flip_icon_rect is not None and self._flip_icon_rect.collidepoint(
+            x, y
+        )
 
     def screen_to_board(self, x, y):
         """Convert screen (x, y) to board (row, col).
@@ -527,3 +549,34 @@ class BoardRenderer:
             self.surface.blit(
                 surf, (lx - rect.width // 2, ly + (cfg.LABEL_MARGIN - rect.height) // 2)
             )
+
+    def _draw_flip_icon(self):
+        """Draw a small flip icon in the upper-left corner above the board."""
+        icon_char = "\u21c5"  # ⇅ up-down arrows
+        mouse_pos = pygame.mouse.get_pos()
+
+        # Position: upper-left, between label margin and board top
+        ix = 1
+        iy = cfg.BOARD_Y - cfg.LABEL_MARGIN + 1
+        iw, ih = cfg.LABEL_MARGIN - 2, cfg.LABEL_MARGIN - 2
+        icon_rect = pygame.Rect(ix, iy, iw, ih)
+        self._flip_icon_rect = icon_rect
+
+        hovered = icon_rect.collidepoint(mouse_pos)
+        if cfg.FLIPPED:
+            bg = (50, 120, 70) if not hovered else (60, 140, 80)
+        elif hovered:
+            bg = (70, 70, 80)
+        else:
+            bg = (50, 50, 56)
+
+        pygame.draw.rect(self.surface, bg, icon_rect, border_radius=4)
+        fg = (200, 255, 200) if cfg.FLIPPED else cfg.COLOR_TEXT_DIM
+        surf, rect = self._flip_icon_font.render(icon_char, fgcolor=fg)
+        self.surface.blit(
+            surf,
+            (
+                ix + (iw - rect.width) // 2,
+                iy + (ih - rect.height) // 2,
+            ),
+        )
