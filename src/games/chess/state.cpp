@@ -58,43 +58,97 @@ int State::extract_nnue_features(int perspective, int* features) const {
 
 
 /*============================================================
- * Material and PST tables
+ * Tapered Eval — packed MG/EG score
+ *
+ * Each eval term produces S(mg, eg) packed into one int32.
+ * At the end of evaluate(), we interpolate by game phase.
  *============================================================*/
-static const int kp_material[7] = {0, 100, 500, 320, 330, 900, 20000};
+#define S(mg, eg) (((int32_t)(mg) << 16) + (int16_t)(eg))
+static inline int mg_of(int s){ return (int16_t)((uint16_t)((unsigned)(s) + 0x8000u) >> 16); }
+static inline int eg_of(int s){ return (int16_t)((uint16_t)((unsigned)(s) & 0xFFFFu)); }
+
+/* Phase weights: N=1, B=1, R=2, Q=4. Total starting = 24.  */
+static const int phase_weight[7] = {0, 0, 2, 1, 1, 4, 0};
+static constexpr int TOTAL_PHASE = 24;  /* 4N + 4B + 4R + 2Q */
+
+/*============================================================
+ * Material values (MG / EG)
+ *============================================================*/
+static const int mat_mg[7] = {0, 100, 500, 320, 330, 900, 20000};
+static const int mat_eg[7] = {0, 130, 550, 320, 340, 950, 20000};
 static const int simple_material[7] = {0, 10, 50, 30, 30, 90, 0};
 
-/* Piece-Square Tables (white perspective, row 0 = rank 8) */
-static const int pst[6][8][8] = {
-    // Pawn
+/*============================================================
+ * Piece-Square Tables (white perspective, row 0 = rank 8)
+ * Separate MG and EG tables.
+ *============================================================*/
+
+/* --- Middlegame PST --- */
+static const int pst_mg[6][8][8] = {
+    // Pawn MG
     {{ 0, 0, 0, 0, 0, 0, 0, 0}, {50,50,50,50,50,50,50,50},
      {10,10,20,30,30,20,10,10}, { 5, 5,10,25,25,10, 5, 5},
      { 0, 0, 0,20,20, 0, 0, 0}, { 5,-5,-10,0, 0,-10,-5,5},
      { 5,10,10,-20,-20,10,10,5}, { 0, 0, 0, 0, 0, 0, 0, 0}},
-    // Rook
+    // Rook MG
     {{ 0, 0, 0, 0, 0, 0, 0, 0}, { 5,10,10,10,10,10,10, 5},
      {-5, 0, 0, 0, 0, 0, 0,-5}, {-5, 0, 0, 0, 0, 0, 0,-5},
      {-5, 0, 0, 0, 0, 0, 0,-5}, {-5, 0, 0, 0, 0, 0, 0,-5},
      {-5, 0, 0, 0, 0, 0, 0,-5}, { 0, 0, 0, 5, 5, 0, 0, 0}},
-    // Knight
+    // Knight MG
     {{-50,-40,-30,-30,-30,-30,-40,-50}, {-40,-20, 0, 0, 0, 0,-20,-40},
      {-30, 0,10,15,15,10, 0,-30}, {-30, 5,15,20,20,15, 5,-30},
      {-30, 0,15,20,20,15, 0,-30}, {-30, 5,10,15,15,10, 5,-30},
      {-40,-20, 0, 5, 5, 0,-20,-40}, {-50,-40,-30,-30,-30,-30,-40,-50}},
-    // Bishop
+    // Bishop MG
     {{-20,-10,-10,-10,-10,-10,-10,-20}, {-10, 0, 0, 0, 0, 0, 0,-10},
      {-10, 0, 5,10,10, 5, 0,-10}, {-10, 5, 5,10,10, 5, 5,-10},
      {-10, 0,10,10,10,10, 0,-10}, {-10,10,10,10,10,10,10,-10},
      {-10, 5, 0, 0, 0, 0, 5,-10}, {-20,-10,-10,-10,-10,-10,-10,-20}},
-    // Queen
+    // Queen MG
     {{-20,-10,-10,-5,-5,-10,-10,-20}, {-10, 0, 0, 0, 0, 0, 0,-10},
      {-10, 0, 5, 5, 5, 5, 0,-10}, { -5, 0, 5, 5, 5, 5, 0, -5},
      {  0, 0, 5, 5, 5, 5, 0, -5}, {-10, 5, 5, 5, 5, 5, 0,-10},
      {-10, 0, 5, 0, 0, 0, 0,-10}, {-20,-10,-10,-5,-5,-10,-10,-20}},
-    // King
+    // King MG — stay safe, hide behind pawns
     {{-30,-40,-40,-50,-50,-40,-40,-30}, {-30,-40,-40,-50,-50,-40,-40,-30},
      {-30,-40,-40,-50,-50,-40,-40,-30}, {-30,-40,-40,-50,-50,-40,-40,-30},
      {-20,-30,-30,-40,-40,-30,-30,-20}, {-10,-20,-20,-20,-20,-20,-20,-10},
-     { 20, 20, 0, 0, 0, 0, 20, 20}, { 20, 30, 10, 0, 0, 10, 30, 20}},
+     { 20, 20,  0,  0,  0,  0, 20, 20}, { 20, 30, 10,  0,  0, 10, 30, 20}},
+};
+
+/* --- Endgame PST --- */
+static const int pst_eg[6][8][8] = {
+    // Pawn EG — strongly reward advancement
+    {{ 0, 0, 0, 0, 0, 0, 0, 0}, {80,80,80,80,80,80,80,80},
+     {50,50,50,50,50,50,50,50}, {30,30,30,30,30,30,30,30},
+     {15,15,15,20,20,15,15,15}, { 5, 5, 5,10,10, 5, 5, 5},
+     { 0, 0, 0, 0, 0, 0, 0, 0}, { 0, 0, 0, 0, 0, 0, 0, 0}},
+    // Rook EG — 7th rank bonus, otherwise flat
+    {{ 0, 0, 0, 0, 0, 0, 0, 0}, {10,10,10,10,10,10,10,10},
+     { 0, 0, 0, 0, 0, 0, 0, 0}, { 0, 0, 0, 0, 0, 0, 0, 0},
+     { 0, 0, 0, 0, 0, 0, 0, 0}, { 0, 0, 0, 0, 0, 0, 0, 0},
+     { 0, 0, 0, 0, 0, 0, 0, 0}, { 0, 0, 0, 0, 0, 0, 0, 0}},
+    // Knight EG — center preference (same as MG but milder)
+    {{-40,-30,-20,-20,-20,-20,-30,-40}, {-30,-10, 0, 5, 5, 0,-10,-30},
+     {-20, 0,10,15,15,10, 0,-20}, {-20, 5,15,20,20,15, 5,-20},
+     {-20, 5,15,20,20,15, 5,-20}, {-20, 0,10,15,15,10, 0,-20},
+     {-30,-10, 0, 5, 5, 0,-10,-30}, {-40,-30,-20,-20,-20,-20,-30,-40}},
+    // Bishop EG — center preference, mild
+    {{-20,-10,-10,-10,-10,-10,-10,-20}, {-10, 0, 0, 0, 0, 0, 0,-10},
+     {-10, 0, 5,10,10, 5, 0,-10}, {-10, 5,10,15,15,10, 5,-10},
+     {-10, 5,10,15,15,10, 5,-10}, {-10, 0, 5,10,10, 5, 0,-10},
+     {-10, 0, 0, 0, 0, 0, 0,-10}, {-20,-10,-10,-10,-10,-10,-10,-20}},
+    // Queen EG — center preference
+    {{-20,-10,-10,-5,-5,-10,-10,-20}, {-10, 0, 0, 0, 0, 0, 0,-10},
+     {-10, 0, 5, 5, 5, 5, 0,-10}, { -5, 0, 5,10,10, 5, 0, -5},
+     { -5, 0, 5,10,10, 5, 0, -5}, {-10, 0, 5, 5, 5, 5, 0,-10},
+     {-10, 0, 0, 0, 0, 0, 0,-10}, {-20,-10,-10,-5,-5,-10,-10,-20}},
+    // King EG — CENTRALIZE (complete reversal from MG)
+    {{-50,-30,-30,-30,-30,-30,-30,-50}, {-30,-10,  0,  0,  0,  0,-10,-30},
+     {-30,  0, 10, 15, 15, 10,  0,-30}, {-30,  0, 15, 20, 20, 15,  0,-30},
+     {-30,  0, 15, 20, 20, 15,  0,-30}, {-30,  0, 10, 15, 15, 10,  0,-30},
+     {-30,-10,  0,  0,  0,  0,-10,-30}, {-50,-30,-30,-30,-30,-30,-30,-50}},
 };
 
 
@@ -381,24 +435,14 @@ uint64_t State::compute_hash_full() const {
 
 
 /*============================================================
- * Evaluate — material + PST + mobility
+ * Evaluate — tapered eval (material + PST MG/EG + tropism)
+ *
+ * Game-agnostic: only this file is changed; search/base_state
+ * interface is unchanged (returns int from side-to-move POV).
  *============================================================*/
-static int king_tropism(
-    int piece_type,
-    int pr, int pc,
-    int ekr, int ekc
-){
-    int dist = std::abs(pr - ekr) + std::abs(pc - ekc);
-    int bonus = 0;
-    switch(piece_type){
-        case QUEEN:  bonus = (14 - dist) * 3; break;
-        case ROOK:   bonus = (14 - dist) * 1; break;
-        case KNIGHT: bonus = (14 - dist) * 2; break;
-        case BISHOP: bonus = (14 - dist) * 1; break;
-        default: break;
-    }
-    return bonus;
-}
+
+/* Tropism: bonus for pieces close to enemy king (MG only) */
+static const int tropism_weight[7] = {0, 0, 1, 2, 1, 3, 0};
 
 int State::evaluate(
     bool use_nnue,
@@ -419,9 +463,10 @@ int State::evaluate(
 #endif
 
     int self = player, oppn = 1 - player;
-    int score = 0;
+    int mg = 0, eg = 0;
+    int phase = 0;
 
-    /* Find king positions */
+    /* Find king positions (for tropism) */
     int self_kr = 0, self_kc = 0, oppn_kr = 0, oppn_kc = 0;
     for(int r = 0; r < 8; r++){
         for(int c = 0; c < 8; c++){
@@ -433,30 +478,44 @@ int State::evaluate(
     for(int r = 0; r < 8; r++){
         for(int c = 0; c < 8; c++){
             int pt;
-            /* Own pieces — mirror row for Black (PST is White perspective) */
+            /* === Own pieces === */
             if((pt = board.board[self][r][c])){
-                score += kp_material[pt];
+                mg += mat_mg[pt];
+                eg += mat_eg[pt];
+                phase += phase_weight[pt];
                 if(use_kp_eval && pt >= 1 && pt <= 6){
                     int pr = (self == 0) ? r : 7 - r;
-                    score += pst[pt-1][pr][c];
-                    if(use_mobility && pt != PAWN && pt != KING){
-                        score += king_tropism(pt, r, c, oppn_kr, oppn_kc);
+                    mg += pst_mg[pt-1][pr][c];
+                    eg += pst_eg[pt-1][pr][c];
+                    /* King tropism (MG only) */
+                    if(use_mobility && tropism_weight[pt]){
+                        int dist = std::abs(r - oppn_kr) + std::abs(c - oppn_kc);
+                        mg += tropism_weight[pt] * (14 - dist);
                     }
                 }
             }
-            /* Opponent pieces — mirror row for White opp (PST is White perspective) */
+            /* === Opponent pieces === */
             if((pt = board.board[oppn][r][c])){
-                score -= kp_material[pt];
+                mg -= mat_mg[pt];
+                eg -= mat_eg[pt];
+                phase += phase_weight[pt];
                 if(use_kp_eval && pt >= 1 && pt <= 6){
                     int pr = (oppn == 0) ? r : 7 - r;
-                    score -= pst[pt-1][pr][c];
-                    if(use_mobility && pt != PAWN && pt != KING){
-                        score -= king_tropism(pt, r, c, self_kr, self_kc);
+                    mg -= pst_mg[pt-1][pr][c];
+                    eg -= pst_eg[pt-1][pr][c];
+                    if(use_mobility && tropism_weight[pt]){
+                        int dist = std::abs(r - self_kr) + std::abs(c - self_kc);
+                        mg -= tropism_weight[pt] * (14 - dist);
                     }
                 }
             }
         }
     }
+
+    /* === Taper: interpolate between MG and EG === */
+    /* phase: 0 = all pieces gone (endgame), TOTAL_PHASE = opening */
+    if(phase > TOTAL_PHASE) phase = TOTAL_PHASE;
+    int score = (mg * phase + eg * (TOTAL_PHASE - phase)) / TOTAL_PHASE;
 
     return score;
 }
