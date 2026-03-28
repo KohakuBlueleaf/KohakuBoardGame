@@ -243,11 +243,7 @@ class ChessState:
         else:
             new_board[me][tr][tc] = piece
 
-        ns = ChessState(new_board, opp, self.step + 1)
-        ns.castling = self.castling
-        ns.hash_counts = dict(self.hash_counts)
-
-        # Castling rook move
+        # Castling rook move (must happen before ChessState copies new_board)
         if piece == KING:
             king_row = 7 if me == 0 else 0
             if fr == king_row and fc == 4:
@@ -257,6 +253,10 @@ class ChessState:
                 elif tc == 2:
                     new_board[me][king_row][0] = 0
                     new_board[me][king_row][3] = ROOK
+
+        ns = ChessState(new_board, opp, self.step + 1)
+        ns.castling = self.castling
+        ns.hash_counts = dict(self.hash_counts)
 
         # Update castling rights
         if piece == KING:
