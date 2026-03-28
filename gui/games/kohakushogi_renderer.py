@@ -99,30 +99,30 @@ def _pentagon_points(cx, cy, w, h, pointing_up):
     The base is wider than the shoulders.
     """
     # Base (bottom for sente) is the widest part
-    base_hw = w * 0.50       # half-width of base
-    shoulder_hw = w * 0.42   # half-width at shoulder
-    tip_y_frac = 0.0         # tip at the very top
-    shoulder_y_frac = 0.28   # shoulder ~28% from tip
+    base_hw = w * 0.50  # half-width of base
+    shoulder_hw = w * 0.42  # half-width at shoulder
+    tip_y_frac = 0.0  # tip at the very top
+    shoulder_y_frac = 0.28  # shoulder ~28% from tip
     hh = h / 2
 
     if pointing_up:
         top = cy - hh
         bot = cy + hh
         points = [
-            (cx, top),                                     # tip (narrow top)
+            (cx, top),  # tip (narrow top)
             (cx + shoulder_hw, top + shoulder_y_frac * h),  # right shoulder
-            (cx + base_hw, bot),                            # right base (widest)
-            (cx - base_hw, bot),                            # left base (widest)
+            (cx + base_hw, bot),  # right base (widest)
+            (cx - base_hw, bot),  # left base (widest)
             (cx - shoulder_hw, top + shoulder_y_frac * h),  # left shoulder
         ]
     else:
         top = cy - hh
         bot = cy + hh
         points = [
-            (cx, bot),                                     # tip (narrow bottom)
+            (cx, bot),  # tip (narrow bottom)
             (cx - shoulder_hw, bot - shoulder_y_frac * h),  # left shoulder
-            (cx - base_hw, top),                            # left base (widest)
-            (cx + base_hw, top),                            # right base (widest)
+            (cx - base_hw, top),  # left base (widest)
+            (cx + base_hw, top),  # right base (widest)
             (cx + shoulder_hw, bot - shoulder_y_frac * h),  # right shoulder
         ]
     return points
@@ -174,6 +174,7 @@ class KohakuShogiRenderer:
 
         # Try bundled Zen Old Mincho font first
         import os
+
         font_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "fonts")
         bundled_path = os.path.join(font_dir, "ZenOldMincho-Bold.ttf")
         if os.path.isfile(bundled_path):
@@ -285,10 +286,16 @@ class KohakuShogiRenderer:
         # Render text at 2x size for the big surface
         try:
             if self._bundled_font:
-                big_font = pygame.freetype.Font(self._bundled_font, int(self._piece_font.size * scale))
+                big_font = pygame.freetype.Font(
+                    self._bundled_font, int(self._piece_font.size * scale)
+                )
             else:
                 big_font = pygame.freetype.SysFont(
-                    self._piece_font.name if hasattr(self._piece_font, 'name') else None,
+                    (
+                        self._piece_font.name
+                        if hasattr(self._piece_font, "name")
+                        else None
+                    ),
                     int(self._piece_font.size * scale),
                 )
             text_surf, text_rect = big_font.render(char, fgcolor=text_color_alpha)
@@ -346,8 +353,7 @@ class KohakuShogiRenderer:
                     if surf is None:
                         continue
 
-                    sx = cfg.BOARD_X + col * cfg.SQUARE_SIZE
-                    sy = cfg.BOARD_Y + row * cfg.SQUARE_SIZE
+                    sx, sy = cfg.sq_xy(row, col)
                     px = sx + (cfg.SQUARE_SIZE - surf.get_width()) // 2
                     py = sy + (cfg.SQUARE_SIZE - surf.get_height()) // 2
 
@@ -542,8 +548,13 @@ class KohakuShogiRenderer:
         row_map = {str(BOARD_H - i): i for i in range(BOARD_H)}
         current_player = state.current_player
         drop_map = {
-            "P": PAWN, "S": SILVER, "G": GOLD,
-            "L": LANCE, "N": KNIGHT, "B": BISHOP, "R": ROOK,
+            "P": PAWN,
+            "S": SILVER,
+            "G": GOLD,
+            "L": LANCE,
+            "N": KNIGHT,
+            "B": BISHOP,
+            "R": ROOK,
         }
 
         # Draw secondary PVs first (behind best), then best PV on top

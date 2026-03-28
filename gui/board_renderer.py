@@ -58,8 +58,13 @@ class BoardRenderer:
     # -----------------------------------------------------------------
 
     def draw(
-        self, state, selected=None, legal_moves=None, last_move=None,
-        pv_arrows=None, pv_multi=None,
+        self,
+        state,
+        selected=None,
+        legal_moves=None,
+        last_move=None,
+        pv_arrows=None,
+        pv_multi=None,
     ):
         self._draw_squares()
         self._draw_last_move(last_move)
@@ -102,13 +107,15 @@ class BoardRenderer:
         col = max(0, min(col, cfg.BOARD_W - 1))
         row = max(0, min(row, cfg.BOARD_H - 1))
 
+        if cfg.FLIPPED:
+            row = cfg.BOARD_H - 1 - row
+            col = cfg.BOARD_W - 1 - col
+
         return (row, col)
 
     def board_to_screen(self, row, col):
         """Convert board (row, col) to the top-left pixel (x, y) of that square."""
-        x = cfg.BOARD_X + col * cfg.SQUARE_SIZE
-        y = cfg.BOARD_Y + row * cfg.SQUARE_SIZE
-        return (x, y)
+        return cfg.sq_xy(row, col)
 
     # -----------------------------------------------------------------
     # Internal drawing helpers
@@ -348,19 +355,25 @@ class BoardRenderer:
 
         def _parse_and_draw(uci, color, shaft_w, head_scale, player_turn=0):
             # Handle drop moves: X*sq (e.g. P*c3)
-            if len(uci) >= 3 and uci[1] == '*':
+            if len(uci) >= 3 and uci[1] == "*":
                 parsed = _parse_sq(uci, 2)
                 if parsed is None:
                     return None
                 tr, tc, _ = parsed
-                tx = cfg.BOARD_X + tc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
-                ty = cfg.BOARD_Y + tr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
+                _bx, _by = cfg.sq_xy(tr, tc)
+                tx = _bx + cfg.SQUARE_SIZE // 2
+                ty = _by + cfg.SQUARE_SIZE // 2
 
                 # Try to find hand piece position from game renderer
-                fx, fy = tx, cfg.BOARD_Y + cfg.BOARD_H * cfg.SQUARE_SIZE + 20  # fallback
+                fx, fy = (
+                    tx,
+                    cfg.BOARD_Y + cfg.BOARD_H * cfg.SQUARE_SIZE + 20,
+                )  # fallback
                 gr = self.game_renderer
                 if gr is not None and hasattr(gr, "_hand_rects"):
-                    drop_pt = char_to_drop.get(uci[0].upper(), char_to_drop.get(uci[0], 0))
+                    drop_pt = char_to_drop.get(
+                        uci[0].upper(), char_to_drop.get(uci[0], 0)
+                    )
                     hand_rect = gr._hand_rects.get((player_turn, drop_pt))
                     if hand_rect is not None:
                         fx = hand_rect.centerx
@@ -381,11 +394,15 @@ class BoardRenderer:
                 head_w = head_len * 0.6
                 sx2 = tx - ux * head_len
                 sy2 = ty - uy * head_len
-                pygame.draw.line(overlay, color, (int(fx), int(fy)), (int(sx2), int(sy2)), shaft_w)
+                pygame.draw.line(
+                    overlay, color, (int(fx), int(fy)), (int(sx2), int(sy2)), shaft_w
+                )
                 px, py = -uy, ux
-                pts = [(tx, ty),
-                       (sx2 + px * head_w, sy2 + py * head_w),
-                       (sx2 - px * head_w, sy2 - py * head_w)]
+                pts = [
+                    (tx, ty),
+                    (sx2 + px * head_w, sy2 + py * head_w),
+                    (sx2 - px * head_w, sy2 - py * head_w),
+                ]
                 pygame.draw.polygon(overlay, color, pts)
 
                 return (fx, fy, tx, ty, px, py)
@@ -416,9 +433,11 @@ class BoardRenderer:
             sy2 = ty - uy * head_len
             pygame.draw.line(overlay, color, (fx, fy), (sx2, sy2), shaft_w)
             px, py = -uy, ux
-            pts = [(tx, ty),
-                   (sx2 + px * head_w, sy2 + py * head_w),
-                   (sx2 - px * head_w, sy2 - py * head_w)]
+            pts = [
+                (tx, ty),
+                (sx2 + px * head_w, sy2 + py * head_w),
+                (sx2 - px * head_w, sy2 - py * head_w),
+            ]
             pygame.draw.polygon(overlay, color, pts)
             return (fx, fy, tx, ty, px, py)
 
@@ -464,36 +483,44 @@ class BoardRenderer:
                 num_surf = num_font.render(label, True, (255, 255, 255))
                 nr = max(num_surf.get_width(), num_surf.get_height()) // 2 + 3
                 pygame.draw.circle(
-                    overlay, (0, 0, 0, min(200, alpha)),
-                    (int(num_x), int(num_y)), nr,
+                    overlay,
+                    (0, 0, 0, min(200, alpha)),
+                    (int(num_x), int(num_y)),
+                    nr,
                 )
                 overlay.blit(
                     num_surf,
-                    (num_x - num_surf.get_width() / 2,
-                     num_y - num_surf.get_height() / 2),
+                    (
+                        num_x - num_surf.get_width() / 2,
+                        num_y - num_surf.get_height() / 2,
+                    ),
                 )
 
         self.surface.blit(overlay, (0, 0))
 
     def _draw_labels(self):
-        """Draw row labels (6-1) on the left and column labels (A-E) below."""
-        for row in range(cfg.BOARD_H):
-            label = cfg.ROW_LABELS[row]
-            sx, sy = self.board_to_screen(row, 0)
+        """Draw row labels on the left and column labels below, respecting flip."""
+        row_labels = cfg.ROW_LABELS
+        col_labels = cfg.COL_LABELS
+        if cfg.FLIPPED:
+            row_labels = list(reversed(row_labels))
+            col_labels = col_labels[::-1]
+
+        for vis_row in range(cfg.BOARD_H):
+            label = row_labels[vis_row]
             # Position to the left of the first column, vertically centred
             lx = cfg.BOARD_X - cfg.LABEL_MARGIN
-            ly = sy + cfg.SQUARE_SIZE // 2
+            ly = cfg.BOARD_Y + vis_row * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
 
             surf, rect = self.label_font.render(label, fgcolor=cfg.COLOR_TEXT_DIM)
             self.surface.blit(
                 surf, (lx + (cfg.LABEL_MARGIN - rect.width) // 2, ly - rect.height // 2)
             )
 
-        for col in range(cfg.BOARD_W):
-            label = cfg.COL_LABELS[col]
-            sx, sy = self.board_to_screen(cfg.BOARD_H - 1, col)
+        for vis_col in range(cfg.BOARD_W):
+            label = col_labels[vis_col]
             # Position below the last row, horizontally centred
-            lx = sx + cfg.SQUARE_SIZE // 2
+            lx = cfg.BOARD_X + vis_col * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
             ly = cfg.BOARD_Y + cfg.BOARD_PIXEL_H
 
             surf, rect = self.label_font.render(label, fgcolor=cfg.COLOR_TEXT_DIM)

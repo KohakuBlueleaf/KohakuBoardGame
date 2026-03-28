@@ -534,6 +534,8 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
             self.open_settings()
         elif action == "undo":
             self.undo_move()
+        elif action == "flip":
+            _cfg.FLIPPED = not _cfg.FLIPPED
         elif action == "analyze":
             self.toggle_analyze()
         elif action == "stop":
@@ -559,6 +561,8 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
             self.undo_move()
         elif key == pygame.K_a:
             self.toggle_analyze()
+        elif key == pygame.K_f:
+            _cfg.FLIPPED = not _cfg.FLIPPED
         elif key == pygame.K_q:
             self.stop_game()
 

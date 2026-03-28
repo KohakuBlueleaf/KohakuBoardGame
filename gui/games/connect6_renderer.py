@@ -55,8 +55,9 @@ class Connect6Renderer:
                 if val == 0:
                     continue
 
-                sx = cfg.BOARD_X + col * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
-                sy = cfg.BOARD_Y + row * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
+                bx, by = cfg.sq_xy(row, col)
+                sx = bx + cfg.SQUARE_SIZE // 2
+                sy = by + cfg.SQUARE_SIZE // 2
 
                 if val == 1:  # black
                     pygame.draw.circle(self.surface, (20, 20, 20), (sx, sy), radius)
@@ -67,11 +68,14 @@ class Connect6Renderer:
                         self.surface, (100, 100, 100), (sx, sy), radius, 2
                     )
 
-    def _draw_ghost_stone(self, r, c, player_turn, alpha, label=None, border_color=None):
+    def _draw_ghost_stone(
+        self, r, c, player_turn, alpha, label=None, border_color=None
+    ):
         """Draw a semi-transparent ghost stone at (r, c)."""
         radius = max(10, cfg.SQUARE_SIZE // 2 - 6)
-        sx = cfg.BOARD_X + c * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
-        sy = cfg.BOARD_Y + r * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
+        bx, by = cfg.sq_xy(r, c)
+        sx = bx + cfg.SQUARE_SIZE // 2
+        sy = by + cfg.SQUARE_SIZE // 2
 
         ghost = pygame.Surface((radius * 2 + 4, radius * 2 + 4), pygame.SRCALPHA)
         cx, cy = radius + 2, radius + 2
@@ -85,7 +89,9 @@ class Connect6Renderer:
             pygame.draw.circle(
                 ghost,
                 (border_color[0], border_color[1], border_color[2], alpha),
-                (cx, cy), radius, 3,
+                (cx, cy),
+                radius,
+                3,
             )
         else:
             border = (60, 60, 60, alpha) if player_turn == 1 else (100, 100, 100, alpha)
@@ -153,7 +159,9 @@ class Connect6Renderer:
 
                 for r, c in squares:
                     label = str(mpv_idx) if i == 0 else str(i + 1)
-                    self._draw_ghost_stone(r, c, player_turn, alpha, label=label, border_color=border_color)
+                    self._draw_ghost_stone(
+                        r, c, player_turn, alpha, label=label, border_color=border_color
+                    )
 
                 stones_left -= 1
                 if stones_left == 0:

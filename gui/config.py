@@ -80,6 +80,18 @@ FONT_SIZE_STATUS = 20
 COL_LABELS = "ABCDE"
 ROW_LABELS = ["6", "5", "4", "3", "2", "1"]
 
+# Board flip (view from Black's perspective)
+FLIPPED = False
+
+
+def sq_xy(row, col):
+    """Top-left pixel (x, y) of square (row, col), accounting for board flip."""
+    if FLIPPED:
+        row = BOARD_H - 1 - row
+        col = BOARD_W - 1 - col
+    return (BOARD_X + col * SQUARE_SIZE, BOARD_Y + row * SQUARE_SIZE)
+
+
 # Paths
 BUILD_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build"
@@ -149,20 +161,20 @@ GAME_PIECES = {
     },
     "KohakuShogi": {
         0: {
-            1: "\u6b69",      # 歩 Pawn
-            2: "\u9280",      # 銀 Silver
-            3: "\u91d1",      # 金 Gold
-            4: "\u9999",      # 香 Lance
-            5: "\u6842",      # 桂 Knight
-            6: "\u89d2",      # 角 Bishop
-            7: "\u98db",      # 飛 Rook
-            8: "\u738b",      # 王 King
-            9: "\u3068",      # と P_Pawn
-            10: "\u5168",     # 全 P_Silver
-            11: "\u674f",     # 杏 P_Lance
-            12: "\u572d",     # 圭 P_Knight
-            13: "\u99ac",     # 馬 P_Bishop
-            14: "\u9f8d",     # 龍 P_Rook
+            1: "\u6b69",  # 歩 Pawn
+            2: "\u9280",  # 銀 Silver
+            3: "\u91d1",  # 金 Gold
+            4: "\u9999",  # 香 Lance
+            5: "\u6842",  # 桂 Knight
+            6: "\u89d2",  # 角 Bishop
+            7: "\u98db",  # 飛 Rook
+            8: "\u738b",  # 王 King
+            9: "\u3068",  # と P_Pawn
+            10: "\u5168",  # 全 P_Silver
+            11: "\u674f",  # 杏 P_Lance
+            12: "\u572d",  # 圭 P_Knight
+            13: "\u99ac",  # 馬 P_Bishop
+            14: "\u9f8d",  # 龍 P_Rook
         },
         1: {
             1: "\u6b69",
@@ -172,7 +184,7 @@ GAME_PIECES = {
             5: "\u6842",
             6: "\u89d2",
             7: "\u98db",
-            8: "\u7389",      # 玉 King (gote)
+            8: "\u7389",  # 玉 King (gote)
             9: "\u3068",
             10: "\u5168",
             11: "\u674f",

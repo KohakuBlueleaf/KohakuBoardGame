@@ -70,8 +70,7 @@ class MiniChessRenderer:
                     main_surf, shadow_surf, glyph_rect = self._glyphs[player][
                         piece_type
                     ]
-                    sx = cfg.BOARD_X + col * cfg.SQUARE_SIZE
-                    sy = cfg.BOARD_Y + row * cfg.SQUARE_SIZE
+                    sx, sy = cfg.sq_xy(row, col)
                     cx = sx + (cfg.SQUARE_SIZE - glyph_rect.width) // 2
                     cy = sy + (cfg.SQUARE_SIZE - glyph_rect.height) // 2
                     for dx, dy in shadow_offsets:

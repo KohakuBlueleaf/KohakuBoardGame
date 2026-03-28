@@ -305,8 +305,7 @@ class MiniShogiRenderer:
                     if surf is None:
                         continue
 
-                    sx = cfg.BOARD_X + col * cfg.SQUARE_SIZE
-                    sy = cfg.BOARD_Y + row * cfg.SQUARE_SIZE
+                    sx, sy = cfg.sq_xy(row, col)
                     # Center the piece in the square
                     px = sx + (cfg.SQUARE_SIZE - surf.get_width()) // 2
                     py = sy + (cfg.SQUARE_SIZE - surf.get_height()) // 2
@@ -575,7 +574,11 @@ class MiniShogiRenderer:
         row_map = {str(BOARD_SIZE - i): i for i in range(BOARD_SIZE)}
         current_player = state.current_player
         drop_map = {
-            "P": PAWN, "S": SILVER, "G": GOLD, "B": BISHOP, "R": ROOK,
+            "P": PAWN,
+            "S": SILVER,
+            "G": GOLD,
+            "B": BISHOP,
+            "R": ROOK,
         }
 
         for mpv_idx in sorted(pv_multi.keys()):
