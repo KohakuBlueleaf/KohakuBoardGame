@@ -98,6 +98,50 @@ class ChessState:
         s.get_legal_actions()
         return s
 
+    def _is_attacked(self, row, col, by_player):
+        """Return True if (row, col) is attacked by *by_player*."""
+        atk = self.board[by_player]
+        own = self.board[1 - by_player]
+        # Pawn attacks
+        pawn_dir = 1 if by_player == 0 else -1  # pawns of by_player attack this way
+        for dc in (-1, 1):
+            pr, pc = row + pawn_dir, col + dc
+            if 0 <= pr < 8 and 0 <= pc < 8 and atk[pr][pc] == PAWN:
+                return True
+        # Knight attacks
+        for dr, dc in _KNIGHT_MOVES:
+            nr, nc = row + dr, col + dc
+            if 0 <= nr < 8 and 0 <= nc < 8 and atk[nr][nc] == KNIGHT:
+                return True
+        # King attacks
+        for dr, dc in _KING_MOVES:
+            kr, kc = row + dr, col + dc
+            if 0 <= kr < 8 and 0 <= kc < 8 and atk[kr][kc] == KING:
+                return True
+        # Rook/Queen (straight lines)
+        for dr, dc in _ROOK_DIRS:
+            r2, c2 = row + dr, col + dc
+            while 0 <= r2 < 8 and 0 <= c2 < 8:
+                p = atk[r2][c2]
+                if p == ROOK or p == QUEEN:
+                    return True
+                if p or own[r2][c2]:
+                    break
+                r2 += dr
+                c2 += dc
+        # Bishop/Queen (diagonals)
+        for dr, dc in _BISHOP_DIRS:
+            r2, c2 = row + dr, col + dc
+            while 0 <= r2 < 8 and 0 <= c2 < 8:
+                p = atk[r2][c2]
+                if p == BISHOP or p == QUEEN:
+                    return True
+                if p or own[r2][c2]:
+                    break
+                r2 += dr
+                c2 += dc
+        return False
+
     def get_legal_actions(self):
         self.game_state = "none"
         all_actions = []
@@ -165,7 +209,8 @@ class ChessState:
                                 self.legal_actions = [((r, c), (tr, tc))]
                                 return
                             all_actions.append(((r, c), (tr, tc)))
-                    # Castling
+                    # Castling (king must not be in check, pass through
+                    # check, or land in check)
                     king_row = 7 if me == 0 else 0
                     if r == king_row and c == 4:
                         ks = CASTLE_WK if me == 0 else CASTLE_BK
@@ -177,6 +222,9 @@ class ChessState:
                             and not my[king_row][6]
                             and not op[king_row][6]
                             and my[king_row][7] == ROOK
+                            and not self._is_attacked(king_row, 4, opp)
+                            and not self._is_attacked(king_row, 5, opp)
+                            and not self._is_attacked(king_row, 6, opp)
                         ):
                             all_actions.append(((r, c), (king_row, 6)))
                         if (
@@ -188,6 +236,9 @@ class ChessState:
                             and not my[king_row][1]
                             and not op[king_row][1]
                             and my[king_row][0] == ROOK
+                            and not self._is_attacked(king_row, 4, opp)
+                            and not self._is_attacked(king_row, 3, opp)
+                            and not self._is_attacked(king_row, 2, opp)
                         ):
                             all_actions.append(((r, c), (king_row, 2)))
 
