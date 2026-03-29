@@ -1,0 +1,896 @@
+"""Standard Shogi (9x9) game engine -- Python state tracking for GUI."""
+
+try:
+    import gui.config as cfg
+except ImportError:
+    import config as cfg
+
+BOARD_H = 9
+BOARD_W = 9
+
+# Piece types
+EMPTY = 0
+PAWN = 1
+SILVER = 2
+GOLD = 3
+LANCE = 4
+KNIGHT = 5
+BISHOP = 6
+ROOK = 7
+KING = 8
+P_PAWN = 9
+P_SILVER = 10
+P_LANCE = 11
+P_KNIGHT = 12
+P_BISHOP = 13
+P_ROOK = 14
+
+NUM_HAND_TYPES = 7  # P, S, G, L, N, B, R (indices 1-7)
+
+PLAYER_LABELS = {0: "Sente", 1: "Gote"}
+PLAYER_COLORS = {0: (200, 160, 80), 1: (80, 60, 40)}  # wood-like
+
+PIECE_NAMES = {
+    PAWN: "P",
+    SILVER: "S",
+    GOLD: "G",
+    LANCE: "L",
+    KNIGHT: "N",
+    BISHOP: "B",
+    ROOK: "R",
+    KING: "K",
+    P_PAWN: "+P",
+    P_SILVER: "+S",
+    P_LANCE: "+L",
+    P_KNIGHT: "+N",
+    P_BISHOP: "+B",
+    P_ROOK: "+R",
+}
+
+# Kanji/symbol for rendering
+PIECE_SYMBOLS = {
+    0: {
+        PAWN: "\u6b69",  # 歩
+        SILVER: "\u9280",  # 銀
+        GOLD: "\u91d1",  # 金
+        LANCE: "\u9999",  # 香
+        KNIGHT: "\u6842",  # 桂
+        BISHOP: "\u89d2",  # 角
+        ROOK: "\u98db",  # 飛
+        KING: "\u738b",  # 王
+        P_PAWN: "\u3068",  # と
+        P_SILVER: "\u5168",  # 全
+        P_LANCE: "\u674f",  # 杏
+        P_KNIGHT: "\u572d",  # 圭
+        P_BISHOP: "\u99ac",  # 馬
+        P_ROOK: "\u9f8d",  # 龍
+    },
+    1: {
+        PAWN: "\u6b69",
+        SILVER: "\u9280",
+        GOLD: "\u91d1",
+        LANCE: "\u9999",
+        KNIGHT: "\u6842",
+        BISHOP: "\u89d2",
+        ROOK: "\u98db",
+        KING: "\u7389",  # 玉
+        P_PAWN: "\u3068",
+        P_SILVER: "\u5168",
+        P_LANCE: "\u674f",
+        P_KNIGHT: "\u572d",
+        P_BISHOP: "\u99ac",
+        P_ROOK: "\u9f8d",
+    },
+}
+
+# Drop piece name abbreviations (for UCI-style notation)
+DROP_PIECE_CHAR = {
+    PAWN: "P",
+    SILVER: "S",
+    GOLD: "G",
+    LANCE: "L",
+    KNIGHT: "N",
+    BISHOP: "B",
+    ROOK: "R",
+}
+CHAR_TO_DROP_PIECE = {
+    "P": PAWN,
+    "S": SILVER,
+    "G": GOLD,
+    "L": LANCE,
+    "N": KNIGHT,
+    "B": BISHOP,
+    "R": ROOK,
+}
+
+# Promotable pieces and their promoted forms
+PROMOTE_MAP = {
+    PAWN: P_PAWN,
+    SILVER: P_SILVER,
+    LANCE: P_LANCE,
+    KNIGHT: P_KNIGHT,
+    BISHOP: P_BISHOP,
+    ROOK: P_ROOK,
+}
+
+# Reverse: promoted piece -> base piece (for captures going to hand)
+_DEMOTE_MAP = {
+    P_PAWN: PAWN,
+    P_SILVER: SILVER,
+    P_LANCE: LANCE,
+    P_KNIGHT: KNIGHT,
+    P_BISHOP: BISHOP,
+    P_ROOK: ROOK,
+}
+
+# Material values for MAX_STEP game-over
+_MATERIAL_TABLE = {
+    EMPTY: 0,
+    PAWN: 1,
+    SILVER: 5,
+    GOLD: 5,
+    LANCE: 3,
+    KNIGHT: 4,
+    BISHOP: 8,
+    ROOK: 10,
+    KING: 100,
+    P_PAWN: 5,
+    P_SILVER: 5,
+    P_LANCE: 5,
+    P_KNIGHT: 5,
+    P_BISHOP: 12,
+    P_ROOK: 14,
+}
+
+MAX_STEP = 512
+
+# ---------------------------------------------------------------------------
+# Movement tables
+# ---------------------------------------------------------------------------
+
+# Gold moves: one step in 6 directions (orthogonal + forward-diagonals)
+_GOLD_MOVES_SENTE = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, 0)]
+_GOLD_MOVES_GOTE = [(1, -1), (1, 0), (1, 1), (0, -1), (0, 1), (-1, 0)]
+
+_SILVER_MOVES_SENTE = [(-1, -1), (-1, 0), (-1, 1), (1, -1), (1, 1)]
+_SILVER_MOVES_GOTE = [(1, -1), (1, 0), (1, 1), (-1, -1), (-1, 1)]
+
+_KING_MOVES = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+
+# Knight moves: 2 forward, 1 sideways (jump, not sliding)
+_KNIGHT_MOVES_SENTE = [(-2, -1), (-2, 1)]
+_KNIGHT_MOVES_GOTE = [(2, -1), (2, 1)]
+
+# Rook: 4 orthogonal sliding directions
+_ROOK_DIRS = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+# Bishop: 4 diagonal sliding directions
+_BISHOP_DIRS = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
+
+
+def _get_piece_moves(piece, player):
+    """Return leaper move offsets for a piece (player-relative)."""
+    if piece == PAWN:
+        return [(-1, 0)] if player == 0 else [(1, 0)]
+    if piece == SILVER:
+        return _SILVER_MOVES_SENTE if player == 0 else _SILVER_MOVES_GOTE
+    if piece in (GOLD, P_PAWN, P_SILVER, P_LANCE, P_KNIGHT):
+        return _GOLD_MOVES_SENTE if player == 0 else _GOLD_MOVES_GOTE
+    if piece == KNIGHT:
+        return _KNIGHT_MOVES_SENTE if player == 0 else _KNIGHT_MOVES_GOTE
+    if piece == KING:
+        return _KING_MOVES
+    if piece == P_BISHOP:
+        return [(0, 1), (0, -1), (1, 0), (-1, 0)]
+    if piece == P_ROOK:
+        return [(1, 1), (1, -1), (-1, 1), (-1, -1)]
+    return []
+
+
+def _get_slide_dirs(piece, player):
+    """Return sliding directions for a piece."""
+    if piece in (BISHOP, P_BISHOP):
+        return _BISHOP_DIRS
+    if piece in (ROOK, P_ROOK):
+        return _ROOK_DIRS
+    if piece == LANCE:
+        return [(-1, 0)] if player == 0 else [(1, 0)]
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Promotion zone helpers
+# ---------------------------------------------------------------------------
+
+
+def _in_promotion_zone(row, player):
+    """Return True if (row) is in the promotion zone for player.
+
+    Promotion zone is the last 3 ranks (standard 9x9 shogi).
+    """
+    if player == 0:
+        return row <= 2  # sente promotes on rows 0-2
+    else:
+        return row >= BOARD_H - 3  # gote promotes on rows 6-8
+
+
+def _can_promote(piece_type):
+    """Return True if piece_type can promote."""
+    return piece_type in PROMOTE_MAP
+
+
+def _is_promoted(piece_type):
+    """Return True if piece_type is already promoted."""
+    return piece_type in _DEMOTE_MAP
+
+
+def _must_promote(piece_type, to_row, player):
+    """Return True if the piece MUST promote.
+
+    Pawn/Lance: last rank.
+    Knight: last 2 ranks.
+    """
+    if piece_type == PAWN or piece_type == LANCE:
+        if player == 0 and to_row == 0:
+            return True
+        if player == 1 and to_row == BOARD_H - 1:
+            return True
+    if piece_type == KNIGHT:
+        if player == 0 and to_row <= 1:
+            return True
+        if player == 1 and to_row >= BOARD_H - 2:
+            return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Initial board layout
+# ---------------------------------------------------------------------------
+
+
+def _make_initial_board():
+    """Return the starting position as board[2][BOARD_H][BOARD_W].
+
+    Standard 9x9 shogi initial position.
+
+    Sente (player 0) -- bottom of board:
+      Row 8 (rank 1): L  N  S  G  K  G  S  N  L
+      Row 7 (rank 2): .  R  .  .  .  .  .  B  .
+      Row 6 (rank 3): P  P  P  P  P  P  P  P  P
+
+    Gote (player 1) -- top of board (mirrored):
+      Row 0 (rank 9): L  N  S  G  K  G  S  N  L
+      Row 1 (rank 8): .  B  .  .  .  .  .  R  .
+      Row 2 (rank 7): P  P  P  P  P  P  P  P  P
+    """
+    board = [[[EMPTY] * BOARD_W for _ in range(BOARD_H)] for _ in range(2)]
+
+    # Sente (player 0) -- bottom rows
+    # Row 8: L N S G K G S N L
+    board[0][8][0] = LANCE
+    board[0][8][1] = KNIGHT
+    board[0][8][2] = SILVER
+    board[0][8][3] = GOLD
+    board[0][8][4] = KING
+    board[0][8][5] = GOLD
+    board[0][8][6] = SILVER
+    board[0][8][7] = KNIGHT
+    board[0][8][8] = LANCE
+    # Row 7: . R . . . . . B .
+    board[0][7][1] = ROOK
+    board[0][7][7] = BISHOP
+    # Row 6: P P P P P P P P P
+    for c in range(BOARD_W):
+        board[0][6][c] = PAWN
+
+    # Gote (player 1) -- top rows (mirrored)
+    # Row 0: L N S G K G S N L
+    board[1][0][0] = LANCE
+    board[1][0][1] = KNIGHT
+    board[1][0][2] = SILVER
+    board[1][0][3] = GOLD
+    board[1][0][4] = KING
+    board[1][0][5] = GOLD
+    board[1][0][6] = SILVER
+    board[1][0][7] = KNIGHT
+    board[1][0][8] = LANCE
+    # Row 1: . B . . . . . R .
+    board[1][1][1] = BISHOP
+    board[1][1][7] = ROOK
+    # Row 2: P P P P P P P P P
+    for c in range(BOARD_W):
+        board[1][2][c] = PAWN
+
+    return board
+
+
+def _make_initial_hand():
+    """Return hand[2][8] -- all zeros. Index 0 unused, 1-7 = P,S,G,L,N,B,R."""
+    return [[0] * (NUM_HAND_TYPES + 1) for _ in range(2)]
+
+
+def _deep_copy_board(board):
+    """Deep-copy a board[2][BOARD_H][BOARD_W] list."""
+    return [[row[:] for row in player_board] for player_board in board]
+
+
+def _deep_copy_hand(hand):
+    """Deep-copy a hand[2][8] list."""
+    return [counts[:] for counts in hand]
+
+
+# ---------------------------------------------------------------------------
+# ShogiState
+# ---------------------------------------------------------------------------
+
+
+class ShogiState:
+    """Game state for Standard Shogi (9x9)."""
+
+    def __init__(self, board=None, hand=None, player=0, step=1):
+        if board is None:
+            self.board = _make_initial_board()
+        else:
+            self.board = _deep_copy_board(board)
+        if hand is None:
+            self.hand = _make_initial_hand()
+        else:
+            self.hand = _deep_copy_hand(hand)
+        self.player = player
+        self.step = step
+        self.game_state = "unknown"
+        self.legal_actions = []
+        self.last_move = None
+        self.hash_counts = {}  # position_key -> count for repetition detection
+        self.check_hash_counts = {}  # position_key -> count when in check
+
+    @property
+    def current_player(self):
+        return self.player
+
+    @staticmethod
+    def initial():
+        """Return the starting-position state with legal actions computed."""
+        s = ShogiState()
+        s.get_legal_actions()
+        return s
+
+    # ------------------------------------------------------------------ #
+    # Legal move generation
+    # ------------------------------------------------------------------ #
+
+    def get_legal_actions(self):
+        """Populate self.legal_actions and set self.game_state.
+
+        Move encoding:
+          Board move: ((from_r, from_c), (to_r, to_c))
+          Board move with promotion: ((from_r, from_c), (to_r + BOARD_H, to_c))
+          Drop move: ((BOARD_H, piece_type), (to_r, to_c))
+        """
+        self.game_state = "none"
+        actions = []
+        me = self.player
+        opp = 1 - me
+        my_board = self.board[me]
+        opp_board = self.board[opp]
+
+        # --- Board moves ---
+        for r in range(BOARD_H):
+            for c in range(BOARD_W):
+                piece = my_board[r][c]
+                if piece == EMPTY:
+                    continue
+
+                dests = []  # list of (to_r, to_c)
+
+                if piece == PAWN:
+                    # Pawn moves one step forward
+                    dr = -1 if me == 0 else 1
+                    nr = r + dr
+                    if 0 <= nr < BOARD_H:
+                        if my_board[nr][c] == EMPTY:
+                            dests.append((nr, c))
+
+                elif piece == LANCE:
+                    # Lance slides forward (no diagonal, no backward)
+                    dr = -1 if me == 0 else 1
+                    nr = r + dr
+                    while 0 <= nr < BOARD_H:
+                        if my_board[nr][c] != EMPTY:
+                            break
+                        dests.append((nr, c))
+                        if opp_board[nr][c] != EMPTY:
+                            break
+                        nr += dr
+
+                elif piece == KNIGHT:
+                    # Knight: 2 forward, 1 sideways (jump)
+                    moves = _KNIGHT_MOVES_SENTE if me == 0 else _KNIGHT_MOVES_GOTE
+                    for dr, dc in moves:
+                        nr, nc = r + dr, c + dc
+                        if 0 <= nr < BOARD_H and 0 <= nc < BOARD_W:
+                            if my_board[nr][nc] == EMPTY:
+                                dests.append((nr, nc))
+
+                elif piece == SILVER:
+                    moves = _SILVER_MOVES_SENTE if me == 0 else _SILVER_MOVES_GOTE
+                    for dr, dc in moves:
+                        nr, nc = r + dr, c + dc
+                        if 0 <= nr < BOARD_H and 0 <= nc < BOARD_W:
+                            if my_board[nr][nc] == EMPTY:
+                                dests.append((nr, nc))
+
+                elif piece in (GOLD, P_PAWN, P_SILVER, P_LANCE, P_KNIGHT):
+                    moves = _GOLD_MOVES_SENTE if me == 0 else _GOLD_MOVES_GOTE
+                    for dr, dc in moves:
+                        nr, nc = r + dr, c + dc
+                        if 0 <= nr < BOARD_H and 0 <= nc < BOARD_W:
+                            if my_board[nr][nc] == EMPTY:
+                                dests.append((nr, nc))
+
+                elif piece == KING:
+                    for dr, dc in _KING_MOVES:
+                        nr, nc = r + dr, c + dc
+                        if 0 <= nr < BOARD_H and 0 <= nc < BOARD_W:
+                            if my_board[nr][nc] == EMPTY:
+                                dests.append((nr, nc))
+
+                elif piece == BISHOP:
+                    for dr, dc in _BISHOP_DIRS:
+                        nr, nc = r + dr, c + dc
+                        while 0 <= nr < BOARD_H and 0 <= nc < BOARD_W:
+                            if my_board[nr][nc] != EMPTY:
+                                break
+                            dests.append((nr, nc))
+                            if opp_board[nr][nc] != EMPTY:
+                                break
+                            nr += dr
+                            nc += dc
+
+                elif piece == ROOK:
+                    for dr, dc in _ROOK_DIRS:
+                        nr, nc = r + dr, c + dc
+                        while 0 <= nr < BOARD_H and 0 <= nc < BOARD_W:
+                            if my_board[nr][nc] != EMPTY:
+                                break
+                            dests.append((nr, nc))
+                            if opp_board[nr][nc] != EMPTY:
+                                break
+                            nr += dr
+                            nc += dc
+
+                elif piece == P_BISHOP:
+                    # Horse: bishop sliding + orthogonal one-step
+                    for dr, dc in _BISHOP_DIRS:
+                        nr, nc = r + dr, c + dc
+                        while 0 <= nr < BOARD_H and 0 <= nc < BOARD_W:
+                            if my_board[nr][nc] != EMPTY:
+                                break
+                            dests.append((nr, nc))
+                            if opp_board[nr][nc] != EMPTY:
+                                break
+                            nr += dr
+                            nc += dc
+                    for dr, dc in _ROOK_DIRS:  # orthogonal one-step
+                        nr, nc = r + dr, c + dc
+                        if 0 <= nr < BOARD_H and 0 <= nc < BOARD_W:
+                            if my_board[nr][nc] == EMPTY:
+                                dests.append((nr, nc))
+
+                elif piece == P_ROOK:
+                    # Dragon: rook sliding + diagonal one-step
+                    for dr, dc in _ROOK_DIRS:
+                        nr, nc = r + dr, c + dc
+                        while 0 <= nr < BOARD_H and 0 <= nc < BOARD_W:
+                            if my_board[nr][nc] != EMPTY:
+                                break
+                            dests.append((nr, nc))
+                            if opp_board[nr][nc] != EMPTY:
+                                break
+                            nr += dr
+                            nc += dc
+                    for dr, dc in _BISHOP_DIRS:  # diagonal one-step
+                        nr, nc = r + dr, c + dc
+                        if 0 <= nr < BOARD_H and 0 <= nc < BOARD_W:
+                            if my_board[nr][nc] == EMPTY:
+                                dests.append((nr, nc))
+
+                # Generate moves for each destination
+                for tr, tc in dests:
+                    captured = opp_board[tr][tc]
+                    if captured == KING:
+                        # King capture -- immediate win
+                        self.game_state = "win"
+                        actions.append(((r, c), (tr, tc)))
+                        self.legal_actions = actions
+                        return
+
+                    promotable = _can_promote(piece) and not _is_promoted(piece)
+                    in_promo_from = _in_promotion_zone(r, me)
+                    in_promo_to = _in_promotion_zone(tr, me)
+                    must = _must_promote(piece, tr, me)
+
+                    if promotable and (in_promo_from or in_promo_to):
+                        # Promotion move
+                        actions.append(((r, c), (tr + BOARD_H, tc)))
+                        if not must:
+                            # Also allow non-promotion
+                            actions.append(((r, c), (tr, tc)))
+                    else:
+                        actions.append(((r, c), (tr, tc)))
+
+        # --- Drop moves ---
+        for pt in range(1, NUM_HAND_TYPES + 1):  # PAWN=1 through ROOK=7
+            if self.hand[me][pt] <= 0:
+                continue
+            for r in range(BOARD_H):
+                for c in range(BOARD_W):
+                    if my_board[r][c] != EMPTY or opp_board[r][c] != EMPTY:
+                        continue
+                    # Pawn drop restrictions
+                    if pt == PAWN:
+                        # Cannot drop pawn on last rank
+                        if (me == 0 and r == 0) or (me == 1 and r == BOARD_H - 1):
+                            continue
+                        # Two-pawn restriction: no column already has an unpromoted pawn
+                        has_pawn_in_col = False
+                        for rr in range(BOARD_H):
+                            if my_board[rr][c] == PAWN:
+                                has_pawn_in_col = True
+                                break
+                        if has_pawn_in_col:
+                            continue
+                    # Lance drop restriction: cannot drop on last rank
+                    if pt == LANCE:
+                        if (me == 0 and r == 0) or (me == 1 and r == BOARD_H - 1):
+                            continue
+                    # Knight drop restriction: cannot drop on last 2 ranks
+                    if pt == KNIGHT:
+                        if (me == 0 and r <= 1) or (me == 1 and r >= BOARD_H - 2):
+                            continue
+                    actions.append(((BOARD_H, pt), (r, c)))
+
+        # === Uchifuzume filter ===
+        # A pawn drop that delivers checkmate is illegal.
+        filtered = []
+        for move in actions:
+            fr, fc = move[0]
+            if fr != BOARD_H or fc != PAWN:
+                filtered.append(move)
+                continue
+
+            tr, tc = move[1]
+
+            # Temporarily create the board after the pawn drop
+            tmp_board = _deep_copy_board(self.board)
+            tmp_hand = _deep_copy_hand(self.hand)
+            tmp_board[me][tr][tc] = PAWN
+            tmp_hand[me][PAWN] -= 1
+
+            # Check if opponent is in check (can dropper capture their king?)
+            probe_check = ShogiState(tmp_board, tmp_hand, me, self.step + 1)
+            probe_check.get_legal_actions()
+            if probe_check.game_state != "win":
+                filtered.append(move)  # not even check
+                continue
+
+            # Opponent is in check. Check if it's checkmate.
+            probe_opp = ShogiState(tmp_board, tmp_hand, opp, self.step + 1)
+            probe_opp.get_legal_actions()
+
+            is_mate = True
+            for opp_move in probe_opp.legal_actions:
+                child = probe_opp.next_state(opp_move)
+                if child.game_state != "win":
+                    is_mate = False
+                    break
+
+            if not is_mate:
+                filtered.append(move)  # opponent can escape
+            # else: uchifuzume, drop is illegal
+
+        actions = filtered
+
+        self.legal_actions = actions
+
+    def position_key(self):
+        """Hashable key for the current board + hand + side-to-move."""
+        return (
+            self.player,
+            tuple(
+                self.board[p][r][c]
+                for p in range(2)
+                for r in range(BOARD_H)
+                for c in range(BOARD_W)
+            ),
+            tuple(
+                self.hand[p][pt] for p in range(2) for pt in range(len(self.hand[0]))
+            ),
+        )
+
+    # ------------------------------------------------------------------ #
+    # Lightweight helpers for checkmate detection
+    # ------------------------------------------------------------------ #
+
+    def _apply_move_raw(self, move):
+        """Apply move and return new state WITHOUT generating legal actions."""
+        frm, to = move
+        fr, fc = frm
+        tr, tc = to
+
+        new_board = _deep_copy_board(self.board)
+        new_hand = _deep_copy_hand(self.hand)
+        me = self.player
+        opp = 1 - me
+
+        if fr == BOARD_H:
+            piece_type = fc
+            new_hand[me][piece_type] -= 1
+            new_board[me][tr][tc] = piece_type
+        else:
+            promoting = tr >= BOARD_H
+            actual_tr = tr - BOARD_H if promoting else tr
+            moved_piece = new_board[me][fr][fc]
+            captured = new_board[opp][actual_tr][tc]
+            if captured != EMPTY:
+                new_board[opp][actual_tr][tc] = EMPTY
+                base = _DEMOTE_MAP.get(captured, captured)
+                if base != KING:
+                    new_hand[me][base] += 1
+            new_board[me][fr][fc] = EMPTY
+            if promoting:
+                new_board[me][actual_tr][tc] = PROMOTE_MAP[moved_piece]
+            else:
+                new_board[me][actual_tr][tc] = moved_piece
+
+        return ShogiState(new_board, new_hand, opp, self.step + 1)
+
+    def _can_capture_king(self, attacker_player):
+        """Check if attacker_player can capture opponent's king
+        using board moves only (no drops). Fast O(pieces) check."""
+        me = attacker_player
+        opp = 1 - me
+        king_r, king_c = -1, -1
+        for r in range(BOARD_H):
+            for c in range(BOARD_W):
+                if self.board[opp][r][c] == KING:
+                    king_r, king_c = r, c
+                    break
+            if king_r >= 0:
+                break
+        if king_r < 0:
+            return True
+
+        for r in range(BOARD_H):
+            for c in range(BOARD_W):
+                piece = self.board[me][r][c]
+                if piece == EMPTY:
+                    continue
+                for dr, dc in _get_piece_moves(piece, me):
+                    if r + dr == king_r and c + dc == king_c:
+                        return True
+                for dr, dc in _get_slide_dirs(piece, me):
+                    ar, ac = r + dr, c + dc
+                    while 0 <= ar < BOARD_H and 0 <= ac < BOARD_W:
+                        if ar == king_r and ac == king_c:
+                            return True
+                        if (
+                            self.board[me][ar][ac] != EMPTY
+                            or self.board[opp][ar][ac] != EMPTY
+                        ):
+                            break
+                        ar += dr
+                        ac += dc
+        return False
+
+    # ------------------------------------------------------------------ #
+    # Next state
+    # ------------------------------------------------------------------ #
+
+    def next_state(self, move):
+        """Return a new ShogiState after applying move."""
+        frm, to = move
+        fr, fc = frm
+        tr, tc = to
+
+        new_board = _deep_copy_board(self.board)
+        new_hand = _deep_copy_hand(self.hand)
+        me = self.player
+        opp = 1 - me
+
+        if fr == BOARD_H:
+            # Drop move: fc = piece_type
+            piece_type = fc
+            new_hand[me][piece_type] -= 1
+            new_board[me][tr][tc] = piece_type
+        else:
+            # Board move
+            promoting = tr >= BOARD_H
+            actual_tr = tr - BOARD_H if promoting else tr
+
+            moved_piece = new_board[me][fr][fc]
+
+            # Handle capture
+            captured = new_board[opp][actual_tr][tc]
+            if captured != EMPTY:
+                new_board[opp][actual_tr][tc] = EMPTY
+                # Demote captured piece if promoted, then add to hand
+                base = _DEMOTE_MAP.get(captured, captured)
+                if base != KING:
+                    new_hand[me][base] += 1
+
+            # Move piece
+            new_board[me][fr][fc] = EMPTY
+            if promoting:
+                new_board[me][actual_tr][tc] = PROMOTE_MAP[moved_piece]
+            else:
+                new_board[me][actual_tr][tc] = moved_piece
+
+        ns = ShogiState(new_board, new_hand, opp, self.step + 1)
+        ns.last_move = move
+        ns.hash_counts = dict(self.hash_counts)
+        ns.check_hash_counts = dict(self.check_hash_counts)
+        key = self.position_key()
+        ns.hash_counts[key] = ns.hash_counts.get(key, 0) + 1
+
+        if self.game_state != "win":
+            ns.get_legal_actions()
+
+            # Detect if the child position is "in check"
+            if ns.game_state not in ("win", "draw"):
+                probe = ShogiState(new_board, new_hand, self.player, self.step + 1)
+                probe.get_legal_actions()
+                if probe.game_state == "win":
+                    # Child is in check -- record it
+                    child_key = ns.position_key()
+                    ns.check_hash_counts[child_key] = (
+                        ns.check_hash_counts.get(child_key, 0) + 1
+                    )
+
+        return ns
+
+    # ------------------------------------------------------------------ #
+    # Game-over check
+    # ------------------------------------------------------------------ #
+
+    def check_game_over(self):
+        """Check if the game ended.
+
+        Returns:
+            ("checkmate", winner_player) -- in check with no escape.
+            ("win", winner_player) -- if king can be captured.
+            ("draw", None) -- if material is equal after MAX_STEP.
+            (None, None) -- game is not over.
+        """
+        if self.game_state == "win":
+            return ("win", self.player)
+
+        # 4-fold repetition -> draw or perpetual check
+        key = self.position_key()
+        if self.hash_counts.get(key, 0) + 1 >= 4:
+            # Check if perpetual check: all 4 occurrences were "in check"
+            check_count = self.check_hash_counts.get(key, 0)
+            # We also need to check the CURRENT position for check
+            if self._can_capture_king(1 - self.player):
+                check_count += 1  # current position is also in check
+            if check_count >= 4:
+                # Perpetual check: the checker (opponent) loses, checked side wins
+                return ("perpetual_check", self.player)
+            return ("draw", None)
+
+        if self.step > MAX_STEP:
+            mat = [0, 0]
+            for p in range(2):
+                for r in range(BOARD_H):
+                    for c in range(BOARD_W):
+                        piece = self.board[p][r][c]
+                        mat[p] += _MATERIAL_TABLE.get(piece, 0)
+                # Add hand material
+                for pt in range(1, NUM_HAND_TYPES + 1):
+                    mat[p] += self.hand[p][pt] * _MATERIAL_TABLE.get(pt, 0)
+
+            if mat[0] > mat[1]:
+                return ("win", 0)
+            elif mat[1] > mat[0]:
+                return ("win", 1)
+            else:
+                return ("draw", None)
+
+        # Checkmate: current player is in check and every move
+        # still leaves king capturable.
+        if self._can_capture_king(1 - self.player):  # we are in check
+            for move in self.legal_actions:
+                child = self._apply_move_raw(move)
+                if not child._can_capture_king(self.player):
+                    return (None, None)  # at least one escape
+            return ("checkmate", 1 - self.player)
+
+        # Stalemate: no legal moves -> loss for the side with no moves (shogi rule).
+        if not self.legal_actions:
+            return ("stalemate_loss", 1 - self.player)
+
+        return (None, None)
+
+    # ------------------------------------------------------------------ #
+    # State encoding for UBGI engine communication
+    # ------------------------------------------------------------------ #
+
+    def encode_state(self):
+        """Encode state for the C++ engine.
+
+        Format:
+            player
+            sente_board (9 rows of 9 ints)
+            <blank>
+            gote_board (9 rows of 9 ints)
+            <blank>
+            sente_hand (7 ints: P S G L N B R counts)
+            gote_hand (7 ints: P S G L N B R counts)
+        """
+        lines = []
+        lines.append(str(self.player))
+        for pl in range(2):
+            for r in range(BOARD_H):
+                lines.append(
+                    " ".join(str(self.board[pl][r][c]) for c in range(BOARD_W)) + " "
+                )
+            lines.append("")
+        for pl in range(2):
+            lines.append(
+                " ".join(str(self.hand[pl][pt]) for pt in range(1, NUM_HAND_TYPES + 1))
+            )
+        return "\n".join(lines) + "\n"
+
+    # ------------------------------------------------------------------ #
+    # Deep copy
+    # ------------------------------------------------------------------ #
+
+    def copy(self):
+        """Return a deep copy of this state."""
+        s = ShogiState.__new__(ShogiState)
+        s.board = _deep_copy_board(self.board)
+        s.hand = _deep_copy_hand(self.hand)
+        s.player = self.player
+        s.step = self.step
+        s.game_state = self.game_state
+        s.legal_actions = list(self.legal_actions)
+        s.last_move = self.last_move
+        s.hash_counts = dict(self.hash_counts)
+        s.check_hash_counts = dict(self.check_hash_counts)
+        return s
+
+    def __repr__(self):
+        return (
+            f"ShogiState(player={self.player}, step={self.step}, "
+            f"game_state={self.game_state!r}, "
+            f"legal_actions={len(self.legal_actions)})"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Move formatting
+# ---------------------------------------------------------------------------
+
+
+def format_move(move):
+    """Format move as a display string.
+
+    Drop: 'P*C3'
+    Board move: 'A1->B2' or 'A1->B2+' (promotion)
+    """
+    (fr, fc), (tr, tc) = move
+    col_labels = "ABCDEFGHI"
+    row_labels = "987654321"
+
+    if fr == BOARD_H:
+        # Drop move: fc = piece_type
+        piece_char = DROP_PIECE_CHAR.get(fc, "?")
+        return f"{piece_char}*{col_labels[tc]}{row_labels[tr]}"
+
+    promoting = tr >= BOARD_H
+    actual_tr = tr - BOARD_H if promoting else tr
+    result = (
+        f"{col_labels[fc]}{row_labels[fr]}->{col_labels[tc]}{row_labels[actual_tr]}"
+    )
+    if promoting:
+        result += "+"
+    return result

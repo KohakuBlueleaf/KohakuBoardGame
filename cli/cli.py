@@ -52,6 +52,10 @@ def _init_game(game_name, board_size=None):
         from cli.games.kohakushogi import get_context
 
         _game_ctx.update(get_context())
+    elif game_name == "shogi":
+        from cli.games.shogi import get_context
+
+        _game_ctx.update(get_context())
     elif game_name == "kohakuchess":
         from cli.games.kohakuchess import get_context
 
@@ -142,9 +146,13 @@ def format_move_display(move_or_uci, state=None):
     game_name = _game_ctx.get("name", "generic")
     if game_name in ("minichess", "kohakuchess") and not isinstance(move_or_uci, str):
         return _game_ctx["format_move"](move_or_uci)
-    elif game_name in ("minishogi", "kohakushogi") and not isinstance(move_or_uci, str):
+    elif game_name in ("minishogi", "kohakushogi", "shogi") and not isinstance(
+        move_or_uci, str
+    ):
         return _game_ctx["format_move"](move_or_uci)
-    elif game_name in ("minishogi", "kohakushogi") and isinstance(move_or_uci, str):
+    elif game_name in ("minishogi", "kohakushogi", "shogi") and isinstance(
+        move_or_uci, str
+    ):
         return move_or_uci.upper()
     elif game_name == "connect6" and isinstance(move_or_uci, str):
         # Connect6 UCI move is like "e5" (column letter + row number)
@@ -357,7 +365,7 @@ def run_game(
                 if game_name in ("minichess", "kohakuchess"):
                     winner_str = "White" if winner == 0 else "Black"
                     color = "white" if winner == 0 else "black"
-                elif game_name in ("minishogi", "kohakushogi"):
+                elif game_name in ("minishogi", "kohakushogi", "shogi"):
                     winner_str = "Sente" if winner == 0 else "Gote"
                     color = "white" if winner == 0 else "black"
                 elif game_name == "connect6":
@@ -385,7 +393,7 @@ def run_game(
                 return "draw"
             elif result == "no_moves":
                 if verbose:
-                    if game_name in ("minishogi", "kohakushogi"):
+                    if game_name in ("minishogi", "kohakushogi", "shogi"):
                         loser = "Sente" if winner == 1 else "Gote"
                     else:
                         loser = "White" if winner == 1 else "Black"
@@ -396,6 +404,7 @@ def run_game(
                     "minishogi",
                     "kohakuchess",
                     "kohakushogi",
+                    "shogi",
                     "chess",
                 ):
                     return "white" if winner == 0 else "black"
@@ -408,6 +417,7 @@ def run_game(
                 "minishogi",
                 "kohakuchess",
                 "kohakushogi",
+                "shogi",
                 "chess",
             ):
                 is_white = state.player == 0
@@ -440,6 +450,7 @@ def run_game(
                         "minishogi",
                         "kohakuchess",
                         "kohakushogi",
+                        "shogi",
                         "chess",
                     )
                     and verbose
@@ -452,6 +463,7 @@ def run_game(
                     "minishogi",
                     "kohakuchess",
                     "kohakushogi",
+                    "shogi",
                     "chess",
                 ):
                     bestmove_uci = _game_ctx["move_to_uci"](result)
@@ -494,6 +506,7 @@ def run_game(
                     "minishogi",
                     "kohakuchess",
                     "kohakushogi",
+                    "shogi",
                     "chess",
                 ):
                     if move not in state.legal_actions:
@@ -677,7 +690,7 @@ def main():
         "--game",
         default="minichess",
         help="Game type for board display and move input (default: minichess). "
-        "Built-in: minichess, minishogi, kohakuchess, kohakushogi, connect6. Use 'generic' for any other UBGI engine.",
+        "Built-in: minichess, minishogi, kohakuchess, kohakushogi, shogi, connect6. Use 'generic' for any other UBGI engine.",
     )
     parser.add_argument(
         "--white", required=True, help='Path to UBGI/UCI engine for White, or "human".'

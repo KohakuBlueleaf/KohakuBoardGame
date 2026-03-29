@@ -122,6 +122,39 @@ def _get_game_module(game_name):
             PLAYER_LABELS,
             PLAYER_COLORS,
         )
+    if game_name in ("Shogi", "shogi"):
+        try:
+            from gui.games.shogi_engine import (
+                ShogiState,
+                format_move,
+                PLAYER_LABELS,
+                PLAYER_COLORS,
+                DROP_PIECE_CHAR,
+                CHAR_TO_DROP_PIECE,
+                PROMOTE_MAP,
+            )
+            from gui.games.shogi_renderer import ShogiRenderer
+        except ImportError:
+            from games.shogi_engine import (
+                ShogiState,
+                format_move,
+                PLAYER_LABELS,
+                PLAYER_COLORS,
+                DROP_PIECE_CHAR,
+                CHAR_TO_DROP_PIECE,
+                PROMOTE_MAP,
+            )
+            from games.shogi_renderer import ShogiRenderer
+        _cfg.DROP_PIECE_CHAR = DROP_PIECE_CHAR
+        _cfg.CHAR_TO_DROP_PIECE = CHAR_TO_DROP_PIECE
+        _cfg.PROMOTE_MAP = PROMOTE_MAP
+        return (
+            ShogiState,
+            format_move,
+            ShogiRenderer,
+            PLAYER_LABELS,
+            PLAYER_COLORS,
+        )
     if game_name in ("KohakuChess", "kohakuchess"):
         try:
             from gui.games.kohakuchess_engine import (
@@ -211,6 +244,14 @@ def _configure_board_size(game_name):
         _cfg.BOARD_W = 6
         _cfg.SQUARE_SIZE = 64  # medium squares for 7x6 board with kanji
         _cfg.MAX_STEP = 300
+        _cfg.SCORE_PLOT_MAX_CP = 2000
+        _cfg.SCORE_DISPLAY_DIV = 100
+        _cfg.HAND_ROW_H = 60  # height of each hand row (gote top, sente bottom)
+    elif game_name in ("Shogi", "shogi"):
+        _cfg.BOARD_H = 9
+        _cfg.BOARD_W = 9
+        _cfg.SQUARE_SIZE = 56  # smaller squares for 9x9 board with kanji
+        _cfg.MAX_STEP = 512
         _cfg.SCORE_PLOT_MAX_CP = 2000
         _cfg.SCORE_DISPLAY_DIV = 100
         _cfg.HAND_ROW_H = 60  # height of each hand row (gote top, sente bottom)
@@ -936,7 +977,7 @@ def main():
     parser.add_argument(
         "--game",
         default="minichess",
-        help="Game type: minichess, minishogi, connect6, kohakushogi, kohakuchess, chess (default: minichess)",
+        help="Game type: minichess, minishogi, connect6, kohakushogi, kohakuchess, chess, shogi (default: minichess)",
     )
     args = parser.parse_args()
 
