@@ -509,7 +509,12 @@ class ShogiRenderer:
                 tx = cfg.BOARD_X + tc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
                 ty = cfg.BOARD_Y + tr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
 
-                color = (80, 220, 80, alpha) if i == 0 else (80, 160, 230, alpha)
+                if i == 0:
+                    color = (80, 220, 80, alpha)
+                elif player_turn == current_player:
+                    color = (80, 160, 230, alpha)
+                else:
+                    color = (230, 140, 50, alpha)
                 self._draw_arrow(fx, fy, tx, ty, color, i)
                 self._draw_pv_number(tx, ty, i + 1, player_turn, alpha)
 
@@ -526,7 +531,12 @@ class ShogiRenderer:
                 tx = cfg.BOARD_X + tc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
                 ty = cfg.BOARD_Y + tr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
 
-                color = (80, 220, 80, alpha) if i == 0 else (80, 160, 230, alpha)
+                if i == 0:
+                    color = (80, 220, 80, alpha)
+                elif player_turn == current_player:
+                    color = (80, 160, 230, alpha)
+                else:
+                    color = (230, 140, 50, alpha)
                 self._draw_arrow(fx, fy, tx, ty, color, i)
 
                 mid_x = (fx + tx) // 2
@@ -586,7 +596,12 @@ class ShogiRenderer:
 
                 player_turn = (current_player + i) % 2
                 alpha = max(40, base_alpha - i * 25)
-                color = (80, 220, 80, alpha)
+                if i == 0 or mpv_idx != 1:
+                    color = (80, 220, 80, alpha)
+                elif player_turn == current_player:
+                    color = (80, 160, 230, alpha)
+                else:
+                    color = (230, 140, 50, alpha)
 
                 if len(uci) >= 3 and uci[1] == "*":
                     tc = col_map.get(uci[2])

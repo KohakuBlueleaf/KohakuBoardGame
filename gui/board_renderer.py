@@ -489,7 +489,11 @@ class BoardRenderer:
                 continue
             player_at_step = (current_player + i) % 2
             alpha = max(80, 200 - i * 30)
-            color = (80, 140, 230, alpha)
+            # Alternate colors: blue for side-to-move, orange for opponent
+            if player_at_step == current_player:
+                color = (80, 140, 230, alpha)
+            else:
+                color = (230, 140, 50, alpha)
             shaft_w = max(3, 6 - i)
             result = _parse_and_draw(uci, color, shaft_w, 1.0, player_at_step)
             if result:

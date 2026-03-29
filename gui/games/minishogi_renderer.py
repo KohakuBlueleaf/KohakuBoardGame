@@ -481,8 +481,10 @@ class MiniShogiRenderer:
 
                 if i == 0:
                     color = (80, 220, 80, alpha)
-                else:
+                elif player_turn == current_player:
                     color = (80, 160, 230, alpha)
+                else:
+                    color = (230, 140, 50, alpha)
 
                 self._draw_arrow(fx, fy, tx, ty, color, i)
                 self._draw_pv_number(tx, ty, i + 1, player_turn, alpha)
@@ -504,8 +506,10 @@ class MiniShogiRenderer:
 
                 if i == 0:
                     color = (80, 220, 80, alpha)
-                else:
+                elif player_turn == current_player:
                     color = (80, 160, 230, alpha)
+                else:
+                    color = (230, 140, 50, alpha)
 
                 self._draw_arrow(fx, fy, tx, ty, color, i)
 
