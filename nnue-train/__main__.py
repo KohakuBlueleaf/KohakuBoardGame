@@ -25,7 +25,8 @@ def main() -> None:
         "--game",
         type=str,
         default=None,
-        help="Game type (default: auto-detect from data). Options: " + ", ".join(GAME_CONFIGS.keys()),
+        help="Game type (default: auto-detect from data). Options: "
+        + ", ".join(GAME_CONFIGS.keys()),
     )
     parser.add_argument(
         "--data",

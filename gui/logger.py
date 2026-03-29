@@ -14,10 +14,10 @@ import threading
 
 # ANSI color codes
 _COLORS = {
-    "DEBUG": "\033[36m",    # cyan
-    "INFO":  "\033[32m",    # green
-    "WARN":  "\033[33m",    # yellow
-    "ERROR": "\033[31m",    # red
+    "DEBUG": "\033[36m",  # cyan
+    "INFO": "\033[32m",  # green
+    "WARN": "\033[33m",  # yellow
+    "ERROR": "\033[31m",  # red
     "RESET": "\033[0m",
 }
 
@@ -42,11 +42,7 @@ class _Logger:
             tid = "Main"
         color = _COLORS.get(level, "")
         reset = _COLORS["RESET"]
-        line = (
-            f"{color}[{elapsed:8.3f}] "
-            f"{level:<5s}{reset} "
-            f"[{tid}] {msg}"
-        )
+        line = f"{color}[{elapsed:8.3f}] " f"{level:<5s}{reset} " f"[{tid}] {msg}"
         print(line, file=sys.stderr, flush=True)
 
     def debug(self, msg: str):

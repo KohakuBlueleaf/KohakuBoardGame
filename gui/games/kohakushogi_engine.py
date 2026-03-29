@@ -673,7 +673,10 @@ class KohakuShogiState:
                     while 0 <= ar < BOARD_H and 0 <= ac < BOARD_W:
                         if ar == king_r and ac == king_c:
                             return True
-                        if self.board[me][ar][ac] != EMPTY or self.board[opp][ar][ac] != EMPTY:
+                        if (
+                            self.board[me][ar][ac] != EMPTY
+                            or self.board[opp][ar][ac] != EMPTY
+                        ):
                             break
                         ar += dr
                         ac += dc
@@ -734,7 +737,9 @@ class KohakuShogiState:
 
             # Detect if the child position is "in check"
             if ns.game_state not in ("win", "draw"):
-                probe = KohakuShogiState(new_board, new_hand, self.player, self.step + 1)
+                probe = KohakuShogiState(
+                    new_board, new_hand, self.player, self.step + 1
+                )
                 probe.get_legal_actions()
                 if probe.game_state == "win":
                     # Child is in check -- record it

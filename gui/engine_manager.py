@@ -38,9 +38,7 @@ class EngineManagerMixin:
         _algo_defaults[algo] = {name: default_val}.
         """
         exe_path = (
-            self.white["engine"]
-            or self.black["engine"]
-            or self._best_engine_for_game()
+            self.white["engine"] or self.black["engine"] or self._best_engine_for_game()
         )
         if exe_path is None:
             return
@@ -366,8 +364,10 @@ class EngineManagerMixin:
                     piece = self.game_state.board[player][fr][fc]
                 except (TypeError, IndexError):
                     piece = 0
-                is_pawn = (piece == 1)  # PAWN = 1 in both chess variants
-                is_last_rank = (tr == 0 and player == 0) or (tr == bh - 1 and player == 1)
+                is_pawn = piece == 1  # PAWN = 1 in both chess variants
+                is_last_rank = (tr == 0 and player == 0) or (
+                    tr == bh - 1 and player == 1
+                )
                 if is_pawn and is_last_rank:
                     # Try queen promotion (promo_idx=1 → to_r + BOARD_H)
                     promo_move = ((fr, fc), (tr + bh, tc))

@@ -2,12 +2,11 @@
 
 import glob
 import struct
-from typing import Dict, Optional
 
 # ---------------------------------------------------------------------------
 # Game configurations
 # ---------------------------------------------------------------------------
-GAME_CONFIGS: Dict[str, dict] = {
+GAME_CONFIGS: dict[str, dict] = {
     "minichess": {
         "board_h": 6,
         "board_w": 5,
@@ -54,12 +53,24 @@ GAME_CONFIGS: Dict[str, dict] = {
         "board_h": 7,
         "board_w": 6,
         "num_piece_types": 15,  # 0=empty, 1-8 base, 9-14 promoted
-        "num_pt_no_king": 14,   # C++ NUM_PT_NO_KING=14 (includes gap at KING index 8)
+        "num_pt_no_king": 14,  # C++ NUM_PT_NO_KING=14 (includes gap at KING index 8)
         "king_id": 8,
         "piece_names": [
             ".",
-            "P", "S", "G", "L", "N", "B", "R", "K",
-            "+P", "+S", "+L", "+N", "+B", "+R",
+            "P",
+            "S",
+            "G",
+            "L",
+            "N",
+            "B",
+            "R",
+            "K",
+            "+P",
+            "+S",
+            "+L",
+            "+N",
+            "+B",
+            "+R",
         ],
         "has_hand": True,
         "num_hand_types": 7,
@@ -167,7 +178,7 @@ def read_data_header(path: str) -> dict:
     return result
 
 
-def detect_game_from_file(path: str) -> Optional[str]:
+def detect_game_from_file(path: str) -> str | None:
     """Try to auto-detect game type from data file header."""
     try:
         hdr = read_data_header(path)
@@ -187,7 +198,7 @@ def detect_game_from_file(path: str) -> Optional[str]:
     return None
 
 
-def resolve_game(cli_game: Optional[str], data_pattern: str) -> dict:
+def resolve_game(cli_game: str | None, data_pattern: str) -> dict:
     """Resolve game config from CLI arg and/or data file auto-detection."""
     detected = None
     files = sorted(glob.glob(data_pattern))

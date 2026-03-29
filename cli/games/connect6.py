@@ -7,7 +7,12 @@ moves. The engine handles turn cycling via stones_left counter.
 import sys
 
 try:
-    from gui.games.connect6_engine import Connect6State, format_move, BOARD_SIZE, WIN_LENGTH
+    from gui.games.connect6_engine import (
+        Connect6State,
+        format_move,
+        BOARD_SIZE,
+        WIN_LENGTH,
+    )
 except ImportError:
     raise ImportError(
         "Connect6 CLI requires gui.games.connect6_engine. "
@@ -116,7 +121,7 @@ def apply_move(state, uci_str, game_ctx):
     row = size - int(uci_str[1:])
     board[row][col] = stone
 
-    switch = (stones_left == 1)
+    switch = stones_left == 1
     new_state = {
         "board": board,
         "size": size,

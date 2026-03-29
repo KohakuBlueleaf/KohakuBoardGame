@@ -52,7 +52,9 @@ class Connect6State:
         # Check for existing win
         for r in range(BOARD_SIZE):
             for c in range(BOARD_SIZE):
-                if self.board[r][c] != EMPTY and self._check_win(r, c, self.board[r][c]):
+                if self.board[r][c] != EMPTY and self._check_win(
+                    r, c, self.board[r][c]
+                ):
                     self.game_state = "win"
                     # Winner is whoever owns the winning stones
                     winning_stone = self.board[r][c]
@@ -84,7 +86,7 @@ class Connect6State:
     def next_state(self, move):
         _, (r, c) = move
         stone = self._stone_id(self.player)
-        switch_player = (self.stones_left == 1)
+        switch_player = self.stones_left == 1
 
         new = Connect6State.__new__(Connect6State)
         new.board = [row[:] for row in self.board]

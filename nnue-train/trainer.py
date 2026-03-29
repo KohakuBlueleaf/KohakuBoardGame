@@ -8,7 +8,6 @@ step-based LR, wandb for logging, step-based val, epoch checkpoints.
 import os
 import time
 from datetime import datetime
-from typing import Optional
 
 import numpy as np
 import torch
@@ -19,8 +18,20 @@ from tqdm import tqdm
 from .data import MmapDataSource
 from .dataset import NNUEDataset
 from .export import export_binary_weights, export_quantized_weights
-from .loss import dual_loss, nnue_loss, _score_to_wp, DEFAULT_SCORE_SCALE, DEFAULT_SCORE_MEAN
+from .game_config import resolve_game
+from .loss import (
+    DEFAULT_SCORE_MEAN,
+    DEFAULT_SCORE_SCALE,
+    _score_to_wp,
+    dual_loss,
+    nnue_loss,
+)
 from .model import GameNNUE
+
+try:
+    import wandb
+except ModuleNotFoundError:  # optional dependency
+    wandb = None
 
 
 class EMA:
@@ -111,15 +122,25 @@ class NNUETrainer:
         if self.model.use_policy:
             vp, pl = self.model(wf, bf, stm)
             loss = dual_loss(
-                vp, pl, sc, res, bm,
-                self.wdl_weight, self.policy_weight,
-                self.score_scale, self.score_mean,
+                vp,
+                pl,
+                sc,
+                res,
+                bm,
+                self.wdl_weight,
+                self.policy_weight,
+                self.score_scale,
+                self.score_mean,
             )
         else:
             vp = self.model(wf, bf, stm)
             loss = nnue_loss(
-                vp, sc, res, self.wdl_weight,
-                self.score_scale, self.score_mean,
+                vp,
+                sc,
+                res,
+                self.wdl_weight,
+                self.score_scale,
+                self.score_mean,
             )
 
         return loss, vp, sc, res
@@ -155,7 +176,9 @@ class NNUETrainer:
             total_loss += loss.item()
             total_mae += (vp - sc).abs().mean().item()
 
-            pred_winner = (_score_to_wp(vp, self.score_scale, self.score_mean) > 0.5).float()
+            pred_winner = (
+                _score_to_wp(vp, self.score_scale, self.score_mean) > 0.5
+            ).float()
             actual_winner = (res > 0).float()
             decisive = res != 0
             if decisive.any():
@@ -325,8 +348,6 @@ def _generate_run_name(args, gcfg):
 
 
 def train(args) -> None:
-    from .game_config import resolve_game
-
     gcfg = resolve_game(args.game, args.data)
     game_name = gcfg["name"]
     policy_size = gcfg["policy_size"]
@@ -419,8 +440,10 @@ def train(args) -> None:
     # ---- wandb -------------------------------------------------------------
     wandb_run = None
     if args.wandb:
-        import wandb
-
+        if wandb is None:
+            raise ImportError(
+                "wandb is required when --wandb is set: pip install wandb"
+            )
         run_name = args.wandb_name or _generate_run_name(args, gcfg)
         wandb_run = wandb.init(
             project=args.wandb_project,

@@ -1,6 +1,8 @@
 """Kohaku Shogi board renderer -- kanji pieces with direction indicators."""
 
 import math
+import os
+
 import pygame
 import pygame.freetype
 
@@ -173,8 +175,6 @@ class KohakuShogiRenderer:
         self._piece_font = None
 
         # Try bundled Zen Old Mincho font first
-        import os
-
         font_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "fonts")
         bundled_path = os.path.join(font_dir, "ZenOldMincho-Bold.ttf")
         if os.path.isfile(bundled_path):

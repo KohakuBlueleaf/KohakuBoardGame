@@ -258,12 +258,15 @@ class MiniChessState:
 
     def position_key(self):
         """Hashable key for the current board + side-to-move."""
-        return (self.player, tuple(
-            self.board[p][r][c]
-            for p in range(2)
-            for r in range(cfg.BOARD_H)
-            for c in range(cfg.BOARD_W)
-        ))
+        return (
+            self.player,
+            tuple(
+                self.board[p][r][c]
+                for p in range(2)
+                for r in range(cfg.BOARD_H)
+                for c in range(cfg.BOARD_W)
+            ),
+        )
 
     # ------------------------------------------------------------------ #
     # Next state

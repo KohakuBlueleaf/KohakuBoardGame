@@ -5,10 +5,18 @@ adapt to the chosen game. When --game is not specified, defaults to minichess.
 """
 
 import argparse
-import sys
 import os
-import time
 import subprocess
+import sys
+import time
+
+from cli.games.chess import get_context as _chess_ctx
+from cli.games.connect6 import get_context as _connect6_ctx
+from cli.games.kohakuchess import get_context as _kohakuchess_ctx
+from cli.games.kohakushogi import get_context as _kohakushogi_ctx
+from cli.games.minichess import get_context as _minichess_ctx
+from cli.games.minishogi import get_context as _minishogi_ctx
+from cli.games.shogi import get_context as _shogi_ctx
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -28,44 +36,39 @@ except ImportError:
     _parse_info = lambda line: {}  # fallback: no info parsing
 
 # ---------------------------------------------------------------------------
+# Game families -- reduce repeated set membership checks
+# ---------------------------------------------------------------------------
+
+_CHESS_FAMILY = frozenset({"minichess", "kohakuchess", "chess"})
+_SHOGI_FAMILY = frozenset({"minishogi", "kohakushogi", "shogi"})
+_BOARD_GAMES = _CHESS_FAMILY | _SHOGI_FAMILY  # games with .player / .legal_actions
+
+# ---------------------------------------------------------------------------
 # Game context -- populated once by _init_game(), replaces per-module globals
 # ---------------------------------------------------------------------------
 
-_game_ctx = {}  # populated by _init_game()
+_game_ctx: dict = {}  # populated by _init_game()
 
 
-def _init_game(game_name, board_size=None):
+def _init_game(game_name: str, board_size: int | None = None) -> None:
     """Initialize game-specific context. Called once from main()."""
-    if game_name == "minichess":
-        from cli.games.minichess import get_context
-
-        _game_ctx.update(get_context())
-    elif game_name == "connect6":
-        from cli.games.connect6 import get_context
-
-        _game_ctx.update(get_context(board_size or 15))
-    elif game_name == "minishogi":
-        from cli.games.minishogi import get_context
-
-        _game_ctx.update(get_context())
-    elif game_name == "kohakushogi":
-        from cli.games.kohakushogi import get_context
-
-        _game_ctx.update(get_context())
-    elif game_name == "shogi":
-        from cli.games.shogi import get_context
-
-        _game_ctx.update(get_context())
-    elif game_name == "kohakuchess":
-        from cli.games.kohakuchess import get_context
-
-        _game_ctx.update(get_context())
-    elif game_name == "chess":
-        from cli.games.chess import get_context
-
-        _game_ctx.update(get_context())
-    else:
-        _game_ctx.update({"name": "generic"})
+    match game_name:
+        case "minichess":
+            _game_ctx.update(_minichess_ctx())
+        case "connect6":
+            _game_ctx.update(_connect6_ctx(board_size or 15))
+        case "minishogi":
+            _game_ctx.update(_minishogi_ctx())
+        case "kohakushogi":
+            _game_ctx.update(_kohakushogi_ctx())
+        case "shogi":
+            _game_ctx.update(_shogi_ctx())
+        case "kohakuchess":
+            _game_ctx.update(_kohakuchess_ctx())
+        case "chess":
+            _game_ctx.update(_chess_ctx())
+        case _:
+            _game_ctx.update({"name": "generic"})
 
 
 ALGO_CHOICES = ["pvs", "alphabeta", "minimax", "random"]
@@ -75,12 +78,11 @@ ALGO_CHOICES = ["pvs", "alphabeta", "minimax", "random"]
 # ---------------------------------------------------------------------------
 
 
-def print_board(state):
+def print_board(state) -> None:
     """Dispatch to the appropriate board printer via _game_ctx."""
     printer = _game_ctx.get("print_board")
     if printer is not None:
         printer(state, _game_ctx)
-    # Generic: no board display
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +90,7 @@ def print_board(state):
 # ---------------------------------------------------------------------------
 
 
-def format_nodes(n):
+def format_nodes(n) -> str:
     """Format node count: 1234 -> '1.2K', 1234567 -> '1.2M'."""
     if n is None:
         return "?"
@@ -99,12 +101,12 @@ def format_nodes(n):
     return str(n)
 
 
-def format_search_info(info):
+def format_search_info(info: dict | None) -> str:
     """Format search info dict for display."""
     if not info:
         return ""
 
-    parts = []
+    parts: list[str] = []
 
     depth = info.get("depth")
     seldepth = info.get("seldepth")
@@ -136,31 +138,24 @@ def format_search_info(info):
     return ", ".join(parts)
 
 
-def format_move_display(move_or_uci, state=None):
+def format_move_display(move_or_uci, state=None) -> str:
     """Format a move for display, adapting to the active game type.
 
-    For minichess: uses the algebraic format_move (e.g. 'B2->B3').
+    For minichess/chess variants: uses the algebraic format_move (e.g. 'B2->B3').
     For connect6: shows the coordinate (e.g. 'E5').
     For generic: shows the raw UCI string.
     """
     game_name = _game_ctx.get("name", "generic")
-    if game_name in ("minichess", "kohakuchess") and not isinstance(move_or_uci, str):
-        return _game_ctx["format_move"](move_or_uci)
-    elif game_name in ("minishogi", "kohakushogi", "shogi") and not isinstance(
-        move_or_uci, str
-    ):
-        return _game_ctx["format_move"](move_or_uci)
-    elif game_name in ("minishogi", "kohakushogi", "shogi") and isinstance(
-        move_or_uci, str
-    ):
-        return move_or_uci.upper()
-    elif game_name == "connect6" and isinstance(move_or_uci, str):
-        # Connect6 UCI move is like "e5" (column letter + row number)
-        return move_or_uci.upper()
-    else:
-        if isinstance(move_or_uci, str):
-            return move_or_uci
-        return str(move_or_uci)
+
+    match game_name:
+        case n if n in _BOARD_GAMES and not isinstance(move_or_uci, str):
+            return _game_ctx["format_move"](move_or_uci)
+        case n if n in _SHOGI_FAMILY and isinstance(move_or_uci, str):
+            return move_or_uci.upper()
+        case "connect6" if isinstance(move_or_uci, str):
+            return move_or_uci.upper()
+        case _:
+            return move_or_uci if isinstance(move_or_uci, str) else str(move_or_uci)
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +163,14 @@ def format_move_display(move_or_uci, state=None):
 # ---------------------------------------------------------------------------
 
 
-def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
+def get_engine_move(
+    engine_path: str,
+    algo: str,
+    params: list[str] | None,
+    uci_moves: list[str],
+    time_limit: int,
+    depth: int = 0,
+) -> tuple[str | None, dict | None]:
     """Spawn engine, send UBGI/UCI commands, kill after timeout, parse output.
 
     Returns (bestmove_uci_str, last_info_dict) or (None, None).
@@ -191,7 +193,7 @@ def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
         proc.stdin.write((cmd + "\n").encode())
         proc.stdin.flush()
 
-    # Setup phase -- blocking communicate for handshake (UBGI, backward compatible with UCI)
+    # Setup phase -- blocking communicate for handshake
     setup_cmds = ["ubgi"]
     setup_cmds.append(f"setoption name Algorithm value {algo}")
     for p in params or []:
@@ -281,7 +283,7 @@ def get_engine_move(engine_path, algo, params, uci_moves, time_limit, depth=0):
 # ---------------------------------------------------------------------------
 
 
-def get_human_move_generic(uci_moves):
+def get_human_move_generic(uci_moves: list[str]) -> str:
     """Prompt human player for a raw UCI move string (generic game)."""
     side_name = "Player 1" if len(uci_moves) % 2 == 0 else "Player 2"
     print(f"  {side_name}'s turn.")
@@ -298,11 +300,150 @@ def get_human_move_generic(uci_moves):
 
 
 # ---------------------------------------------------------------------------
+# Game loop helpers
+# ---------------------------------------------------------------------------
+
+
+def _init_game_state(game_name: str):
+    """Create initial game state from context, or None for generic."""
+    if game_name == "generic":
+        return None
+    if "make_state" in _game_ctx:
+        return _game_ctx["make_state"](_game_ctx.get("board_size", 15))
+    return _game_ctx["state_class"].initial()
+
+
+def _side_labels(game_name: str) -> tuple[str, str]:
+    """Return (first_player_label, second_player_label) for the game."""
+    if game_name in _SHOGI_FAMILY:
+        return ("Sente", "Gote")
+    return ("White", "Black")
+
+
+def _check_game_over(state, game_name: str, verbose: bool) -> str | None:
+    """Check if the game is over. Returns 'white', 'black', 'draw', or None."""
+    if game_name == "generic":
+        return None
+
+    check_fn = _game_ctx.get("check_game_over")
+    result, winner = check_fn(state)
+    first_label, second_label = _side_labels(game_name)
+
+    if result in ("win", "checkmate", "perpetual_check", "stalemate_loss"):
+        if game_name == "connect6":
+            winner_str = "Player 1 (X)" if winner == 1 else "Player 2 (O)"
+            color = "white" if winner == 1 else "black"
+        else:
+            winner_str = first_label if winner == 0 else second_label
+            color = "white" if winner == 0 else "black"
+        if verbose:
+            match result:
+                case "checkmate":
+                    print(f"  >> Checkmate! {winner_str} wins!")
+                case "perpetual_check":
+                    print(f"  >> Perpetual check! {winner_str} wins!")
+                case "stalemate_loss":
+                    loser_str = first_label if winner == 1 else second_label
+                    print(f"  >> {loser_str} has no legal moves! {winner_str} wins!")
+                case _:
+                    print(f"  >> {winner_str} wins!")
+        return color
+
+    if result == "draw":
+        if verbose:
+            print("  >> Draw!")
+        return "draw"
+
+    if result == "no_moves":
+        if verbose:
+            loser = first_label if winner == 1 else second_label
+            print(f"  >> {loser} has no legal moves!")
+        # For board games, winner==0 means first player wins
+        if game_name in _BOARD_GAMES:
+            return "white" if winner == 0 else "black"
+        # connect6: winner value is 1-indexed player
+        return "white" if winner == 1 else "black"
+
+    return None  # game continues
+
+
+def _determine_side_to_move(state, game_name: str, uci_moves: list[str]) -> bool:
+    """Return True if it's White's (first player's) turn."""
+    if game_name in _BOARD_GAMES:
+        return state.player == 0
+    if game_name == "connect6":
+        return state["player"] == 1  # player 1 = "white" (first player)
+    return len(uci_moves) % 2 == 0
+
+
+def _get_human_move(state, game_name: str, verbose: bool, uci_moves: list[str]) -> str:
+    """Get a move from the human player, returning a UCI string."""
+    human_fn = _game_ctx.get("get_human_move")
+    if human_fn is None:
+        return get_human_move_generic(uci_moves)
+
+    if game_name in _BOARD_GAMES and verbose:
+        print(f"  Step {state.step}/{_game_ctx['max_step']}")
+
+    result = human_fn(state, _game_ctx)
+
+    if game_name in _BOARD_GAMES:
+        return _game_ctx["move_to_uci"](result)
+    return result
+
+
+def _validate_engine_move(
+    bestmove_uci: str, state, game_name: str, side_name: str, verbose: bool
+) -> bool:
+    """Validate an engine move against the current state. Returns True if valid."""
+    if game_name == "generic":
+        return True
+
+    try:
+        move = _game_ctx["uci_to_move"](bestmove_uci)
+    except (ValueError, IndexError, KeyError):
+        if verbose:
+            print(
+                f"  >> {side_name} engine returned invalid move "
+                f"'{bestmove_uci}'! {side_name} loses."
+            )
+        return False
+
+    if game_name in _BOARD_GAMES:
+        if move not in state.legal_actions:
+            if verbose:
+                print(
+                    f"  >> {side_name} engine returned illegal move "
+                    f"{_game_ctx['format_move'](move)}! {side_name} loses."
+                )
+            return False
+    elif game_name == "connect6":
+        _, (r, c) = move
+        size = state["size"]
+        if r < 0 or r >= size or c < 0 or c >= size:
+            if verbose:
+                print(
+                    f"  >> {side_name} engine returned out-of-bounds move "
+                    f"'{bestmove_uci}'! {side_name} loses."
+                )
+            return False
+        if state["board"][r][c] != 0:
+            if verbose:
+                print(
+                    f"  >> {side_name} engine returned move to occupied "
+                    f"square '{bestmove_uci}'! {side_name} loses."
+                )
+            return False
+
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Game loop
 # ---------------------------------------------------------------------------
 
 
-def _quit_engine(engine):
+def _quit_engine(engine) -> None:
     """Quit a UBGI/UCI engine, ignoring errors."""
     if engine is not None:
         try:
@@ -312,19 +453,19 @@ def _quit_engine(engine):
 
 
 def run_game(
-    white_path,
-    black_path,
-    time_limit,
-    white_algo,
-    black_algo,
-    verbose=True,
-    game_num=None,
-    total_games=None,
-    depth=0,
-    params=None,
-    white_params=None,
-    black_params=None,
-):
+    white_path: str,
+    black_path: str,
+    time_limit: int,
+    white_algo: str,
+    black_algo: str,
+    verbose: bool = True,
+    game_num: int | None = None,
+    total_games: int | None = None,
+    depth: int = 0,
+    params: list[str] | None = None,
+    white_params: list[str] | None = None,
+    black_params: list[str] | None = None,
+) -> str:
     """Run a single game between two players.
 
     Returns "white", "black", or "draw".
@@ -333,17 +474,9 @@ def run_game(
     """
     game_name = _game_ctx.get("name", "generic")
     has_state = game_name != "generic"
-    uci_moves = []
+    uci_moves: list[str] = []
     move_number = 0
-
-    # Initialize game state based on game type
-    if has_state:
-        if "make_state" in _game_ctx:
-            state = _game_ctx["make_state"](_game_ctx.get("board_size", 15))
-        else:
-            state = _game_ctx["state_class"].initial()
-    else:
-        state = None  # generic: no local state
+    state = _init_game_state(game_name)
 
     if verbose:
         if game_num is not None and total_games is not None:
@@ -359,72 +492,11 @@ def run_game(
     while True:
         # --- Check game over ---
         if has_state:
-            check_fn = _game_ctx.get("check_game_over")
-            result, winner = check_fn(state)
-            if result in ("win", "checkmate", "perpetual_check", "stalemate_loss"):
-                if game_name in ("minichess", "kohakuchess"):
-                    winner_str = "White" if winner == 0 else "Black"
-                    color = "white" if winner == 0 else "black"
-                elif game_name in ("minishogi", "kohakushogi", "shogi"):
-                    winner_str = "Sente" if winner == 0 else "Gote"
-                    color = "white" if winner == 0 else "black"
-                elif game_name == "connect6":
-                    winner_str = "Player 1 (X)" if winner == 1 else "Player 2 (O)"
-                    color = "white" if winner == 1 else "black"
-                else:
-                    winner_str = str(winner)
-                    color = "white" if winner in (0, 1) else "black"
-                if verbose:
-                    if result == "checkmate":
-                        print(f"  >> Checkmate! {winner_str} wins!")
-                    elif result == "perpetual_check":
-                        print(f"  >> Perpetual check! {winner_str} wins!")
-                    elif result == "stalemate_loss":
-                        loser_str = "Sente" if winner == 1 else "Gote"
-                        print(
-                            f"  >> {loser_str} has no legal moves! {winner_str} wins!"
-                        )
-                    else:
-                        print(f"  >> {winner_str} wins!")
-                return color
-            elif result == "draw":
-                if verbose:
-                    print(f"  >> Draw!")
-                return "draw"
-            elif result == "no_moves":
-                if verbose:
-                    if game_name in ("minishogi", "kohakushogi", "shogi"):
-                        loser = "Sente" if winner == 1 else "Gote"
-                    else:
-                        loser = "White" if winner == 1 else "Black"
-                    print(f"  >> {loser} has no legal moves!")
-                # winner value is the winning side
-                if game_name in (
-                    "minichess",
-                    "minishogi",
-                    "kohakuchess",
-                    "kohakushogi",
-                    "shogi",
-                    "chess",
-                ):
-                    return "white" if winner == 0 else "black"
-                else:
-                    return "white" if winner == 1 else "black"
+            over = _check_game_over(state, game_name, verbose)
+            if over is not None:
+                return over
 
-            # Determine which side to move
-            if game_name in (
-                "minichess",
-                "minishogi",
-                "kohakuchess",
-                "kohakushogi",
-                "shogi",
-                "chess",
-            ):
-                is_white = state.player == 0
-            elif game_name == "connect6":
-                is_white = state["player"] == 1  # player 1 = "white" (first player)
-            else:
-                is_white = len(uci_moves) % 2 == 0
+            is_white = _determine_side_to_move(state, game_name, uci_moves)
         else:
             # Generic: no game-over detection, rely on engine
             is_white = len(uci_moves) % 2 == 0
@@ -436,41 +508,11 @@ def run_game(
         if is_white:
             move_number += 1
 
-        bestmove_uci = None
-        info = None
+        bestmove_uci: str | None = None
+        info: dict | None = None
 
         if engine_path == "human":
-            # Human move input
-            human_fn = _game_ctx.get("get_human_move")
-            if human_fn is not None:
-                if (
-                    game_name
-                    in (
-                        "minichess",
-                        "minishogi",
-                        "kohakuchess",
-                        "kohakushogi",
-                        "shogi",
-                        "chess",
-                    )
-                    and verbose
-                ):
-                    print(f"  Step {state.step}/{_game_ctx['max_step']}")
-                result = human_fn(state, _game_ctx)
-                # For chess/shogi variants, result is a move tuple; for connect6, a UCI string
-                if game_name in (
-                    "minichess",
-                    "minishogi",
-                    "kohakuchess",
-                    "kohakushogi",
-                    "shogi",
-                    "chess",
-                ):
-                    bestmove_uci = _game_ctx["move_to_uci"](result)
-                else:
-                    bestmove_uci = result
-            else:
-                bestmove_uci = get_human_move_generic(uci_moves)
+            bestmove_uci = _get_human_move(state, game_name, verbose, uci_moves)
         else:
             side_params = list(params or [])
             extra = white_params if is_white else black_params
@@ -483,56 +525,22 @@ def run_game(
             if bestmove_uci is None:
                 if verbose:
                     print(
-                        f"  >> {side_name} engine failed to return a move! {side_name} loses."
+                        f"  >> {side_name} engine failed to return a move! "
+                        f"{side_name} loses."
                     )
                     print(
-                        f"     algo={algo_name}, moves={len(uci_moves)}, last_info={info}"
+                        f"     algo={algo_name}, moves={len(uci_moves)}, "
+                        f"last_info={info}"
                     )
                 return "black" if is_white else "white"
 
             # Move validation (for games with state)
-            if has_state:
-                try:
-                    move = _game_ctx["uci_to_move"](bestmove_uci)
-                except (ValueError, IndexError, KeyError):
-                    if verbose:
-                        print(
-                            f"  >> {side_name} engine returned invalid move '{bestmove_uci}'! {side_name} loses."
-                        )
-                    return "black" if is_white else "white"
+            if has_state and not _validate_engine_move(
+                bestmove_uci, state, game_name, side_name, verbose
+            ):
+                return "black" if is_white else "white"
 
-                if game_name in (
-                    "minichess",
-                    "minishogi",
-                    "kohakuchess",
-                    "kohakushogi",
-                    "shogi",
-                    "chess",
-                ):
-                    if move not in state.legal_actions:
-                        if verbose:
-                            print(
-                                f"  >> {side_name} engine returned illegal move {_game_ctx['format_move'](move)}! {side_name} loses."
-                            )
-                        return "black" if is_white else "white"
-                elif game_name == "connect6":
-                    # Validate placement is on an empty square and in bounds
-                    _, (r, c) = move
-                    size = state["size"]
-                    if r < 0 or r >= size or c < 0 or c >= size:
-                        if verbose:
-                            print(
-                                f"  >> {side_name} engine returned out-of-bounds move '{bestmove_uci}'! {side_name} loses."
-                            )
-                        return "black" if is_white else "white"
-                    if state["board"][r][c] != 0:
-                        if verbose:
-                            print(
-                                f"  >> {side_name} engine returned move to occupied square '{bestmove_uci}'! {side_name} loses."
-                            )
-                        return "black" if is_white else "white"
-
-        # For generic games, if engine returns "none" or "(none)", it means no moves
+        # For generic games, "none"/"(none)"/"0000" means no moves
         if game_name == "generic" and bestmove_uci in ("none", "(none)", "0000"):
             if verbose:
                 print(f"  >> {side_name} has no moves. Game over.")
@@ -561,18 +569,18 @@ def run_game(
 
 
 def run_tournament(
-    engine1_path,
-    engine2_path,
-    time_limit,
-    algo1,
-    algo2,
-    num_games,
-    verbose,
-    depth=0,
-    params=None,
-    engine1_params=None,
-    engine2_params=None,
-):
+    engine1_path: str,
+    engine2_path: str,
+    time_limit: int,
+    algo1: str,
+    algo2: str,
+    num_games: int,
+    verbose: bool,
+    depth: int = 0,
+    params: list[str] | None = None,
+    engine1_params: list[str] | None = None,
+    engine2_params: list[str] | None = None,
+) -> None:
     """Run a tournament of N games, alternating colors."""
     engine1_wins = 0
     engine2_wins = 0
@@ -626,21 +634,22 @@ def run_tournament(
                 black_params=b_params,
             )
 
-            if result == "white":
-                white_wins += 1
-                if engine1_is_white:
-                    engine1_wins += 1
-                else:
-                    engine2_wins += 1
-            elif result == "black":
-                black_wins += 1
-                if engine1_is_white:
-                    engine2_wins += 1
-                else:
-                    engine1_wins += 1
-            else:
-                draws += 1
-                color_draws += 1
+            match result:
+                case "white":
+                    white_wins += 1
+                    if engine1_is_white:
+                        engine1_wins += 1
+                    else:
+                        engine2_wins += 1
+                case "black":
+                    black_wins += 1
+                    if engine1_is_white:
+                        engine2_wins += 1
+                    else:
+                        engine1_wins += 1
+                case _:
+                    draws += 1
+                    color_draws += 1
 
             if not verbose:
                 winner_str = {"white": "1-0", "black": "0-1", "draw": "1/2"}[result]
@@ -672,7 +681,7 @@ def run_tournament(
     print("=" * 50)
 
 
-def main():
+def main() -> None:
     """Parse arguments and run UBGI CLI."""
 
     parser = argparse.ArgumentParser(
@@ -690,7 +699,8 @@ def main():
         "--game",
         default="minichess",
         help="Game type for board display and move input (default: minichess). "
-        "Built-in: minichess, minishogi, kohakuchess, kohakushogi, shogi, connect6. Use 'generic' for any other UBGI engine.",
+        "Built-in: minichess, minishogi, kohakuchess, kohakushogi, shogi, connect6. "
+        "Use 'generic' for any other UBGI engine.",
     )
     parser.add_argument(
         "--white", required=True, help='Path to UBGI/UCI engine for White, or "human".'

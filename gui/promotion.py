@@ -137,8 +137,10 @@ class PromotionMixin:
                 )
                 surf.blit(
                     label,
-                    (rect.centerx - label.get_width() // 2,
-                     rect.bottom - label.get_height() - 2),
+                    (
+                        rect.centerx - label.get_width() // 2,
+                        rect.bottom - label.get_height() - 2,
+                    ),
                 )
             except Exception:
                 pass
@@ -215,15 +217,19 @@ class PromotionMixin:
                 s = cache[(player, promoted_piece)]
                 surf.blit(
                     s,
-                    (promo_rect.centerx - s.get_width() // 2,
-                     promo_rect.centery - s.get_height() // 2 - 8),
+                    (
+                        promo_rect.centerx - s.get_width() // 2,
+                        promo_rect.centery - s.get_height() // 2 - 8,
+                    ),
                 )
             if (player, base_piece) in cache:
                 s = cache[(player, base_piece)]
                 surf.blit(
                     s,
-                    (keep_rect.centerx - s.get_width() // 2,
-                     keep_rect.centery - s.get_height() // 2 - 8),
+                    (
+                        keep_rect.centerx - s.get_width() // 2,
+                        keep_rect.centery - s.get_height() // 2 - 8,
+                    ),
                 )
 
         # Labels
@@ -233,13 +239,17 @@ class PromotionMixin:
             keep_label = label_font.render("Keep", True, (40, 40, 40))
             surf.blit(
                 promo_label,
-                (promo_rect.centerx - promo_label.get_width() // 2,
-                 promo_rect.bottom - promo_label.get_height() - 4),
+                (
+                    promo_rect.centerx - promo_label.get_width() // 2,
+                    promo_rect.bottom - promo_label.get_height() - 4,
+                ),
             )
             surf.blit(
                 keep_label,
-                (keep_rect.centerx - keep_label.get_width() // 2,
-                 keep_rect.bottom - keep_label.get_height() - 4),
+                (
+                    keep_rect.centerx - keep_label.get_width() // 2,
+                    keep_rect.bottom - keep_label.get_height() - 4,
+                ),
             )
         except Exception:
             pass

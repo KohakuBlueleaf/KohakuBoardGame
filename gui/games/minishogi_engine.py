@@ -498,11 +498,18 @@ class MiniShogiState:
 
     def position_key(self):
         """Hashable key for the current board + hand + side-to-move."""
-        return (self.player,
-                tuple(self.board[p][r][c]
-                      for p in range(2) for r in range(BOARD_SIZE) for c in range(BOARD_SIZE)),
-                tuple(self.hand[p][pt]
-                      for p in range(2) for pt in range(len(self.hand[0]))))
+        return (
+            self.player,
+            tuple(
+                self.board[p][r][c]
+                for p in range(2)
+                for r in range(BOARD_SIZE)
+                for c in range(BOARD_SIZE)
+            ),
+            tuple(
+                self.hand[p][pt] for p in range(2) for pt in range(len(self.hand[0]))
+            ),
+        )
 
     # ------------------------------------------------------------------ #
     # Lightweight helpers for checkmate detection
@@ -576,7 +583,10 @@ class MiniShogiState:
                     while 0 <= ar < BOARD_SIZE and 0 <= ac < BOARD_SIZE:
                         if ar == king_r and ac == king_c:
                             return True
-                        if self.board[me][ar][ac] != EMPTY or self.board[opp][ar][ac] != EMPTY:
+                        if (
+                            self.board[me][ar][ac] != EMPTY
+                            or self.board[opp][ar][ac] != EMPTY
+                        ):
                             break
                         ar += dr
                         ac += dc
@@ -698,7 +708,9 @@ class MiniShogiState:
         # Checkmate: current player is in check and every move
         # still leaves king capturable.
         # Use lightweight _can_capture_king (no drops/uchifuzume).
-        if self._can_capture_king(1 - self.player):  # opponent can take our king = we are in check
+        if self._can_capture_king(
+            1 - self.player
+        ):  # opponent can take our king = we are in check
             for move in self.legal_actions:
                 child = self._apply_move_raw(move)
                 if not child._can_capture_king(self.player):

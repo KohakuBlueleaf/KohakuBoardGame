@@ -1,7 +1,7 @@
 """UBGI GUI -- entry point and game loop."""
 
-import sys
 import time
+import tkinter as tk
 import argparse
 
 import pygame
@@ -13,6 +13,7 @@ try:
     from gui.engine_manager import EngineManagerMixin
     from gui.promotion import PromotionMixin
     from gui.dialogs import DialogsMixin
+    from gui.game_registry import get_game_module, configure_board_size
     from gui.logger import log
     import gui.config as _cfg
 except ImportError:
@@ -22,278 +23,9 @@ except ImportError:
     from engine_manager import EngineManagerMixin
     from promotion import PromotionMixin
     from dialogs import DialogsMixin
+    from game_registry import get_game_module, configure_board_size
     from logger import log
     import config as _cfg
-
-
-def _get_game_module(game_name):
-    """Return (StateClass, format_move, RendererClass, player_labels, player_colors) for the given game."""
-    # Default: no drops (overridden by shogi games)
-    _cfg.DROP_PIECE_CHAR = {}
-    _cfg.CHAR_TO_DROP_PIECE = {}
-
-    if game_name in ("Connect6", "connect6"):
-        try:
-            from gui.games.connect6_engine import (
-                Connect6State,
-                format_move,
-                PLAYER_LABELS,
-                PLAYER_COLORS,
-            )
-            from gui.games.connect6_renderer import Connect6Renderer
-        except ImportError:
-            from games.connect6_engine import (
-                Connect6State,
-                format_move,
-                PLAYER_LABELS,
-                PLAYER_COLORS,
-            )
-            from games.connect6_renderer import Connect6Renderer
-        return (
-            Connect6State,
-            format_move,
-            Connect6Renderer,
-            PLAYER_LABELS,
-            PLAYER_COLORS,
-        )
-    if game_name in ("MiniShogi", "minishogi"):
-        try:
-            from gui.games.minishogi_engine import (
-                MiniShogiState,
-                format_move,
-                PLAYER_LABELS,
-                PLAYER_COLORS,
-                DROP_PIECE_CHAR,
-                CHAR_TO_DROP_PIECE,
-                PROMOTE_MAP,
-            )
-            from gui.games.minishogi_renderer import MiniShogiRenderer
-        except ImportError:
-            from games.minishogi_engine import (
-                MiniShogiState,
-                format_move,
-                PLAYER_LABELS,
-                PLAYER_COLORS,
-                DROP_PIECE_CHAR,
-                CHAR_TO_DROP_PIECE,
-                PROMOTE_MAP,
-            )
-            from games.minishogi_renderer import MiniShogiRenderer
-        _cfg.DROP_PIECE_CHAR = DROP_PIECE_CHAR
-        _cfg.CHAR_TO_DROP_PIECE = CHAR_TO_DROP_PIECE
-        _cfg.PROMOTE_MAP = PROMOTE_MAP
-        return (
-            MiniShogiState,
-            format_move,
-            MiniShogiRenderer,
-            PLAYER_LABELS,
-            PLAYER_COLORS,
-        )
-    if game_name in ("KohakuShogi", "kohakushogi"):
-        try:
-            from gui.games.kohakushogi_engine import (
-                KohakuShogiState,
-                format_move,
-                PLAYER_LABELS,
-                PLAYER_COLORS,
-                DROP_PIECE_CHAR,
-                CHAR_TO_DROP_PIECE,
-                PROMOTE_MAP,
-            )
-            from gui.games.kohakushogi_renderer import KohakuShogiRenderer
-        except ImportError:
-            from games.kohakushogi_engine import (
-                KohakuShogiState,
-                format_move,
-                PLAYER_LABELS,
-                PLAYER_COLORS,
-                DROP_PIECE_CHAR,
-                CHAR_TO_DROP_PIECE,
-                PROMOTE_MAP,
-            )
-            from games.kohakushogi_renderer import KohakuShogiRenderer
-        _cfg.DROP_PIECE_CHAR = DROP_PIECE_CHAR
-        _cfg.CHAR_TO_DROP_PIECE = CHAR_TO_DROP_PIECE
-        _cfg.PROMOTE_MAP = PROMOTE_MAP
-        return (
-            KohakuShogiState,
-            format_move,
-            KohakuShogiRenderer,
-            PLAYER_LABELS,
-            PLAYER_COLORS,
-        )
-    if game_name in ("Shogi", "shogi"):
-        try:
-            from gui.games.shogi_engine import (
-                ShogiState,
-                format_move,
-                PLAYER_LABELS,
-                PLAYER_COLORS,
-                DROP_PIECE_CHAR,
-                CHAR_TO_DROP_PIECE,
-                PROMOTE_MAP,
-            )
-            from gui.games.shogi_renderer import ShogiRenderer
-        except ImportError:
-            from games.shogi_engine import (
-                ShogiState,
-                format_move,
-                PLAYER_LABELS,
-                PLAYER_COLORS,
-                DROP_PIECE_CHAR,
-                CHAR_TO_DROP_PIECE,
-                PROMOTE_MAP,
-            )
-            from games.shogi_renderer import ShogiRenderer
-        _cfg.DROP_PIECE_CHAR = DROP_PIECE_CHAR
-        _cfg.CHAR_TO_DROP_PIECE = CHAR_TO_DROP_PIECE
-        _cfg.PROMOTE_MAP = PROMOTE_MAP
-        return (
-            ShogiState,
-            format_move,
-            ShogiRenderer,
-            PLAYER_LABELS,
-            PLAYER_COLORS,
-        )
-    if game_name in ("KohakuChess", "kohakuchess"):
-        try:
-            from gui.games.kohakuchess_engine import (
-                KohakuChessState,
-                format_move,
-                PLAYER_LABELS,
-                PLAYER_COLORS,
-            )
-            from gui.games.kohakuchess_renderer import KohakuChessRenderer
-        except ImportError:
-            from games.kohakuchess_engine import (
-                KohakuChessState,
-                format_move,
-                PLAYER_LABELS,
-                PLAYER_COLORS,
-            )
-            from games.kohakuchess_renderer import KohakuChessRenderer
-        return (
-            KohakuChessState,
-            format_move,
-            KohakuChessRenderer,
-            PLAYER_LABELS,
-            PLAYER_COLORS,
-        )
-    if game_name in ("Chess", "chess"):
-        try:
-            from gui.games.chess_engine import (
-                ChessState,
-                format_move,
-                PLAYER_LABELS,
-                PLAYER_COLORS,
-            )
-            from gui.games.chess_renderer import ChessRenderer
-        except ImportError:
-            from games.chess_engine import (
-                ChessState,
-                format_move,
-                PLAYER_LABELS,
-                PLAYER_COLORS,
-            )
-            from games.chess_renderer import ChessRenderer
-        return (
-            ChessState,
-            format_move,
-            ChessRenderer,
-            PLAYER_LABELS,
-            PLAYER_COLORS,
-        )
-    try:
-        from gui.games.minichess_engine import (
-            MiniChessState,
-            format_move,
-            PLAYER_LABELS,
-            PLAYER_COLORS,
-        )
-        from gui.games.minichess_renderer import MiniChessRenderer
-    except ImportError:
-        from games.minichess_engine import (
-            MiniChessState,
-            format_move,
-            PLAYER_LABELS,
-            PLAYER_COLORS,
-        )
-        from games.minichess_renderer import MiniChessRenderer
-    return MiniChessState, format_move, MiniChessRenderer, PLAYER_LABELS, PLAYER_COLORS
-
-
-def _configure_board_size(game_name):
-    """Set config board dimensions based on game type."""
-    if game_name in ("Connect6", "connect6"):
-        _cfg.BOARD_H = 15
-        _cfg.BOARD_W = 15
-        _cfg.SQUARE_SIZE = 36  # smaller squares for 15x15 board
-        _cfg.MAX_STEP = _cfg.BOARD_H * _cfg.BOARD_W
-        _cfg.SCORE_PLOT_MAX_CP = 10000  # connect6 threats score large
-        _cfg.SCORE_DISPLAY_DIV = 2000  # normalize to ±5 range for display
-    elif game_name in ("MiniShogi", "minishogi"):
-        _cfg.BOARD_H = 5
-        _cfg.BOARD_W = 5
-        _cfg.SQUARE_SIZE = 70  # larger squares for kanji
-        _cfg.MAX_STEP = 200
-        _cfg.SCORE_PLOT_MAX_CP = 2000
-        _cfg.SCORE_DISPLAY_DIV = 100
-        _cfg.HAND_ROW_H = 60  # height of each hand row (gote top, sente bottom)
-    elif game_name in ("KohakuShogi", "kohakushogi"):
-        _cfg.BOARD_H = 7
-        _cfg.BOARD_W = 6
-        _cfg.SQUARE_SIZE = 64  # medium squares for 7x6 board with kanji
-        _cfg.MAX_STEP = 300
-        _cfg.SCORE_PLOT_MAX_CP = 2000
-        _cfg.SCORE_DISPLAY_DIV = 100
-        _cfg.HAND_ROW_H = 60  # height of each hand row (gote top, sente bottom)
-    elif game_name in ("Shogi", "shogi"):
-        _cfg.BOARD_H = 9
-        _cfg.BOARD_W = 9
-        _cfg.SQUARE_SIZE = 56  # smaller squares for 9x9 board with kanji
-        _cfg.MAX_STEP = 512
-        _cfg.SCORE_PLOT_MAX_CP = 2000
-        _cfg.SCORE_DISPLAY_DIV = 100
-        _cfg.HAND_ROW_H = 60  # height of each hand row (gote top, sente bottom)
-    elif game_name in ("KohakuChess", "kohakuchess"):
-        _cfg.BOARD_H = 6
-        _cfg.BOARD_W = 6
-        _cfg.SQUARE_SIZE = 80  # medium squares for 6x6 chess board
-        _cfg.MAX_STEP = 150
-        _cfg.SCORE_PLOT_MAX_CP = 500
-        _cfg.SCORE_DISPLAY_DIV = 100
-    elif game_name in ("Chess", "chess"):
-        _cfg.BOARD_H = 8
-        _cfg.BOARD_W = 8
-        _cfg.SQUARE_SIZE = 60  # 8x8 board fits well with 60px squares
-        _cfg.MAX_STEP = 300
-        _cfg.SCORE_PLOT_MAX_CP = 500
-        _cfg.SCORE_DISPLAY_DIV = 100
-    else:
-        _cfg.BOARD_H = 6
-        _cfg.BOARD_W = 5
-        _cfg.SQUARE_SIZE = 80
-        _cfg.MAX_STEP = 100
-        _cfg.SCORE_PLOT_MAX_CP = 500  # chess centipawns
-        _cfg.SCORE_DISPLAY_DIV = 100  # centipawns → pawns
-    _cfg.BOARD_PIXEL_W = _cfg.BOARD_W * _cfg.SQUARE_SIZE
-    _cfg.BOARD_PIXEL_H = _cfg.BOARD_H * _cfg.SQUARE_SIZE
-    _cfg.COL_LABELS = "".join(chr(65 + i) for i in range(_cfg.BOARD_W))
-    _cfg.ROW_LABELS = [str(_cfg.BOARD_H - i) for i in range(_cfg.BOARD_H)]
-    # Hand rows for games with captured pieces (e.g. MiniShogi)
-    hand_h = getattr(_cfg, "HAND_ROW_H", 0)
-    _cfg.HAND_TOP_Y = _cfg.BOARD_Y  # gote hand row above board
-    if hand_h:
-        _cfg.BOARD_Y += hand_h  # push board down below gote hand
-    # Sente hand goes BELOW the column labels (LABEL_MARGIN below board)
-    _cfg.HAND_BOTTOM_Y = _cfg.BOARD_Y + _cfg.BOARD_PIXEL_H + _cfg.LABEL_MARGIN
-    total_h = hand_h + _cfg.BOARD_PIXEL_H + _cfg.LABEL_MARGIN + hand_h
-    _cfg.PANEL_X = _cfg.BOARD_X + _cfg.BOARD_PIXEL_W + 16
-    _cfg.PANEL_Y = _cfg.HAND_TOP_Y
-    _cfg.PANEL_H = max(getattr(_cfg, "PANEL_H", total_h), total_h)
-    _cfg.BOTTOM_Y = _cfg.HAND_TOP_Y + total_h + 4
-    _cfg.WINDOW_W = _cfg.PANEL_X + _cfg.PANEL_WIDTH + 12
-    _cfg.WINDOW_H = _cfg.BOTTOM_Y + _cfg.BOTTOM_H + 8
 
 
 class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
@@ -301,14 +33,12 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
 
     def __init__(self, game_name="minichess"):
         # Configure board size BEFORE creating the window
-        _configure_board_size(game_name)
+        configure_board_size(game_name)
 
         # Initialize Tk BEFORE pygame to avoid NSApplication conflict on macOS.
         # SDL and Tk both register their own NSApplication subclass; whichever
         # comes second crashes.  Keeping a hidden Tk root alive lets us reuse
         # it for settings dialogs later.
-        import tkinter as tk
-
         self._tk_root = tk.Tk()
         self._tk_root.withdraw()
 
@@ -320,7 +50,7 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
 
         # Select game module (state class, move formatter, renderer, labels, colors)
         state_cls, fmt_move, renderer_cls, player_labels, player_colors = (
-            _get_game_module(game_name)
+            get_game_module(game_name)
         )
         self._state_class = state_cls
         self._format_move = fmt_move
@@ -572,21 +302,22 @@ class GameApp(EngineManagerMixin, PromotionMixin, DialogsMixin):
                 return
 
         action = self.side_panel.handle_click(x, y)
-        if action == "reset":
-            self.reset()
-        elif action == "new_game":
-            self.open_new_game_dialog()
-        elif action == "settings":
-            self.open_settings()
-        elif action == "undo":
-            self.undo_move()
-        elif action == "analyze":
-            self.toggle_analyze()
-        elif action == "stop":
-            if self._is_gaming():
-                self._paused = not self._paused
-                if not self._paused:
-                    self._trigger_ai_if_needed()
+        match action:
+            case "reset":
+                self.reset()
+            case "new_game":
+                self.open_new_game_dialog()
+            case "settings":
+                self.open_settings()
+            case "undo":
+                self.undo_move()
+            case "analyze":
+                self.toggle_analyze()
+            case "stop":
+                if self._is_gaming():
+                    self._paused = not self._paused
+                    if not self._paused:
+                        self._trigger_ai_if_needed()
 
     def _handle_keydown(self, key):
         if key == pygame.K_n:

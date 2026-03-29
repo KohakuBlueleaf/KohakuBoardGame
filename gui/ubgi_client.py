@@ -4,10 +4,16 @@ UBGI (Universal Board Game Interface) is backward compatible with UCI.
 The handshake sends 'ubgi' and accepts both 'ubgiok' and 'uciok'.
 """
 
-import subprocess
-import threading
 import os
+import subprocess
 import sys
+import threading
+import time
+
+try:
+    import gui.config as _c
+except ImportError:
+    import config as _c
 
 try:
     from gui.logger import log as _log
@@ -17,10 +23,18 @@ except ImportError:
     except ImportError:
         # Fallback if logger not available
         class _DummyLog:
-            def debug(self, m): pass
-            def info(self, m): pass
-            def warning(self, m): pass
-            def error(self, m): pass
+            def debug(self, m):
+                pass
+
+            def info(self, m):
+                pass
+
+            def warning(self, m):
+                pass
+
+            def error(self, m):
+                pass
+
         _log = _DummyLog()
 
 
@@ -187,11 +201,9 @@ class UBGIEngine:
         Returns True if bestmove was received, False on timeout.
         Safe to call even if not searching.
         """
-        import threading as _threading
-
         if not self._searching:
             return True
-        event = _threading.Event()
+        event = threading.Event()
         old_done = self._done_callback
 
         def _on_done(bm):
@@ -266,8 +278,6 @@ class UBGIEngine:
 
         Returns True if the target was found, False on timeout.
         """
-        import time
-
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             line = self._readline()
@@ -283,8 +293,6 @@ class UBGIEngine:
         Populates self.options with parsed option dicts.
         Returns True if 'uciok' or 'ubgiok' was found, False on timeout.
         """
-        import time
-
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             line = self._readline()
@@ -373,101 +381,52 @@ class UBGIEngine:
         i = 0
         while i < len(tokens):
             token = tokens[i]
+            match token:
+                case (
+                    "depth"
+                    | "seldepth"
+                    | "nodes"
+                    | "time"
+                    | "nps"
+                    | "multipv"
+                    | "hashfull"
+                    | "tbhits"
+                    | "currmovenumber"
+                ) if i + 1 < len(tokens):
+                    try:
+                        result[token] = int(tokens[i + 1])
+                    except ValueError:
+                        pass
+                    i += 2
 
-            if token == "depth" and i + 1 < len(tokens):
-                try:
-                    result["depth"] = int(tokens[i + 1])
-                except ValueError:
-                    pass
-                i += 2
-
-            elif token == "seldepth" and i + 1 < len(tokens):
-                try:
-                    result["seldepth"] = int(tokens[i + 1])
-                except ValueError:
-                    pass
-                i += 2
-
-            elif token == "score" and i + 2 < len(tokens):
-                score_type = tokens[i + 1]
-                try:
-                    score_val = int(tokens[i + 2])
-                except ValueError:
+                case "score" if i + 2 < len(tokens):
+                    score_type = tokens[i + 1]
+                    try:
+                        score_val = int(tokens[i + 2])
+                    except ValueError:
+                        i += 3
+                        continue
+                    if score_type == "cp":
+                        result["score_cp"] = score_val
+                    elif score_type == "mate":
+                        result["score_cp"] = 10000 * (1 if score_val > 0 else -1)
+                        result["score_mate"] = score_val
                     i += 3
-                    continue
-                if score_type == "cp":
-                    result["score_cp"] = score_val
-                elif score_type == "mate":
-                    # Convert mate score to a large cp value
-                    result["score_cp"] = 10000 * (1 if score_val > 0 else -1)
-                    result["score_mate"] = score_val
-                i += 3
 
-            elif token == "nodes" and i + 1 < len(tokens):
-                try:
-                    result["nodes"] = int(tokens[i + 1])
-                except ValueError:
-                    pass
-                i += 2
+                case "pv":
+                    result["pv"] = tokens[i + 1 :]
+                    break
 
-            elif token == "time" and i + 1 < len(tokens):
-                try:
-                    result["time"] = int(tokens[i + 1])
-                except ValueError:
-                    pass
-                i += 2
+                case "string":
+                    result["string"] = " ".join(tokens[i + 1 :])
+                    break
 
-            elif token == "nps" and i + 1 < len(tokens):
-                try:
-                    result["nps"] = int(tokens[i + 1])
-                except ValueError:
-                    pass
-                i += 2
+                case "currmove" if i + 1 < len(tokens):
+                    result["currmove"] = tokens[i + 1]
+                    i += 2
 
-            elif token == "pv":
-                # All remaining tokens are the PV
-                result["pv"] = tokens[i + 1 :]
-                break
-
-            elif token == "string":
-                # 'string' consumes the rest of the line
-                result["string"] = " ".join(tokens[i + 1 :])
-                break
-
-            elif token == "multipv" and i + 1 < len(tokens):
-                try:
-                    result["multipv"] = int(tokens[i + 1])
-                except ValueError:
-                    pass
-                i += 2
-
-            elif token == "hashfull" and i + 1 < len(tokens):
-                try:
-                    result["hashfull"] = int(tokens[i + 1])
-                except ValueError:
-                    pass
-                i += 2
-
-            elif token == "tbhits" and i + 1 < len(tokens):
-                try:
-                    result["tbhits"] = int(tokens[i + 1])
-                except ValueError:
-                    pass
-                i += 2
-
-            elif token == "currmove" and i + 1 < len(tokens):
-                result["currmove"] = tokens[i + 1]
-                i += 2
-
-            elif token == "currmovenumber" and i + 1 < len(tokens):
-                try:
-                    result["currmovenumber"] = int(tokens[i + 1])
-                except ValueError:
-                    pass
-                i += 2
-
-            else:
-                i += 1
+                case _:
+                    i += 1
 
         return result
 
@@ -587,10 +546,6 @@ class UBGIEngine:
         Board move: returns e.g. 'a2a3' or 'a2a10'.
         Promotion move (to_r >= BOARD_H): returns e.g. 'a1b2+'.
         """
-        try:
-            import gui.config as _c
-        except ImportError:
-            import config as _c
         bh = _c.BOARD_H
         (fr, fc), (tr, tc) = move
         col_ch = lambda c: chr(ord("a") + c)
@@ -631,10 +586,6 @@ class UBGIEngine:
         Board move: two squares concatenated (e.g. 'a2a3', 'a2a10').
         Trailing '+' = promotion (to_r += BOARD_H).
         """
-        try:
-            import gui.config as _c
-        except ImportError:
-            import config as _c
         bh = _c.BOARD_H
         if uci_str is None or len(uci_str) < 2:
             return None
@@ -679,8 +630,16 @@ class UBGIEngine:
                 tr += bh
             else:
                 # Chess-style promotion suffix: q=1, r=2, b=3, n=4
-                promo_map = {"q": 1, "Q": 1, "r": 2, "R": 2,
-                             "b": 3, "B": 3, "n": 4, "N": 4}
+                promo_map = {
+                    "q": 1,
+                    "Q": 1,
+                    "r": 2,
+                    "R": 2,
+                    "b": 3,
+                    "B": 3,
+                    "n": 4,
+                    "N": 4,
+                }
                 pidx = promo_map.get(suffix, 0)
                 if pidx > 0:
                     tr += bh * pidx

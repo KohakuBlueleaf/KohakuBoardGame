@@ -1,7 +1,10 @@
 """Dialog mixin for GameApp — New Game, Settings, Params."""
 
-import os
 import glob
+import os
+import re
+import tkinter as tk
+from tkinter import ttk
 
 try:
     from gui.ubgi_client import discover_engines
@@ -23,8 +26,7 @@ def _discover_nnue_models(game_name):
     names.add(game_name.replace(" ", ""))
     names.add(game_name.replace(" ", "").lower())
     # CamelCase → snake_case: "KohakuShogi" → "kohakushogi"
-    import re
-    snake = re.sub(r'(?<!^)(?=[A-Z])', '_', game_name).lower()
+    snake = re.sub(r"(?<!^)(?=[A-Z])", "_", game_name).lower()
     names.add(snake)
     # Also strip underscores: "kohakushogi" → "kohakushogi"
     names.add(game_name.lower().replace("_", ""))
@@ -45,9 +47,6 @@ class DialogsMixin:
 
     def open_new_game_dialog(self):
         """Player setup dialog → starts a new game on OK."""
-        import tkinter as tk
-        from tkinter import ttk
-
         self._available_engines = discover_engines(_cfg.BUILD_DIR)
         engine_names = ["Human"] + [name for name, _path in self._available_engines]
         engine_paths = [None] + [path for _name, path in self._available_engines]
@@ -149,9 +148,9 @@ class DialogsMixin:
         ttk.Label(dialog, text="Time limit (s):").grid(
             row=2, column=0, sticky="w", **pad
         )
-        ttk.Spinbox(dialog, from_=0.1, to=30, increment=0.1, textvariable=time_var, width=5).grid(
-            row=2, column=1, sticky="w", **pad
-        )
+        ttk.Spinbox(
+            dialog, from_=0.1, to=30, increment=0.1, textvariable=time_var, width=5
+        ).grid(row=2, column=1, sticky="w", **pad)
 
         def _update():
             for w in w_widgets:
@@ -259,9 +258,6 @@ class DialogsMixin:
 
     def open_settings(self):
         """Settings dialog: analyze engine config + time limit. Saves without starting game."""
-        import tkinter as tk
-        from tkinter import ttk
-
         self._available_engines = discover_engines(_cfg.BUILD_DIR)
         engine_names = ["Human"] + [name for name, _path in self._available_engines]
         engine_paths = [None] + [path for _name, path in self._available_engines]
@@ -344,9 +340,9 @@ class DialogsMixin:
         ttk.Label(dialog, text="Time limit (s):").grid(
             row=1, column=0, sticky="w", **pad
         )
-        ttk.Spinbox(dialog, from_=0.1, to=30, increment=0.1, textvariable=time_var, width=5).grid(
-            row=1, column=1, sticky="w", **pad
-        )
+        ttk.Spinbox(
+            dialog, from_=0.1, to=30, increment=0.1, textvariable=time_var, width=5
+        ).grid(row=1, column=1, sticky="w", **pad)
 
         # MultiPV and PV display settings
         pv_frame = ttk.LabelFrame(dialog, text="PV Display")
@@ -356,19 +352,17 @@ class DialogsMixin:
         ttk.Label(pv_frame, text="MultiPV:").grid(
             row=0, column=0, sticky="w", padx=4, pady=2
         )
-        ttk.Spinbox(pv_frame, from_=1, to=10, increment=1,
-                     textvariable=multi_pv_var, width=5).grid(
-            row=0, column=1, sticky="w", padx=4, pady=2
-        )
+        ttk.Spinbox(
+            pv_frame, from_=1, to=10, increment=1, textvariable=multi_pv_var, width=5
+        ).grid(row=0, column=1, sticky="w", padx=4, pady=2)
 
         pv_steps_var = tk.IntVar(value=self.pv_display_steps)
         ttk.Label(pv_frame, text="PV Steps:").grid(
             row=1, column=0, sticky="w", padx=4, pady=2
         )
-        ttk.Spinbox(pv_frame, from_=1, to=20, increment=1,
-                     textvariable=pv_steps_var, width=5).grid(
-            row=1, column=1, sticky="w", padx=4, pady=2
-        )
+        ttk.Spinbox(
+            pv_frame, from_=1, to=20, increment=1, textvariable=pv_steps_var, width=5
+        ).grid(row=1, column=1, sticky="w", padx=4, pady=2)
 
         # Buttons
         bf = ttk.Frame(dialog)
@@ -426,9 +420,12 @@ class DialogsMixin:
         self.multi_pv = new_multi_pv
 
         # Send MultiPV option to running analyze engine if changed
-        if multi_pv_changed and self._analyze_engine is not None and self._analyze_engine.is_alive():
+        if (
+            multi_pv_changed
+            and self._analyze_engine is not None
+            and self._analyze_engine.is_alive()
+        ):
             self._analyze_engine.set_option("MultiPV", str(self.multi_pv))
-
 
         # Restart analysis if it was running
         if self.analyze["enabled"]:
@@ -443,9 +440,6 @@ class DialogsMixin:
             params_dict: Mutable dict of param_name -> value_string.
                          Modified in-place if OK is clicked.
         """
-        import tkinter as tk
-        from tkinter import ttk
-
         sub = tk.Toplevel(parent)
         sub.title(f"Search Parameters ({algo_name})")
         sub.resizable(False, False)

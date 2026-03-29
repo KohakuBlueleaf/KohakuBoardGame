@@ -8,7 +8,6 @@ import glob
 import os
 import struct
 import sys
-from typing import List, Tuple
 
 import numpy as np
 
@@ -84,7 +83,7 @@ class MmapDataSource:
         self.gcfg = gcfg
         board_cells = gcfg["board_cells"]
 
-        self.metas: List[FileMeta] = []
+        self.metas: list[FileMeta] = []
         file_indices = []
         record_indices = []
 

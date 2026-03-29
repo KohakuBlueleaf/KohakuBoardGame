@@ -1,5 +1,7 @@
 """Board renderer for UBGI games."""
 
+import math
+
 import pygame
 import pygame.freetype
 
@@ -245,8 +247,6 @@ class BoardRenderer:
 
     def _draw_pv_arrows(self, pv_moves):
         """Draw numbered arrows on the board for the principal variation."""
-        import math
-
         if not pv_moves:
             return
 
@@ -341,8 +341,6 @@ class BoardRenderer:
         - Best PV sequence (steps 2+): BLUE arrows with step numbers
         - No rank numbers on any arrow
         """
-        import math
-
         if not pv_multi:
             return
 
