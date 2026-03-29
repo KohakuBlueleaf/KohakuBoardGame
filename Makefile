@@ -11,6 +11,7 @@ STATE_SOURCE_GK = $(SOURCES_DIR)/games/connect6/state.cpp
 STATE_SOURCE_KS = $(SOURCES_DIR)/games/kohakushogi/state.cpp
 STATE_SOURCE_KC = $(SOURCES_DIR)/games/kohakuchess/state.cpp
 STATE_SOURCE_CH = $(SOURCES_DIR)/games/chess/state.cpp
+STATE_SOURCE_SH = $(SOURCES_DIR)/games/shogi/state.cpp
 NNUE_SOURCE = $(SOURCES_DIR)/nnue/nnue.cpp
 POLICY_SRC = $(wildcard $(SOURCES_DIR)/policy/*.cpp)
 UNITTESTS = $(wildcard $(UNITTEST_DIR)/*.cpp)
@@ -23,9 +24,10 @@ MINISHOGI_INC = -Isrc/games/minishogi -Isrc/state -Isrc
 KOHAKU_SHOGI_INC = -Isrc/games/kohakushogi -Isrc/state -Isrc
 KOHAKU_CHESS_INC = -Isrc/games/kohakuchess -Isrc/state -Isrc
 CHESS_INC = -Isrc/games/chess -Isrc/state -Isrc
+SHOGI_INC = -Isrc/games/shogi -Isrc/state -Isrc
 
 
-.PHONY: all clean minichess connect6 minishogi kohakushogi kohakuchess chess
+.PHONY: all clean minichess connect6 minishogi kohakushogi kohakuchess chess shogi
 .PHONY: datagen selfplay benchmark nnue_bench
 .PHONY: minichess-datagen minishogi-datagen connect6-datagen kohakushogi-datagen kohakuchess-datagen chess-datagen
 .PHONY: minichess-selfplay minishogi-selfplay connect6-selfplay kohakushogi-selfplay kohakuchess-selfplay chess-selfplay
@@ -50,6 +52,8 @@ kohakuchess:
 	$(CXX) $(CXXFLAGS) $(KOHAKU_CHESS_INC) -o $(BUILD_DIR)/kohakuchess-ubgi.exe $(STATE_SOURCE_KC) $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
 chess:
 	$(CXX) $(CXXFLAGS) $(CHESS_INC) -o $(BUILD_DIR)/chess-ubgi.exe $(STATE_SOURCE_CH) $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
+shogi:
+	$(CXX) $(CXXFLAGS) $(SHOGI_INC) -o $(BUILD_DIR)/shogi-ubgi.exe $(STATE_SOURCE_SH) $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
 
 # === Per-game datagen (Windows) ===
 minichess-datagen:
@@ -120,6 +124,8 @@ kohakuchess:
 	$(CXX) $(CXXFLAGS) $(KOHAKU_CHESS_INC) -o $(BUILD_DIR)/kohakuchess-ubgi $(STATE_SOURCE_KC) $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
 chess:
 	$(CXX) $(CXXFLAGS) $(CHESS_INC) -o $(BUILD_DIR)/chess-ubgi $(STATE_SOURCE_CH) $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
+shogi:
+	$(CXX) $(CXXFLAGS) $(SHOGI_INC) -o $(BUILD_DIR)/shogi-ubgi $(STATE_SOURCE_SH) $(NNUE_SOURCE) $(POLICY_SRC) src/ubgi/ubgi.cpp
 
 # === Per-game datagen (Unix) ===
 minichess-datagen:
