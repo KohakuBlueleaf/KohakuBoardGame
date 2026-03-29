@@ -1349,14 +1349,9 @@ int State::evaluate(
     if(phase > TOTAL_PHASE) phase = TOTAL_PHASE;
     int score = (mg * phase + eg * (TOTAL_PHASE - phase)) / TOTAL_PHASE;
 
-    /* === Mobility bonus (not tapered) === */
-    if(use_mobility){
-        int self_mobility = (int)this->legal_actions.size();
-        State oppn_state(this->board, 1 - p);
-        oppn_state.get_legal_actions();
-        int oppn_mobility = (int)oppn_state.legal_actions.size();
-        score += 2 * (self_mobility - oppn_mobility);
-    }
+    (void)use_mobility;
+    /* Movegen-based mobility removed: 6x NPS penalty from opponent
+     * drop generation + uchifuzume.  Tropism handles positional guidance. */
 
     return score;
 }
