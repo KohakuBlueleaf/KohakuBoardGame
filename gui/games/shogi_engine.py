@@ -275,9 +275,9 @@ def _make_initial_board():
     board[0][8][6] = SILVER
     board[0][8][7] = KNIGHT
     board[0][8][8] = LANCE
-    # Row 7: . R . . . . . B .
-    board[0][7][1] = ROOK
-    board[0][7][7] = BISHOP
+    # Row 7: . B . . . . . R .  (角左飛右: bishop left, rook right)
+    board[0][7][1] = BISHOP
+    board[0][7][7] = ROOK
     # Row 6: P P P P P P P P P
     for c in range(BOARD_W):
         board[0][6][c] = PAWN
@@ -293,9 +293,9 @@ def _make_initial_board():
     board[1][0][6] = SILVER
     board[1][0][7] = KNIGHT
     board[1][0][8] = LANCE
-    # Row 1: . B . . . . . R .
-    board[1][1][1] = BISHOP
-    board[1][1][7] = ROOK
+    # Row 1: . R . . . . . B .  (mirrored: rook left, bishop right from gote view)
+    board[1][1][1] = ROOK
+    board[1][1][7] = BISHOP
     # Row 2: P P P P P P P P P
     for c in range(BOARD_W):
         board[1][2][c] = PAWN
