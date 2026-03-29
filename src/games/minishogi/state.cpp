@@ -17,7 +17,6 @@
  * Constants & Tables
  * ================================================================ */
 
-/* === Material values === */
 /* === Material values (centipawn-ish scale) ===
  *
  * Shogi piece values (adjusted for 5x5 minishogi):
@@ -30,12 +29,29 @@
  *   - Promoted rook (Dragon) ~ 13 (rook + king moves = monster)
  *   - Promoted pawn/silver = gold equivalent ~ 5
  */
-static const int material_value[NUM_PIECE_TYPES] = {
+static const int material_mg[NUM_PIECE_TYPES] = {
     /* EMPTY */ 0,
     /* PAWN  */ 10, /* SILVER */ 40, /* GOLD   */ 50,
     /* BISHOP*/ 70, /* ROOK   */ 90, /* KING   */ 0,
     /* P_PAWN*/ 50, /* P_SILVER*/ 50, /* P_BISHOP */ 120, /* P_ROOK */ 130,
 };
+static const int material_eg[NUM_PIECE_TYPES] = {
+    /* EMPTY */ 0,
+    /* PAWN  */ 12, /* SILVER */ 40, /* GOLD   */ 50,
+    /* BISHOP*/ 70, /* ROOK   */ 100, /* KING  */ 0,
+    /* P_PAWN*/ 50, /* P_SILVER*/ 50, /* P_BISHOP */ 120, /* P_ROOK */ 145,
+};
+
+/* === Phase weights for tapered eval ===
+ * Starting position each side: 1P(0) + 1S(1) + 1G(1) + 1B(2) + 1R(3) = 7
+ * TOTAL_PHASE = 7 * 2 = 14 */
+static const int phase_weight[NUM_PIECE_TYPES] = {
+    /* EMPTY */ 0,
+    /* PAWN  */ 0, /* SILVER */ 1, /* GOLD   */ 1,
+    /* BISHOP*/ 2, /* ROOK   */ 3, /* KING   */ 0,
+    /* P_PAWN*/ 0, /* P_SILVER*/ 1, /* P_BISHOP */ 3, /* P_ROOK */ 4,
+};
+static constexpr int TOTAL_PHASE = 14;
 
 /* Hand pieces are more valuable than board pieces (drop flexibility) */
 static const int hand_value[NUM_HAND_TYPES + 1] = {
@@ -89,6 +105,14 @@ static const int pst_king[BOARD_H][BOARD_W] = {
     {  4,  4,  0,  4,  4},
     {  6,  8,  4,  8,  6},
 };
+/* King EG PST: centralization — king should be active in endgame */
+static const int pst_king_eg[BOARD_H][BOARD_W] = {
+    { -8, -4, -2, -4, -8},
+    { -4,  4,  8,  4, -4},
+    { -2,  8, 12,  8, -2},
+    { -4,  4,  8,  4, -4},
+    { -8, -4, -2, -4, -8},
+};
 /* Promoted bishop (horse): wants to be aggressive, near enemy */
 static const int pst_horse[BOARD_H][BOARD_W] = {
     {10, 10, 12, 10, 10},
@@ -106,7 +130,7 @@ static const int pst_dragon[BOARD_H][BOARD_W] = {
     { 0,  0,  0,  0,  0},
 };
 
-/* Pointers for indexing by piece type */
+/* Pointers for indexing by piece type (MG) */
 static const int (*pst_table[NUM_PIECE_TYPES])[BOARD_W] = {
     /* EMPTY    */ nullptr,
     /* PAWN     */ pst_pawn,
@@ -119,6 +143,21 @@ static const int (*pst_table[NUM_PIECE_TYPES])[BOARD_W] = {
     /* P_SILVER */ pst_gold,     /* narigin moves like gold */
     /* P_BISHOP */ pst_horse,    /* horse = aggressive */
     /* P_ROOK   */ pst_dragon,   /* dragon = aggressive */
+};
+
+/* Pointers for indexing by piece type (EG) — only king differs */
+static const int (*pst_table_eg[NUM_PIECE_TYPES])[BOARD_W] = {
+    /* EMPTY    */ nullptr,
+    /* PAWN     */ pst_pawn,
+    /* SILVER   */ pst_silver,
+    /* GOLD     */ pst_gold,
+    /* BISHOP   */ pst_bishop,
+    /* ROOK     */ pst_rook,
+    /* KING     */ pst_king_eg,
+    /* P_PAWN   */ pst_gold,
+    /* P_SILVER */ pst_gold,
+    /* P_BISHOP */ pst_horse,
+    /* P_ROOK   */ pst_dragon,
 };
 
 /* King tropism: bonus for pieces near enemy king */
@@ -1333,7 +1372,8 @@ int State::evaluate(
     int opp = 1 - p;
     auto& self_board = this->board.board[p];
     auto& oppn_board = this->board.board[opp];
-    int self_score = 0, oppn_score = 0;
+    int mg = 0, eg = 0;
+    int phase = 0;
 
     /* Find king positions for tropism */
     int self_kr = 0, self_kc = 0, oppn_kr = 0, oppn_kc = 0;
@@ -1345,65 +1385,87 @@ int State::evaluate(
     }
 
     if(use_kp_eval){
-        /* === KP eval: material + PST + king tropism === */
+        /* === KP eval: material + PST + king tropism (tapered) === */
         for(int r = 0; r < BOARD_H; r++){
             for(int c = 0; c < BOARD_W; c++){
                 int piece;
+                /* === Own pieces === */
                 if((piece = self_board[r][c])){
-                    self_score += material_value[piece];
+                    mg += material_mg[piece];
+                    eg += material_eg[piece];
+                    phase += phase_weight[piece];
                     int pr = (p == 0) ? r : (BOARD_H - 1 - r);
                     if(pst_table[piece]){
-                        self_score += pst_table[piece][pr][c];
+                        mg += pst_table[piece][pr][c];
                     }
-                    self_score += king_tropism(piece, r, c, oppn_kr, oppn_kc);
+                    if(pst_table_eg[piece]){
+                        eg += pst_table_eg[piece][pr][c];
+                    }
+                    /* King tropism: MG only */
+                    mg += king_tropism(piece, r, c, oppn_kr, oppn_kc);
                 }
+                /* === Opponent pieces === */
                 if((piece = oppn_board[r][c])){
-                    oppn_score += material_value[piece];
+                    mg -= material_mg[piece];
+                    eg -= material_eg[piece];
+                    phase += phase_weight[piece];
                     int pr = (p == 0) ? (BOARD_H - 1 - r) : r;
                     if(pst_table[piece]){
-                        oppn_score += pst_table[piece][pr][c];
+                        mg -= pst_table[piece][pr][c];
                     }
-                    oppn_score += king_tropism(piece, r, c, self_kr, self_kc);
+                    if(pst_table_eg[piece]){
+                        eg -= pst_table_eg[piece][pr][c];
+                    }
+                    mg -= king_tropism(piece, r, c, self_kr, self_kc);
                 }
             }
         }
 
-        /* Hand pieces use hand_value (premium for drop flexibility) */
+        /* Hand pieces contribute equally to both MG and EG */
         for(int pt = 1; pt <= NUM_HAND_TYPES; pt++){
-            self_score += board.hand[p][pt] * hand_value[pt];
-            oppn_score += board.hand[opp][pt] * hand_value[pt];
+            int hand_diff = board.hand[p][pt] - board.hand[opp][pt];
+            mg += hand_diff * hand_value[pt];
+            eg += hand_diff * hand_value[pt];
         }
     }else{
-        /* === Simple material-only eval === */
+        /* === Simple material-only eval (tapered) === */
         for(int r = 0; r < BOARD_H; r++){
             for(int c = 0; c < BOARD_W; c++){
                 int piece;
                 if((piece = self_board[r][c])){
-                    self_score += material_value[piece];
+                    mg += material_mg[piece];
+                    eg += material_eg[piece];
+                    phase += phase_weight[piece];
                 }
                 if((piece = oppn_board[r][c])){
-                    oppn_score += material_value[piece];
+                    mg -= material_mg[piece];
+                    eg -= material_eg[piece];
+                    phase += phase_weight[piece];
                 }
             }
         }
         for(int pt = 1; pt <= NUM_HAND_TYPES; pt++){
-            self_score += board.hand[p][pt] * hand_value[pt];
-            oppn_score += board.hand[opp][pt] * hand_value[pt];
+            int hand_diff = board.hand[p][pt] - board.hand[opp][pt];
+            mg += hand_diff * hand_value[pt];
+            eg += hand_diff * hand_value[pt];
         }
     }
 
-    int bonus = 0;
+    /* === Taper: interpolate between MG and EG === */
+    /* phase: 0 = all pieces gone (endgame), TOTAL_PHASE = opening */
+    if(phase > TOTAL_PHASE) phase = TOTAL_PHASE;
+    int score = (mg * phase + eg * (TOTAL_PHASE - phase)) / TOTAL_PHASE;
 
-    /* === Mobility bonus === */
+    /* === Mobility bonus (not tapered, added to final score) === */
     if(use_mobility){
         int self_mobility = (int)this->legal_actions.size();
         State oppn_state(this->board, 1 - p);
         oppn_state.get_legal_actions();
         int oppn_mobility = (int)oppn_state.legal_actions.size();
-        bonus += 2 * (self_mobility - oppn_mobility);
+        score += 2 * (self_mobility - oppn_mobility);
     }
 
-    return self_score - oppn_score + bonus;
+    return score;
 }
 
 
