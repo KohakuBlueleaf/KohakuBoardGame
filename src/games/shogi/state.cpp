@@ -245,8 +245,10 @@ static const int tropism_w[NUM_PIECE_TYPES] = {
 
 static int king_tropism(
     int piece_type,
-    int pr, int pc,
-    int ekr, int ekc
+    int pr,
+    int pc,
+    int ekr,
+    int ekc
 ){
     int dist = std::max(std::abs(pr - ekr), std::abs(pc - ekc));
     if(dist <= 2){
@@ -379,10 +381,14 @@ static bool try_add_move(
     std::vector<Move>& actions,
     const char self_board[BOARD_H][BOARD_W],
     const char oppn_board[BOARD_H][BOARD_W],
-    int from_r, int from_c,
-    int to_r, int to_c,
-    int piece, int player,
-    bool entering_promo, bool leaving_promo,
+    int from_r,
+    int from_c,
+    int to_r,
+    int to_c,
+    int piece,
+    int player,
+    bool entering_promo,
+    bool leaving_promo,
     GameState& game_state
 ){
     /* Out of bounds */
@@ -460,9 +466,18 @@ void State::gen_board_moves(){
                     int tr = r + dr;
                     bool to_promo = (tr >= 0 && tr < BOARD_H) && is_promotion_zone(tr, p);
                     if(try_add_move(
-                        legal_actions, self_board, oppn_board,
-                        r, c, tr, c, piece, p,
-                        to_promo, from_promo, game_state
+                        legal_actions,
+                        self_board,
+                        oppn_board,
+                        r,
+                        c,
+                        tr,
+                        c,
+                        piece,
+                        p,
+                        to_promo,
+                        from_promo,
+                        game_state
                     )){
                         return;
                     }
@@ -477,9 +492,18 @@ void State::gen_board_moves(){
                         int tr = r + dr, tc = c + dc;
                         bool to_promo = (tr >= 0 && tr < BOARD_H) && is_promotion_zone(tr, p);
                         if(try_add_move(
-                            legal_actions, self_board, oppn_board,
-                            r, c, tr, tc, piece, p,
-                            to_promo, from_promo, game_state
+                            legal_actions,
+                            self_board,
+                            oppn_board,
+                            r,
+                            c,
+                            tr,
+                            tc,
+                            piece,
+                            p,
+                            to_promo,
+                            from_promo,
+                            game_state
                         )){
                             return;
                         }
@@ -500,9 +524,18 @@ void State::gen_board_moves(){
                         int tr = r + dr, tc = c + dc;
                         /* Gold/promoted pieces cannot promote further */
                         if(try_add_move(
-                            legal_actions, self_board, oppn_board,
-                            r, c, tr, tc, GOLD, p,
-                            false, false, game_state
+                            legal_actions,
+                            self_board,
+                            oppn_board,
+                            r,
+                            c,
+                            tr,
+                            tc,
+                            GOLD,
+                            p,
+                            false,
+                            false,
+                            game_state
                         )){
                             return;
                         }
@@ -562,9 +595,18 @@ void State::gen_board_moves(){
                         int tr = r + dr, tc = c + dc;
                         bool to_promo = (tr >= 0 && tr < BOARD_H) && is_promotion_zone(tr, p);
                         if(try_add_move(
-                            legal_actions, self_board, oppn_board,
-                            r, c, tr, tc, piece, p,
-                            to_promo, from_promo, game_state
+                            legal_actions,
+                            self_board,
+                            oppn_board,
+                            r,
+                            c,
+                            tr,
+                            tc,
+                            piece,
+                            p,
+                            to_promo,
+                            from_promo,
+                            game_state
                         )){
                             return;
                         }
@@ -656,9 +698,18 @@ void State::gen_board_moves(){
                         int tc = c + dir8_dc[d];
                         /* King cannot promote -- pass false for promo flags */
                         if(try_add_move(
-                            legal_actions, self_board, oppn_board,
-                            r, c, tr, tc, KING, p,
-                            false, false, game_state
+                            legal_actions,
+                            self_board,
+                            oppn_board,
+                            r,
+                            c,
+                            tr,
+                            tc,
+                            KING,
+                            p,
+                            false,
+                            false,
+                            game_state
                         )){
                             return;
                         }
@@ -696,9 +747,18 @@ void State::gen_board_moves(){
                         int tr = r + dir8_dr[d];
                         int tc = c + dir8_dc[d];
                         if(try_add_move(
-                            legal_actions, self_board, oppn_board,
-                            r, c, tr, tc, P_BISHOP, p,
-                            false, false, game_state
+                            legal_actions,
+                            self_board,
+                            oppn_board,
+                            r,
+                            c,
+                            tr,
+                            tc,
+                            P_BISHOP,
+                            p,
+                            false,
+                            false,
+                            game_state
                         )){
                             return;
                         }
@@ -736,9 +796,18 @@ void State::gen_board_moves(){
                         int tr = r + dir8_dr[d];
                         int tc = c + dir8_dc[d];
                         if(try_add_move(
-                            legal_actions, self_board, oppn_board,
-                            r, c, tr, tc, P_ROOK, p,
-                            false, false, game_state
+                            legal_actions,
+                            self_board,
+                            oppn_board,
+                            r,
+                            c,
+                            tr,
+                            tc,
+                            P_ROOK,
+                            p,
+                            false,
+                            false,
+                            game_state
                         )){
                             return;
                         }
@@ -1640,7 +1709,7 @@ void State::decode_board(const std::string& s, int side_to_move){
 
 
 /* === Repetition: shogi 4-fold rule === */
-bool State::check_repetition(const GameHistory& history, int& out_score) const {
+bool State::check_repetition(const GameHistory& history, int& out_score) const{
     if(history.count(hash()) >= 4){
         out_score = 0;  /* draw (perpetual check handled by GUI) */
         return true;
