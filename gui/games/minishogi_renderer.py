@@ -223,11 +223,15 @@ class MiniShogiRenderer:
 
     def _pre_render_pieces(self):
         """Pre-render all piece shapes with text."""
-        for player in (0, 1):
-            for pt in _ALL_PIECE_TYPES:
-                self._piece_cache[(player, pt)] = self._render_piece(player, pt, 255)
+        self._piece_cache.clear()
+        for flipped in (False, True):
+            for player in (0, 1):
+                for pt in _ALL_PIECE_TYPES:
+                    self._piece_cache[(flipped, player, pt)] = self._render_piece(
+                        player, pt, 255, flipped
+                    )
 
-    def _render_piece(self, player, piece_type, alpha=255):
+    def _render_piece(self, player, piece_type, alpha=255, flipped=False):
         """Render a single piece as a surface with transparent background."""
         w = self._piece_w
         h = self._piece_h
@@ -235,8 +239,8 @@ class MiniShogiRenderer:
         cx = (w + 4) / 2
         cy = (h + 4) / 2
 
-        pointing_up = player == 0
-        pts = _pentagon_points(cx, cy, w, h, pointing_up)
+        points_up = (player == 0) != flipped
+        pts = _pentagon_points(cx, cy, w, h, points_up)
 
         # Background fill
         bg = _SENTE_BG if player == 0 else _GOTE_BG
@@ -264,6 +268,9 @@ class MiniShogiRenderer:
             text_surf, text_rect = self._piece_font.render(
                 "?", fgcolor=text_color_alpha
             )
+
+        if not points_up:
+            text_surf = pygame.transform.rotate(text_surf, 180)
 
         tx = cx - text_rect.width / 2
         ty = cy - text_rect.height / 2
@@ -301,7 +308,7 @@ class MiniShogiRenderer:
                     if piece == EMPTY:
                         continue
 
-                    surf = self._piece_cache.get((player, piece))
+                    surf = self._piece_cache.get((cfg.FLIPPED, player, piece))
                     if surf is None:
                         continue
 
@@ -332,12 +339,18 @@ class MiniShogiRenderer:
         hand_h = getattr(cfg, "HAND_ROW_H", 36)
 
         for player in (0, 1):
-            if player == 1:
-                # Gote's hand: above board
-                base_y = getattr(cfg, "HAND_TOP_Y", cfg.BOARD_Y - hand_h)
+            if cfg.FLIPPED:
+                base_y = (
+                    getattr(cfg, "HAND_BOTTOM_Y", cfg.BOARD_Y + cfg.BOARD_PIXEL_H)
+                    if player == 1
+                    else getattr(cfg, "HAND_TOP_Y", cfg.BOARD_Y - hand_h)
+                )
             else:
-                # Sente's hand: below board
-                base_y = getattr(cfg, "HAND_BOTTOM_Y", cfg.BOARD_Y + cfg.BOARD_PIXEL_H)
+                base_y = (
+                    getattr(cfg, "HAND_TOP_Y", cfg.BOARD_Y - hand_h)
+                    if player == 1
+                    else getattr(cfg, "HAND_BOTTOM_Y", cfg.BOARD_Y + cfg.BOARD_PIXEL_H)
+                )
 
             # Center the row horizontally within the board width
             total_w = len(_HAND_PIECES) * spacing_x
@@ -367,8 +380,8 @@ class MiniShogiRenderer:
                 small_surf = pygame.Surface((sw + 4, sh + 4), pygame.SRCALPHA)
                 scx = (sw + 4) / 2
                 scy_local = (sh + 4) / 2
-                pointing_up = player == 0
-                pts = _pentagon_points(scx, scy_local, sw, sh, pointing_up)
+                points_up = (player == 0) != cfg.FLIPPED
+                pts = _pentagon_points(scx, scy_local, sw, sh, points_up)
 
                 if count > 0:
                     bg = _SENTE_BG if player == 0 else _GOTE_BG
@@ -386,6 +399,8 @@ class MiniShogiRenderer:
                 try:
                     fg = _NORMAL_TEXT if count > 0 else (100, 90, 80)
                     text_surf, text_rect = self._hand_font.render(char, fgcolor=fg)
+                    if not points_up:
+                        text_surf = pygame.transform.rotate(text_surf, 180)
                     small_surf.blit(
                         text_surf,
                         (scx - text_rect.width / 2, scy_local - text_rect.height / 2),
@@ -476,8 +491,9 @@ class MiniShogiRenderer:
                     fx = cfg.BOARD_X - 20 if player_turn == 0 else cfg.BOARD_X - 20
                     fy = cfg.BOARD_Y + cfg.BOARD_PIXEL_H // 2
 
-                tx = cfg.BOARD_X + tc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
-                ty = cfg.BOARD_Y + tr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
+                sq_x, sq_y = cfg.sq_xy(tr, tc)
+                tx = sq_x + cfg.SQUARE_SIZE // 2
+                ty = sq_y + cfg.SQUARE_SIZE // 2
 
                 if i == 0:
                     color = (80, 220, 80, alpha)
@@ -499,10 +515,12 @@ class MiniShogiRenderer:
                     continue
 
                 # Draw arrow from source to destination
-                fx = cfg.BOARD_X + fc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
-                fy = cfg.BOARD_Y + fr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
-                tx = cfg.BOARD_X + tc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
-                ty = cfg.BOARD_Y + tr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
+                from_sq_x, from_sq_y = cfg.sq_xy(fr, fc)
+                to_sq_x, to_sq_y = cfg.sq_xy(tr, tc)
+                fx = from_sq_x + cfg.SQUARE_SIZE // 2
+                fy = from_sq_y + cfg.SQUARE_SIZE // 2
+                tx = to_sq_x + cfg.SQUARE_SIZE // 2
+                ty = to_sq_y + cfg.SQUARE_SIZE // 2
 
                 if i == 0:
                     color = (80, 220, 80, alpha)
@@ -623,8 +641,9 @@ class MiniShogiRenderer:
                     else:
                         fx = cfg.BOARD_X - 20
                         fy = cfg.BOARD_Y + cfg.BOARD_PIXEL_H // 2
-                    tx = cfg.BOARD_X + tc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
-                    ty = cfg.BOARD_Y + tr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
+                    sq_x, sq_y = cfg.sq_xy(tr, tc)
+                    tx = sq_x + cfg.SQUARE_SIZE // 2
+                    ty = sq_y + cfg.SQUARE_SIZE // 2
                     self._draw_arrow(fx, fy, tx, ty, color, i)
                     if i == 0:
                         self._draw_pv_number(tx, ty, mpv_idx, player_turn, alpha)
@@ -636,10 +655,12 @@ class MiniShogiRenderer:
                     tr = row_map.get(uci[3])
                     if any(v is None for v in (fc, fr, tc, tr)):
                         continue
-                    fx = cfg.BOARD_X + fc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
-                    fy = cfg.BOARD_Y + fr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
-                    tx = cfg.BOARD_X + tc * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
-                    ty = cfg.BOARD_Y + tr * cfg.SQUARE_SIZE + cfg.SQUARE_SIZE // 2
+                    from_sq_x, from_sq_y = cfg.sq_xy(fr, fc)
+                    to_sq_x, to_sq_y = cfg.sq_xy(tr, tc)
+                    fx = from_sq_x + cfg.SQUARE_SIZE // 2
+                    fy = from_sq_y + cfg.SQUARE_SIZE // 2
+                    tx = to_sq_x + cfg.SQUARE_SIZE // 2
+                    ty = to_sq_y + cfg.SQUARE_SIZE // 2
                     self._draw_arrow(fx, fy, tx, ty, color, i)
                     if i == 0:
                         mid_x = (fx + tx) // 2

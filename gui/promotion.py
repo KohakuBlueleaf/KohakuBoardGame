@@ -72,12 +72,13 @@ class PromotionMixin:
         gap = 4
         num_boxes = len(promo_moves)
 
-        # Position: column of boxes centered on the destination column
-        cx = _cfg.BOARD_X + col * sq + sq // 2
+        # Position relative to the destination square in the current view
+        sq_x, sq_y = _cfg.sq_xy(row, col)
+        cx = sq_x + sq // 2
         start_x = cx - box_size // 2
 
         # Stack downward from destination (or upward if near bottom)
-        dest_y = _cfg.BOARD_Y + row * sq
+        dest_y = sq_y
         total_h = num_boxes * (box_size + gap) - gap
 
         # Check if stacking downward fits; if not, stack upward
@@ -165,8 +166,9 @@ class PromotionMixin:
         sq = _cfg.SQUARE_SIZE
 
         # Position: two boxes side by side centered on the destination square
-        cx = _cfg.BOARD_X + col * sq + sq // 2
-        cy = _cfg.BOARD_Y + row * sq + sq // 2
+        sq_x, sq_y = _cfg.sq_xy(row, col)
+        cx = sq_x + sq // 2
+        cy = sq_y + sq // 2
         box_w = int(sq * 1.2)
         box_h = int(sq * 1.4)
         gap = 8
@@ -213,8 +215,10 @@ class PromotionMixin:
             promoted_piece = promote_map.get(base_piece)
 
             cache = gr._piece_cache
-            if promoted_piece and (player, promoted_piece) in cache:
-                s = cache[(player, promoted_piece)]
+            promoted_key = (_cfg.FLIPPED, player, promoted_piece)
+            base_key = (_cfg.FLIPPED, player, base_piece)
+            if promoted_piece and promoted_key in cache:
+                s = cache[promoted_key]
                 surf.blit(
                     s,
                     (
@@ -222,8 +226,8 @@ class PromotionMixin:
                         promo_rect.centery - s.get_height() // 2 - 8,
                     ),
                 )
-            if (player, base_piece) in cache:
-                s = cache[(player, base_piece)]
+            if base_key in cache:
+                s = cache[base_key]
                 surf.blit(
                     s,
                     (
