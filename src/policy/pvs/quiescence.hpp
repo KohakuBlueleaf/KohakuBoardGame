@@ -61,8 +61,8 @@ inline int quiescence_ctx(
     /* === Collect and sort captures by MVV-LVA === */
     std::vector<Move> captures;
     for(auto& move : state->legal_actions){
-        int to_r = move.second.first;
-        int to_c = move.second.second;
+        int to_r, to_c;
+        decode_move_to_square(move, to_r, to_c);
         if(state->piece_at(1 - state->player, to_r, to_c)){
             captures.push_back(move);
         }

@@ -10,15 +10,33 @@
  * Move ordering: captures scored by MVV-LVA
  * With TT: TT best move gets highest priority
  * With Killers: killer moves rank below captures, above quiet
+ *
+ * Some games encode move metadata in the row component of the
+ * destination square (e.g. promotion choices). Generic search
+ * code must decode that back to a board row before probing the
+ * board with piece_at().
  *============================================================*/
+inline int decode_move_row(size_t encoded_row){
+    int row = static_cast<int>(encoded_row);
+    if(row >= BOARD_H){
+        row %= BOARD_H;
+    }
+    return row;
+}
+
+inline void decode_move_to_square(const Move& move, int& to_r, int& to_c){
+    to_r = decode_move_row(move.second.first);
+    to_c = static_cast<int>(move.second.second);
+}
+
 inline int score_move(
     const State* state,
     const Move& move,
     int ply,
     int killer_slots
 ){
-    int to_r = move.second.first;
-    int to_c = move.second.second;
+    int to_r, to_c;
+    decode_move_to_square(move, to_r, to_c);
     int captured = state->piece_at(1 - state->player, to_r, to_c);
     if(captured){
         int from_r = move.first.first;

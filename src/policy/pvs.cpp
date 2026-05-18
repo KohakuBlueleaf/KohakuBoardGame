@@ -197,8 +197,8 @@ int PVS::eval_ctx(
                && move_index >= p.lmr_full_depth
                && depth >= p.lmr_depth_limit
             ){
-                int to_r = move.second.first;
-                int to_c = move.second.second;
+                int to_r, to_c;
+                decode_move_to_square(move, to_r, to_c);
                 bool is_capture = state->piece_at(1 - state->player, to_r, to_c) != 0;
                 if(!is_capture){
                     if(p.use_killer_moves){
@@ -256,8 +256,8 @@ int PVS::eval_ctx(
         if(alpha >= beta){
             /* Beta cutoff -- store killer if quiet move */
             if(p.use_killer_moves){
-                int to_r = move.second.first;
-                int to_c = move.second.second;
+                int to_r, to_c;
+                decode_move_to_square(move, to_r, to_c);
                 bool is_capture = state->piece_at(1 - state->player, to_r, to_c) != 0;
                 if(!is_capture){
                     store_killer(ply, move, p.killer_slots);
